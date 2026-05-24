@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/firebase-service-account.json
+**/*credentials*.json
+
+# Build outputs
+dist/
+build/
+**/dist/
+**/build/
+*.log
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# React Native / Android
+share-wheels-mobile/android/app/build/
+share-wheels-mobile/android/.gradle/
+share-wheels-mobile/android/local.properties
+share-wheels-mobile/ios/Pods/
+share-wheels-mobile/.metro-health-check*
+
+# Misc
+tmp/
+temp/
+coverage/

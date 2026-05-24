@@ -1,0 +1,310 @@
+{
+  "info": {
+    "_postman_id": "b9c4b5e2-6e65-4ef7-a65d-a6e5100a0d85",
+    "name": "ShareWheels Backend API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Postman collection for ShareWheels backend routes."
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3001" },
+    { "key": "token", "value": "" },
+    { "key": "userId", "value": "" },
+    { "key": "rideId", "value": "" },
+    { "key": "passengerUserId", "value": "" },
+    { "key": "passengerRideId", "value": "" },
+    { "key": "courierId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"test@example.com\",\n  \"mobile\": \"9999999999\",\n  \"gender\": \"male\"\n}" },
+            "url": "{{baseUrl}}/auth/register"
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"mobile\": \"9999999999\"\n}" },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"otp\": \"123456\",\n  \"fcmToken\": \"sample-fcm-token\"\n}" },
+            "url": "{{baseUrl}}/auth/verify-otp"
+          }
+        },
+        {
+          "name": "Verify Token",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/auth/verify-token"
+          }
+        },
+        {
+          "name": "Register FCM Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"fcmToken\": \"sample-fcm-token\"\n}" },
+            "url": "{{baseUrl}}/auth/register-fcm-token"
+          }
+        },
+        {
+          "name": "Send Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"title\": \"Hello\",\n  \"body\": \"Test notification\",\n  \"data\": { \"type\": \"manual\" }\n}" },
+            "url": "{{baseUrl}}/auth/send-notification"
+          }
+        },
+        {
+          "name": "Add Vehicle",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"company\": \"Honda\",\n  \"model\": \"City\",\n  \"type\": \"car\",\n  \"license_number\": \"LIC12345\",\n  \"car_no\": \"KA01AB1234\"\n}" },
+            "url": "{{baseUrl}}/auth/add-vehicle"
+          }
+        },
+        {
+          "name": "Get User Profile",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/auth/user-profile"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rides",
+      "item": [
+        {
+          "name": "Create Ride",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"from\": \"Bangalore\",\n  \"to\": \"Mysore\",\n  \"availableSeats\": 3,\n  \"ride_amount\": 250,\n  \"date\": \"2026-05-01\",\n  \"startTime\": \"09:30\",\n  \"CanCarryCourier\": true,\n  \"QuickReserve\": false\n}" },
+            "url": "{{baseUrl}}/rides/create-ride"
+          }
+        },
+        {
+          "name": "Get Rides",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/rides/get-rides?from=Bangalore&to=Mysore&date=2026-05-01"
+          }
+        },
+        {
+          "name": "Passenger Send Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"rideId\": \"{{rideId}}\",\n  \"requires_seats\": 1\n}" },
+            "url": "{{baseUrl}}/rides/passenger/send-request"
+          }
+        },
+        {
+          "name": "Upcoming Rides",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/rides/upcoming-rides"
+          }
+        },
+        {
+          "name": "History Rides",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/rides/history-rides"
+          }
+        },
+        {
+          "name": "Ride Details",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/rides/ride-details/{{rideId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Passenger Rides",
+      "item": [
+        {
+          "name": "Create Passenger Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"from\": \"Bangalore\",\n  \"to\": \"Mysore\",\n  \"ride_need_date\": \"2026-05-01\",\n  \"seats_needed\": 1\n}" },
+            "url": "{{baseUrl}}/passenger-rides/create-passenger-request"
+          }
+        },
+        {
+          "name": "Open Passenger Requests",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/passenger-rides/open"
+          }
+        },
+        {
+          "name": "Driver Pick Passenger",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"passenger_rideId\": \"{{passengerRideId}}\",\n  \"rideId\": \"{{rideId}}\"\n}" },
+            "url": "{{baseUrl}}/passenger-rides/driver/pick-passenger"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Courier",
+      "item": [
+        {
+          "name": "Create Courier Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"from\": \"Bangalore\",\n  \"to\": \"Mysore\",\n  \"courier_type\": \"parcel\",\n  \"what_to_deliver\": \"Documents\",\n  \"courier_img\": \"https://example.com/p.png\",\n  \"amount_will\": \"120\",\n  \"date\": { \"startDate\": \"2026-05-01\", \"endDate\": null },\n  \"receiver_name\": \"John\",\n  \"receiver_mobile\": \"9999999998\",\n  \"receiver_alternate_mobile\": \"9999999997\",\n  \"receiver_address\": \"Mysore\"\n}" },
+            "url": "{{baseUrl}}/courier/create-courier-request"
+          }
+        },
+        {
+          "name": "Request Courier on Ride",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"rideId\": \"{{rideId}}\",\n  \"from\": \"Bangalore\",\n  \"to\": \"Mysore\",\n  \"courier_type\": \"parcel\",\n  \"what_to_deliver\": \"Documents\",\n  \"courier_img\": \"https://example.com/p.png\",\n  \"amount_will\": \"120\",\n  \"date\": \"2026-05-01\",\n  \"timeSlot\": \"10:00-12:00\",\n  \"receiver_name\": \"John\",\n  \"receiver_mobile\": \"9999999998\",\n  \"receiver_alternate_mobile\": \"9999999997\",\n  \"receiver_address\": \"Mysore\"\n}" },
+            "url": "{{baseUrl}}/courier/request-courier"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Driver Rides",
+      "item": [
+        {
+          "name": "Accept Passenger Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"rideId\": \"{{rideId}}\",\n  \"passenger_userId\": \"{{passengerUserId}}\"\n}" },
+            "url": "{{baseUrl}}/driver-rides/driver-accept-passenger-request"
+          }
+        },
+        {
+          "name": "Start Ride",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"rideId\": \"{{rideId}}\"\n}" },
+            "url": "{{baseUrl}}/driver-rides/start-ride"
+          }
+        },
+        {
+          "name": "End Ride",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"rideId\": \"{{rideId}}\"\n}" },
+            "url": "{{baseUrl}}/driver-rides/end-ride"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ride Details",
+      "item": [
+        {
+          "name": "Get User Ride Details",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": \"{{userId}}\"\n}" },
+            "url": "{{baseUrl}}/rideDetails/user/get-ride-details"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Admin Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Admin\",\n  \"email\": \"admin@example.com\",\n  \"mobile\": \"8888888888\",\n  \"password\": \"Admin@123\"\n}" },
+            "url": "{{baseUrl}}/admin/register"
+          }
+        },
+        {
+          "name": "Admin Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"Admin@123\"\n}" },
+            "url": "{{baseUrl}}/admin/login"
+          }
+        }
+      ]
+    }
+  ]
+}
