@@ -41,8 +41,11 @@ const listVerificationParticipants = async (user, rideId) => {
   if (ride.creator.toString() !== user._id.toString()) {
     return { status: 403, body: { success: false, message: "Only driver can verify participants" } };
   }
-  if (ride.status !== "pending") {
-    return { status: 400, body: { success: false, message: "Verification only before ride starts" } };
+  if (!["pending", "started"].includes(ride.status)) {
+    return {
+      status: 400,
+      body: { success: false, message: "Verification is not available for this ride" },
+    };
   }
 
   let dirty = false;
@@ -115,8 +118,11 @@ const verifyParticipant = async (user, { rideId, userNo, otp }) => {
   if (ride.creator.toString() !== user._id.toString()) {
     return { status: 403, body: { success: false, message: "Only driver can verify participants" } };
   }
-  if (ride.status !== "pending") {
-    return { status: 400, body: { success: false, message: "Ride already started or completed" } };
+  if (!["pending", "started"].includes(ride.status)) {
+    return {
+      status: 400,
+      body: { success: false, message: "Cannot verify on a completed or cancelled ride" },
+    };
   }
 
   const match = findParticipantByUserNo(ride, normalizedUserNo);

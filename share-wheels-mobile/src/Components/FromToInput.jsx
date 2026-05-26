@@ -3,22 +3,28 @@ import React, {
   useCallback,
   forwardRef,
   useImperativeHandle,
+  useRef,
 } from "react";
 import {
   View,
   TextInput,
-  FlatList,
+  ScrollView,
   Text,
   TouchableOpacity,
   StyleSheet,
+  Pressable,
 } from "react-native";
 
 import { validateForm, validateLocation } from "../Utils";
 import { INPUT_COLORS } from "../theme/inputTheme";
 
+const BLUR_HIDE_MS = 280;
+
 const FromToInput = forwardRef(({ fields = [] }, ref) => {
   const [dropdownState, setDropdownState] = useState({});
   const [errors, setErrors] = useState({});
+  const blurTimers = useRef({});
+  const selectingRef = useRef(false);
 
   const data = [
     "Hyderabad",
@@ -29,7 +35,6 @@ const FromToInput = forwardRef(({ fields = [] }, ref) => {
     "Chennai",
   ];
 
-  /* ---------------- VALIDATE SINGLE FIELD ---------------- */
   const validateField = (field) => {
     if (!field.rules) return;
 
@@ -44,7 +49,6 @@ const FromToInput = forwardRef(({ fields = [] }, ref) => {
     setErrors((prev) => ({ ...prev, [field.key]: "" }));
   };
 
-  /* ---------------- VALIDATE FULL FORM ---------------- */
   useImperativeHandle(ref, () => ({
     validate: () => {
       const validationErrors = validateForm(
@@ -64,9 +68,27 @@ const FromToInput = forwardRef(({ fields = [] }, ref) => {
     },
   }));
 
-  /* ---------------- SEARCH ---------------- */
+  const clearBlurTimer = (key) => {
+    if (blurTimers.current[key]) {
+      clearTimeout(blurTimers.current[key]);
+      blurTimers.current[key] = null;
+    }
+  };
+
+  const scheduleHideDropdown = (key) => {
+    clearBlurTimer(key);
+    blurTimers.current[key] = setTimeout(() => {
+      if (selectingRef.current) return;
+      setDropdownState((prev) => ({
+        ...prev,
+        [key]: { ...(prev[key] || {}), show: false },
+      }));
+    }, BLUR_HIDE_MS);
+  };
+
   const handleSearch = useCallback((key, text, onChangeText) => {
     onChangeText(text);
+    clearBlurTimer(key);
 
     if (!text || text.trim() === "") {
       setDropdownState((prev) => ({
@@ -89,16 +111,18 @@ const FromToInput = forwardRef(({ fields = [] }, ref) => {
     }));
   }, []);
 
-  /* ---------------- SELECT ---------------- */
   const handleSelect = useCallback((key, item, onChangeText) => {
+    selectingRef.current = true;
+    clearBlurTimer(key);
     onChangeText(item);
-
     setDropdownState((prev) => ({
       ...prev,
       [key]: { show: false, data: [] },
     }));
-
     setErrors((prev) => ({ ...prev, [key]: "" }));
+    setTimeout(() => {
+      selectingRef.current = false;
+    }, 100);
   }, []);
 
   return (
@@ -108,41 +132,33 @@ const FromToInput = forwardRef(({ fields = [] }, ref) => {
           show: false,
           data: [],
         };
-
         const error = errors[field.key];
+        const showDropdown = state.show && state.data.length > 0;
 
         return (
           <View
             key={field.key}
             style={[styles.container, { zIndex: 100 - index }]}
           >
-            {/* ✅ LABEL + RED STAR */}
             <Text style={styles.label}>
               {field.label}
               {field.rules && <Text style={styles.star}> *</Text>}
             </Text>
 
-            {/* INPUT */}
             <TextInput
-              style={[
-                styles.input,
-                error && styles.inputError,
-              ]}
+              style={[styles.input, error && styles.inputError]}
               placeholder={field.placeholder}
               placeholderTextColor={INPUT_COLORS.placeholder}
               value={field.value}
+              blurOnSubmit={false}
               onChangeText={(text) => {
                 handleSearch(field.key, text, field.onChangeText);
-
                 if (error) {
-                  setErrors((prev) => ({
-                    ...prev,
-                    [field.key]: "",
-                  }));
+                  setErrors((prev) => ({ ...prev, [field.key]: "" }));
                 }
               }}
-              onBlur={() => validateField(field)}
               onFocus={() => {
+                clearBlurTimer(field.key);
                 if (state.data.length > 0) {
                   setDropdownState((prev) => ({
                     ...prev,
@@ -150,39 +166,39 @@ const FromToInput = forwardRef(({ fields = [] }, ref) => {
                   }));
                 }
               }}
+              onBlur={() => {
+                scheduleHideDropdown(field.key);
+                validateField(field);
+              }}
             />
 
-            {/* ERROR */}
-            {error ? (
-              <Text style={styles.errorText}>{error}</Text>
-            ) : null}
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-            {/* DROPDOWN */}
-            {state.show && (
+            {showDropdown ? (
               <View style={styles.dropdownWrapper}>
-                <FlatList
-                  data={state.data}
-                  keyExtractor={(item, index) => index.toString()}
-                  keyboardShouldPersistTaps="handled"
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={styles.item}
+                <ScrollView
+                  nestedScrollEnabled
+                  keyboardShouldPersistTaps="always"
+                  keyboardDismissMode="none"
+                  style={styles.dropdownScroll}
+                >
+                  {state.data.map((item, idx) => (
+                    <Pressable
+                      key={`${item}-${idx}`}
+                      style={({ pressed }) => [
+                        styles.item,
+                        pressed && styles.itemPressed,
+                      ]}
                       onPress={() =>
-                        handleSelect(
-                          field.key,
-                          item,
-                          field.onChangeText
-                        )
+                        handleSelect(field.key, item, field.onChangeText)
                       }
                     >
-                      <Text style={styles.itemText}>
-                        {item}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                />
+                      <Text style={styles.itemText}>{item}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
               </View>
-            )}
+            ) : null}
           </View>
         );
       })}
@@ -192,25 +208,20 @@ const FromToInput = forwardRef(({ fields = [] }, ref) => {
 
 export default FromToInput;
 
-/* ---------------- STYLES ---------------- */
-
 const styles = StyleSheet.create({
   container: {
     marginBottom: 18,
   },
-
   label: {
-   fontSize: 16,
+    fontSize: 16,
     fontWeight: "600",
     color: "#0b0e13",
     marginBottom: 6,
   },
-
   star: {
     color: "red",
     fontWeight: "bold",
   },
-
   input: {
     height: 50,
     borderWidth: 1,
@@ -221,11 +232,9 @@ const styles = StyleSheet.create({
     color: INPUT_COLORS.text,
     fontSize: 15,
   },
-
   inputError: {
     borderColor: "red",
   },
-
   errorText: {
     color: "red",
     fontSize: 12,
@@ -233,29 +242,32 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     marginLeft: 4,
   },
-
   dropdownWrapper: {
-    position: "absolute",
-    top: 75,
-    left: 0,
-    right: 0,
-    maxHeight: 150,
+    marginTop: 4,
+    maxHeight: 160,
     backgroundColor: "#fff",
     borderWidth: 1,
     borderColor: "#E5E7EB",
     borderRadius: 10,
-    elevation: 5,
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
     zIndex: 999,
   },
-
+  dropdownScroll: {
+    maxHeight: 160,
+  },
   item: {
-    padding: 12,
+    padding: 14,
     borderBottomWidth: 0.5,
     borderColor: "#eee",
   },
-
+  itemPressed: {
+    backgroundColor: "#F1F5F9",
+  },
   itemText: {
-    fontSize: 14,
+    fontSize: 15,
     color: "#111",
   },
 });

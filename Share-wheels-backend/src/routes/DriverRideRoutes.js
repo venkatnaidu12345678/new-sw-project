@@ -10,6 +10,7 @@ router.post("/driver-reject-passenger-request", authMiddleware, driverRideContro
 router.post("/driver-remove-passenger", authMiddleware, driverRideController.removePassenger);
 router.patch("/start-ride", authMiddleware, driverRideController.startRide);
 router.patch("/end-ride", authMiddleware, driverRideController.endRide);
+router.patch("/update-seats", authMiddleware, driverRideController.updateRideSeats);
 router.post("/enroute-requests", authMiddleware, driverRideController.enrouteRequests);
 router.post("/driver/pick-courier", authMiddleware, driverRideController.pickCourier);
 router.get(

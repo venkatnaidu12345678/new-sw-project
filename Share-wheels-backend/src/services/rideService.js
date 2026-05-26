@@ -1,8 +1,16 @@
 const mongoose = require("mongoose");
 const Ride = require("../models/rideModel");
 const UserRides = require("../models/userRides");
+const User = require("../models/userModel");
 const Courier = require("../models/courierModel");
+const PassengerRide = require("../models/passengerRideModel");
 const { parseAmount } = require("../schemas/commonSchemas");
+const { ensureParticipantBoardingOtp } = require("./rideVerificationService");
+const { sendPushNotification } = require("../utils/firebaseAdmin");
+const {
+  isRideScheduledTimePassed,
+  isRideScheduledTimeFuture,
+} = require("../utils/rideScheduleUtils");
 
 const getRidesData = async ({ rideIds }) => {
   if (!rideIds || !Array.isArray(rideIds)) {
@@ -51,7 +59,7 @@ const createRide = async (user, payload) => {
   return { status: 200, body: { message: "Ride created successfully", ride } };
 };
 
-const getRides = async (query) => {
+const getRides = async (query, authUser) => {
   let { from, to, date } = query;
   if (!from || !to || !date) return { status: 400, body: { message: "from, to and date are required" } };
   from = from.trim();
@@ -60,12 +68,16 @@ const getRides = async (query) => {
   startDate.setHours(0, 0, 0, 0);
   const endDate = new Date(date);
   endDate.setHours(23, 59, 59, 999);
-  const rides = await Ride.find({
+  const findFilter = {
     from: { $regex: from, $options: "i" },
     to: { $regex: to, $options: "i" },
     date: { $gte: startDate, $lte: endDate },
     status: "pending",
-  })
+  };
+  if (authUser?._id) {
+    findFilter.creator = { $ne: authUser._id };
+  }
+  const rides = await Ride.find(findFilter)
     .populate("creator", "name email mobile profile_img")
     .sort({ createdAt: -1 });
   if (!rides.length) return { status: 404, body: { message: "No rides found" } };
@@ -93,22 +105,116 @@ const cancelRide = async (user, { rideId, reason }) => {
   return { status: 200, body: { status: true, message: "Ride cancelled successfully", ride } };
 };
 
+const addPassengerDirectly = async (ride, user, seats, total_amount) => {
+  const userId = user._id;
+  const passengerEntry = {
+    userId,
+    requires_seats: seats,
+    ride_amount: total_amount,
+    status: "accepted",
+    joinedAt: new Date(),
+  };
+  await ensureParticipantBoardingOtp(passengerEntry, userId);
+  ride.passengers.push(passengerEntry);
+  ride.availableSeats -= seats;
+  await ride.save();
+
+  await UserRides.findOneAndUpdate(
+    { creator: userId },
+    {
+      $pull: { my_pending_ride_requests: { rideId: ride._id } },
+      $push: {
+        driver_accepted_ride_requests: {
+          rideId: ride._id,
+          driverId: ride.creator,
+          amount_requested: total_amount,
+          seats_requested: seats,
+          status: "accepted",
+        },
+      },
+    },
+    { upsert: true }
+  );
+
+  const driver = await User.findById(ride.creator);
+  if (driver?.fcmToken) {
+    await sendPushNotification(
+      driver.fcmToken,
+      "New passenger (Quick Reserve)",
+      `${user.name || "A passenger"} booked ${seats} seat(s) on your ride`,
+      { rideId: ride._id.toString(), type: "passenger_joined" }
+    );
+  }
+
+  return passengerEntry;
+};
+
 const sendPassengerRequest = async (user, { rideId, requires_seats }) => {
   const userId = user._id;
-  if (!rideId || !requires_seats) {
-    return { status: 400, body: { message: "rideId & requires_seats are required" } };
+  const seats = Number(requires_seats);
+  if (!rideId || !Number.isFinite(seats) || seats < 1) {
+    return {
+      status: 400,
+      body: { success: false, message: "rideId and requires_seats (min 1) are required" },
+    };
   }
   const ride = await Ride.findById(rideId);
-  if (!ride) return { status: 404, body: { message: "Ride not found" } };
+  if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
 
-  const alreadyRequested = ride.passenger_requested_ride.some((reqObj) => reqObj.userId.toString() === userId.toString());
-  if (alreadyRequested) return { status: 400, body: { message: "Request already sent" } };
-  const alreadyPassenger = ride.passengers.some((p) => p.userId.toString() === userId.toString());
-  if (alreadyPassenger) return { status: 400, body: { message: "Already a passenger" } };
-  if (requires_seats > ride.availableSeats) return { status: 400, body: { message: "Not enough seats available" } };
+  if (ride.creator.toString() === userId.toString()) {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message: "You cannot book a seat on your own ride. You are the driver for this trip.",
+      },
+    };
+  }
 
-  const total_amount = ride.ride_amount * requires_seats;
-  ride.passenger_requested_ride.push({ userId, requires_seats, ride_amount: total_amount, requestedAt: new Date() });
+  const alreadyRequested = ride.passenger_requested_ride.some(
+    (reqObj) => reqObj.userId.toString() === userId.toString()
+  );
+  if (alreadyRequested) {
+    return { status: 400, body: { success: false, message: "Request already sent" } };
+  }
+  const alreadyPassenger = ride.passengers.some(
+    (p) => p.userId.toString() === userId.toString()
+  );
+  if (alreadyPassenger) {
+    return { status: 400, body: { success: false, message: "Already a passenger" } };
+  }
+  if (seats > ride.availableSeats) {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message: `Not enough seats available (only ${ride.availableSeats} left)`,
+      },
+    };
+  }
+
+  const total_amount = ride.ride_amount * seats;
+
+  if (ride.QuickReserve) {
+    await addPassengerDirectly(ride, user, seats, total_amount);
+    return {
+      status: 200,
+      body: {
+        success: true,
+        bookingStatus: "confirmed",
+        message: `Booking confirmed! ${seats} seat(s) reserved (₹${total_amount}).`,
+        calculated_amount: total_amount,
+        ride,
+      },
+    };
+  }
+
+  ride.passenger_requested_ride.push({
+    userId,
+    requires_seats: seats,
+    ride_amount: total_amount,
+    requestedAt: new Date(),
+  });
   await ride.save();
 
   await UserRides.findOneAndUpdate(
@@ -119,91 +225,188 @@ const sendPassengerRequest = async (user, { rideId, requires_seats }) => {
           rideId: ride._id,
           driverId: ride.creator,
           amount_requested: total_amount,
-          seats_requested: requires_seats,
+          seats_requested: seats,
           status: "pending",
         },
       },
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
+
+  const driver = await User.findById(ride.creator);
+  if (driver?.fcmToken) {
+    await sendPushNotification(
+      driver.fcmToken,
+      "New passenger request",
+      `${user.name || "Someone"} requested ${seats} seat(s)`,
+      { rideId: ride._id.toString(), type: "passenger_request" }
+    );
+  }
+
   return {
     status: 200,
-    body: { message: "Passenger request sent successfully", calculated_amount: total_amount, ride },
+    body: {
+      success: true,
+      bookingStatus: "pending_approval",
+      message: "Request sent. The driver must accept your booking.",
+      calculated_amount: total_amount,
+      ride,
+    },
   };
 };
 
-const upcomingDateFilter = () => {
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const currentTime = new Date().toTimeString().slice(0, 5);
-  return {
-    $or: [
-      { date: { $gt: todayStart } },
-      { date: todayStart, startTime: { $gte: currentTime } },
-    ],
-  };
-};
+const refIdStr = (ref) =>
+  ref?._id?.toString?.() || ref?.toString?.() || "";
+
+/** Inclusion-only — cannot mix `-password` exclusions with named fields in MongoDB projections */
+const USER_PUBLIC_FIELDS = "name email mobile profile_img gender userNo";
 
 const listRidesByPhase = async (user, completed) => {
-  const userId = new mongoose.Types.ObjectId(user._id);
+  const userIdRaw = user?._id || user?.id;
+  if (!userIdRaw) {
+    return { status: 401, body: { success: false, message: "User not authenticated" } };
+  }
+
+  let userId;
+  try {
+    userId = new mongoose.Types.ObjectId(userIdRaw);
+  } catch {
+    return { status: 400, body: { success: false, message: "Invalid user id" } };
+  }
+
   const userIdStr = userId.toString();
   const membership = {
     $or: [
       { creator: userId },
       { "passengers.userId": userId },
       { "all_deliveries.userId": userId },
+      { "passenger_requested_ride.userId": userId },
+      { "users_request_Couriers.userId": userId },
     ],
   };
 
   const query = completed
     ? {
-        status: { $in: ["completed", "cancelled", "started"] },
+        status: "completed",
         ...membership,
       }
     : {
-        status: "pending",
-        $and: [upcomingDateFilter(), membership],
+        status: { $in: ["pending", "started"] },
+        ...membership,
       };
 
   const rides = await Ride.find(query)
-    .populate("creator", "-password -otp -otpExpires -__v")
-    .populate("passengers.userId", "-password -otp -otpExpires -__v userNo")
-    .populate("all_deliveries.userId", "-password -otp -otpExpires -__v userNo")
+    .populate({ path: "creator", select: USER_PUBLIC_FIELDS, strictPopulate: false })
+    .populate({
+      path: "passengers.userId",
+      select: USER_PUBLIC_FIELDS,
+      strictPopulate: false,
+    })
+    .populate({
+      path: "all_deliveries.userId",
+      select: USER_PUBLIC_FIELDS,
+      strictPopulate: false,
+    })
+    .populate({
+      path: "passenger_requested_ride.userId",
+      select: USER_PUBLIC_FIELDS,
+      strictPopulate: false,
+    })
+    .populate({
+      path: "users_request_Couriers.userId",
+      select: USER_PUBLIC_FIELDS,
+      strictPopulate: false,
+    })
     .sort(completed ? { date: -1, startTime: -1 } : { date: 1, startTime: 1 })
     .lean();
 
+  const allowedStatuses = completed ? ["completed"] : ["pending", "started"];
+
   const updatedRides = rides
-    .filter((ride) => (completed ? ride.status !== "pending" : ride.status === "pending"))
+    .filter((ride) => allowedStatuses.includes(ride.status))
     .flatMap((ride) => {
-    const results = [];
-    const isDriver = ride.creator?._id.toString() === userIdStr;
-    const passengerData = ride.passengers?.find((p) => p.userId?._id.toString() === userIdStr);
-    const courierData = ride.all_deliveries?.find((d) => d.userId?._id.toString() === userIdStr);
-    if (isDriver) results.push({ ...ride, myRole: "driver", roleContext: "creator", activeData: ride.creator });
-    if (passengerData) {
-      results.push({
-        ...ride,
-        myRole: "passenger",
-        roleContext: "passengers",
-        activeData: passengerData,
-        ride_amount: passengerData.ride_amount ?? ride.ride_amount,
-      });
-    }
-    if (courierData) {
-      results.push({
-        ...ride,
-        myRole: "courier",
-        roleContext: "all_deliveries",
-        activeData: courierData,
-        ride_amount: courierData.amount_will ?? ride.ride_amount,
-      });
-    }
-    return results;
-  });
+      const results = [];
+      const passengers = ride.passengers || [];
+      const deliveries = ride.all_deliveries || [];
+      const passengerRequests = ride.passenger_requested_ride || [];
+      const courierRequests = ride.users_request_Couriers || [];
+
+      const isDriver = refIdStr(ride.creator) === userIdStr;
+      const passengerData = passengers.find((p) => refIdStr(p.userId) === userIdStr);
+      const courierData = deliveries.find((d) => refIdStr(d.userId) === userIdStr);
+      const pendingPassengerReq = passengerRequests.find(
+        (r) => refIdStr(r.userId) === userIdStr
+      );
+      const pendingCourierReq = courierRequests.find(
+        (r) => refIdStr(r.userId) === userIdStr
+      );
+
+      const scheduleMeta = {
+        isSchedulePassed: isRideScheduledTimePassed(ride),
+        isScheduleFuture: isRideScheduledTimeFuture(ride),
+        canStartLate: ride.status === "pending" && isRideScheduledTimePassed(ride),
+        canStartEarly: ride.status === "pending" && isRideScheduledTimeFuture(ride),
+      };
+
+      if (isDriver) {
+        results.push({
+          ...ride,
+          ...scheduleMeta,
+          myRole: "driver",
+          roleContext: "creator",
+          activeData: ride.creator,
+        });
+      }
+      if (passengerData) {
+        results.push({
+          ...ride,
+          ...scheduleMeta,
+          myRole: "passenger",
+          roleContext: "passengers",
+          bookingStatus: "confirmed",
+          activeData: passengerData,
+          ride_amount: passengerData.ride_amount ?? ride.ride_amount,
+          requires_seats: passengerData.requires_seats,
+        });
+      } else if (pendingPassengerReq) {
+        results.push({
+          ...ride,
+          ...scheduleMeta,
+          myRole: "passenger",
+          roleContext: "passenger_requested_ride",
+          bookingStatus: "pending_approval",
+          activeData: pendingPassengerReq,
+          ride_amount: pendingPassengerReq.ride_amount ?? ride.ride_amount,
+          requires_seats: pendingPassengerReq.requires_seats,
+        });
+      }
+      if (courierData) {
+        results.push({
+          ...ride,
+          ...scheduleMeta,
+          myRole: "courier",
+          roleContext: "all_deliveries",
+          bookingStatus: "confirmed",
+          activeData: courierData,
+          ride_amount: courierData.amount_will ?? ride.ride_amount,
+        });
+      } else if (pendingCourierReq) {
+        results.push({
+          ...ride,
+          ...scheduleMeta,
+          myRole: "courier",
+          roleContext: "users_request_Couriers",
+          bookingStatus: "pending_approval",
+          activeData: pendingCourierReq,
+          ride_amount: pendingCourierReq.amount_will ?? ride.ride_amount,
+        });
+      }
+      return results;
+    });
   return { status: 200, body: { success: true, count: updatedRides.length, rides: updatedRides } };
 };
 
-const USER_FIELDS = "name email mobile profile_img gender userNo";
+const USER_FIELDS = USER_PUBLIC_FIELDS;
 
 const sanitizeParticipant = (entry, viewerId) => {
   const doc = entry.toObject ? entry.toObject() : { ...entry };
@@ -286,8 +489,9 @@ const getRideDetails = async (rideId, viewerId) => {
 
 const getMyRequests = async (user) => {
   const userId = new mongoose.Types.ObjectId(user._id);
+
   const passengerData = await PassengerRide.find({ creator: userId, status: "pending" }).lean();
-  const passengerRequests = passengerData.map((p) => ({
+  const standalonePassengerRequests = passengerData.map((p) => ({
     requestId: p._id,
     passengerRideId: p._id,
     from: p.from,
@@ -300,6 +504,31 @@ const getMyRequests = async (user) => {
     status: p.status,
     type: "passenger",
   }));
+
+  const userRidesDoc = await UserRides.findOne({ creator: userId })
+    .populate("my_pending_ride_requests.rideId", "from to date startTime")
+    .populate("my_pending_ride_requests.driverId", "name mobile")
+    .lean();
+
+  const rideJoinRequests = (userRidesDoc?.my_pending_ride_requests || [])
+    .filter((r) => !r.status || r.status === "pending")
+    .map((r) => ({
+      requestId: r.rideId?._id || r.rideId,
+      rideId: r.rideId?._id || r.rideId,
+      from: r.rideId?.from,
+      to: r.rideId?.to,
+      date: r.rideId?.date,
+      startTime: r.rideId?.startTime,
+      seats: r.seats_requested,
+      amount: r.amount_requested,
+      driver: r.driverId ? { name: r.driverId.name, mobile: r.driverId.mobile } : null,
+      requestedAt: r.requestedAt,
+      status: r.status || "pending",
+      type: "passenger",
+    }));
+
+  const passengerRequests = [...standalonePassengerRequests, ...rideJoinRequests];
+
   const courierRequestsData = await Courier.find({ creator: userId, courier_status: { $in: ["pending", "request_to_driver"] } }).lean();
   const courierRequests = courierRequestsData.map((c) => ({
     requestId: c._id,

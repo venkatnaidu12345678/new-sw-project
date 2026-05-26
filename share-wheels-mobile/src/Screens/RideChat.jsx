@@ -8,19 +8,29 @@ import {
   StyleSheet,
   Platform,
   ActivityIndicator,
+  KeyboardAvoidingView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import KeyboardAwareScreen from "../Components/ui/KeyboardAwareScreen";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRoute } from "@react-navigation/native";
-import BackButton from "../Components/BackButton";
+import { useRoute, useNavigation } from "@react-navigation/native";
+import ScreenHeader from "../Components/ui/ScreenHeader";
+import ScreenContainer from "../Components/ui/ScreenContainer";
+import UserAvatar from "../Components/ui/UserAvatar";
 import { getRideChatMessages, sendRideChatMessage } from "../ApiService/chatApiServices";
 import { profileData } from "../Navigation/AuthNavigator";
 import { useParticipantLocation } from "../hooks/useDriverLocation";
 import { INPUT_COLORS } from "../theme/inputTheme";
+import { LAYOUT } from "../theme/layout";
+
+const ROLE_COLORS = {
+  driver: "#2563EB",
+  passenger: "#10B981",
+  courier: "#F59E0B",
+};
 
 const RideChat = () => {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
   const route = useRoute();
   const {
     rideId,
@@ -33,6 +43,7 @@ const RideChat = () => {
   } = route.params || {};
   const { ProfileDetails } = profileData();
   const myId = ProfileDetails?._id || ProfileDetails?.id;
+  const myProfile = ProfileDetails?.data?.personalInfo;
 
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
@@ -41,9 +52,15 @@ const RideChat = () => {
   const [token, setToken] = useState(null);
   const listRef = useRef(null);
 
-  const isDirect = !!peerId;
   const isRideStarted =
     rideStatus === "started" || rideStatus === "Started";
+  const peerColor = ROLE_COLORS[peerRole] || "#64748B";
+
+  useEffect(() => {
+    if (!peerId) {
+      navigation.goBack();
+    }
+  }, [peerId, navigation]);
 
   useParticipantLocation({
     enabled: isRideStarted && !!token && !!rideId,
@@ -52,9 +69,9 @@ const RideChat = () => {
   });
 
   const loadMessages = useCallback(async () => {
-    if (!token || !rideId) return;
+    if (!token || !rideId || !peerId) return;
     try {
-      const res = await getRideChatMessages(token, rideId, peerId || undefined);
+      const res = await getRideChatMessages(token, rideId, peerId);
       setMessages(res.messages || []);
     } catch (e) {
       console.log("Chat load error:", e.message);
@@ -68,26 +85,21 @@ const RideChat = () => {
   }, []);
 
   useEffect(() => {
-    if (token) loadMessages();
-  }, [token, loadMessages]);
+    if (token && peerId) loadMessages();
+  }, [token, peerId, loadMessages]);
 
   useEffect(() => {
-    if (!token) return undefined;
+    if (!token || !peerId) return undefined;
     const poll = setInterval(loadMessages, 4000);
     return () => clearInterval(poll);
-  }, [token, loadMessages]);
+  }, [token, peerId, loadMessages]);
 
   const handleSend = async () => {
     const msg = text.trim();
-    if (!msg || sending) return;
+    if (!msg || sending || !peerId) return;
     setSending(true);
     try {
-      const res = await sendRideChatMessage(
-        token,
-        rideId,
-        msg,
-        peerId || undefined
-      );
+      const res = await sendRideChatMessage(token, rideId, msg, peerId);
       if (res.message) {
         setMessages((prev) => [...prev, res.message]);
         setText("");
@@ -101,173 +113,296 @@ const RideChat = () => {
   };
 
   const renderItem = ({ item }) => {
-    const isMine =
-      item.senderId?.toString() === myId?.toString() ||
-      item.senderId === myId;
+    const senderId = item.senderId?._id || item.senderId;
+    const isMine = senderId?.toString() === myId?.toString();
+    const roleColor = ROLE_COLORS[item.senderRole] || "#64748B";
+    const timeStr = item.createdAt
+      ? new Date(item.createdAt).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "";
+
+    if (isMine) {
+      return (
+        <View style={styles.rowMine}>
+          <View style={styles.colMine}>
+            <View style={[styles.bubble, styles.bubbleMine]}>
+              <Text style={styles.msgTextMine}>{item.message}</Text>
+            </View>
+            <Text style={styles.timeMine}>{timeStr}</Text>
+          </View>
+          <UserAvatar user={myProfile} size={32} />
+        </View>
+      );
+    }
+
     return (
-      <View style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleOther]}>
-        {!isMine && (
-          <Text style={styles.senderName}>
-            {item.senderName} · {item.senderRole}
+      <View style={styles.rowOther}>
+        <UserAvatar
+          user={{ name: item.senderName, profile_img: item.senderAvatar }}
+          size={32}
+        />
+        <View style={styles.colOther}>
+          <Text style={styles.senderLabel}>
+            {item.senderName || peerName || "User"}
+            {item.senderRole ? (
+              <Text style={[styles.roleTag, { color: roleColor }]}>
+                {" "}
+                · {item.senderRole}
+              </Text>
+            ) : null}
           </Text>
-        )}
-        <Text style={[styles.msgText, isMine && styles.msgTextMine]}>{item.message}</Text>
-        <Text style={[styles.time, isMine && styles.timeMine]}>
-          {item.createdAt
-            ? new Date(item.createdAt).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : ""}
-        </Text>
+          <View style={[styles.bubble, styles.bubbleOther]}>
+            <Text style={styles.msgTextOther}>{item.message}</Text>
+          </View>
+          <Text style={styles.timeOther}>{timeStr}</Text>
+        </View>
       </View>
     );
   };
 
-  const chatTitle = isDirect
-    ? `Chat · ${peerName || "User"}`
-    : "Group chat";
+  if (!peerId) return null;
+
+  const subtitle = [rideTitle, peerRole].filter(Boolean).join(" · ");
 
   return (
-    <KeyboardAwareScreen
-      style={styles.container}
-      keyboardVerticalOffset={insets.top + (Platform.OS === "ios" ? 56 : 24)}
-    >
-      <View style={styles.header}>
-        <BackButton />
-        <View style={styles.headerText}>
-          <Text style={styles.title}>{chatTitle}</Text>
-          <Text style={styles.subtitle} numberOfLines={1}>
-            {rideTitle || "Ride conversation"}
-            {peerRole ? ` · ${peerRole}` : ""}
+    <ScreenContainer backgroundColor="#F1F5F9" edges={["top", "bottom"]} style={styles.screen}>
+      <ScreenHeader title={peerName || "Chat"} />
+
+      <View style={styles.peerBar}>
+        <View style={[styles.peerDot, { backgroundColor: peerColor }]} />
+        <View style={styles.peerMeta}>
+          <Text style={styles.peerRole}>
+            {(peerRole || "participant").toString()}
           </Text>
+          {subtitle ? (
+            <Text style={styles.peerRide} numberOfLines={1}>
+              {subtitle}
+            </Text>
+          ) : null}
         </View>
       </View>
 
       {isRideStarted && (
         <View style={styles.trackingBanner}>
           <Text style={styles.trackingText}>
-            Location sharing active — open Live map from ride details
+            Live ride — location sharing is active
           </Text>
         </View>
       )}
 
-      {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} size="large" color="#2563EB" />
-      ) : (
-        <FlatList
-          ref={listRef}
-          data={messages}
-          keyExtractor={(item, i) => item._id?.toString() || String(i)}
-          renderItem={renderItem}
-          contentContainerStyle={styles.list}
-          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
-          ListEmptyComponent={
-            <Text style={styles.empty}>
-              {isDirect
-                ? "No messages yet. Start a private conversation."
-                : "No messages yet. Say hello to everyone on the ride!"}
-            </Text>
-          }
-        />
-      )}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={insets.top + 8}
+      >
+        {loading ? (
+          <ActivityIndicator style={styles.loader} size="large" color="#2563EB" />
+        ) : (
+          <FlatList
+            ref={listRef}
+            data={messages}
+            keyExtractor={(item, i) => item._id?.toString() || String(i)}
+            renderItem={renderItem}
+            contentContainerStyle={styles.list}
+            onContentSizeChange={() =>
+              listRef.current?.scrollToEnd({ animated: false })
+            }
+            ListEmptyComponent={
+              <View style={styles.emptyWrap}>
+                <Text style={styles.emptyIcon}>💬</Text>
+                <Text style={styles.emptyTitle}>No messages yet</Text>
+                <Text style={styles.empty}>
+                  Send a message to {peerName || "this person"}.
+                </Text>
+              </View>
+            }
+          />
+        )}
 
-      <View style={styles.inputRow}>
-        <TextInput
-          style={styles.input}
-          placeholder={isDirect ? "Private message…" : "Message the group…"}
-          placeholderTextColor={INPUT_COLORS.placeholder}
-          value={text}
-          onChangeText={setText}
-          multiline
-          maxLength={500}
-        />
-        <TouchableOpacity
-          style={[styles.sendBtn, sending && styles.sendDisabled]}
-          onPress={handleSend}
-          disabled={sending}
-        >
-          <Text style={styles.sendText}>{sending ? "…" : "Send"}</Text>
-        </TouchableOpacity>
-      </View>
-    </KeyboardAwareScreen>
+        <View style={[styles.inputRow, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+          <TextInput
+            style={styles.input}
+            placeholder="Type a message…"
+            placeholderTextColor={INPUT_COLORS.placeholder}
+            value={text}
+            onChangeText={setText}
+            multiline
+            maxLength={500}
+          />
+          <TouchableOpacity
+            style={[styles.sendBtn, (!text.trim() || sending) && styles.sendDisabled]}
+            onPress={handleSend}
+            disabled={!text.trim() || sending}
+          >
+            <Text style={styles.sendText}>{sending ? "…" : "Send"}</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </ScreenContainer>
   );
 };
 
 export default RideChat;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8FAFC" },
-  header: {
+  screen: { flex: 1 },
+  flex: { flex: 1 },
+  peerBar: {
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: 48,
-    paddingHorizontal: 12,
-    paddingBottom: 12,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
+    paddingHorizontal: LAYOUT.spacing.screen,
+    paddingBottom: LAYOUT.spacing.sm,
   },
-  headerText: { marginLeft: 8, flex: 1 },
-  title: { fontSize: 18, fontWeight: "700" },
-  subtitle: { fontSize: 13, color: "#64748B" },
+  peerDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 8,
+  },
+  peerMeta: { flex: 1 },
+  peerRole: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#334155",
+    textTransform: "capitalize",
+  },
+  peerRide: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
+  },
   trackingBanner: {
     backgroundColor: "#DCFCE7",
-    padding: 10,
-    marginHorizontal: 12,
-    marginTop: 8,
-    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: LAYOUT.spacing.screen,
+    marginHorizontal: LAYOUT.spacing.screen,
+    borderRadius: 10,
+    marginBottom: 8,
   },
-  trackingText: { fontSize: 12, color: "#166534", textAlign: "center" },
-  list: { padding: 16, paddingBottom: 8 },
-  empty: { textAlign: "center", color: "#94A3B8", marginTop: 40 },
+  trackingText: {
+    fontSize: 12,
+    color: "#166534",
+    textAlign: "center",
+    fontWeight: "600",
+  },
+  loader: { marginTop: 48 },
+  list: {
+    paddingHorizontal: LAYOUT.spacing.screen,
+    paddingTop: 8,
+    paddingBottom: 12,
+    flexGrow: 1,
+  },
+  emptyWrap: {
+    alignItems: "center",
+    marginTop: 48,
+    paddingHorizontal: 24,
+  },
+  emptyIcon: { fontSize: 40, marginBottom: 12 },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#0F172A",
+    marginBottom: 6,
+  },
+  empty: {
+    textAlign: "center",
+    color: "#64748B",
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  rowMine: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "flex-end",
+    marginBottom: 14,
+    gap: 8,
+  },
+  colMine: {
+    maxWidth: "78%",
+    alignItems: "flex-end",
+  },
+  rowOther: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    marginBottom: 14,
+    gap: 8,
+  },
+  colOther: {
+    maxWidth: "78%",
+    flex: 1,
+  },
+  senderLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#64748B",
+    marginBottom: 4,
+    marginLeft: 4,
+  },
+  roleTag: {
+    fontWeight: "700",
+    textTransform: "capitalize",
+  },
   bubble: {
-    maxWidth: "80%",
-    padding: 12,
-    borderRadius: 16,
-    marginBottom: 10,
-    alignSelf: "flex-start",
-    backgroundColor: "#fff",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
+  },
+  bubbleMine: {
+    backgroundColor: "#2563EB",
+    borderBottomRightRadius: 4,
+  },
+  bubbleOther: {
+    backgroundColor: "#FFFFFF",
+    borderBottomLeftRadius: 4,
     borderWidth: 1,
     borderColor: "#E2E8F0",
   },
-  bubbleMine: {
-    alignSelf: "flex-end",
-    backgroundColor: "#2563EB",
-    borderColor: "#2563EB",
+  msgTextMine: { fontSize: 15, color: "#FFFFFF", lineHeight: 21 },
+  msgTextOther: { fontSize: 15, color: "#0F172A", lineHeight: 21 },
+  timeMine: {
+    fontSize: 10,
+    color: "#94A3B8",
+    marginTop: 4,
+    marginRight: 4,
   },
-  bubbleOther: {},
-  senderName: { fontSize: 11, color: "#64748B", marginBottom: 4, fontWeight: "600" },
-  msgText: { fontSize: 15, color: "#0F172A" },
-  msgTextMine: { color: "#fff" },
-  time: { fontSize: 10, color: "#94A3B8", marginTop: 6, alignSelf: "flex-end" },
-  timeMine: { color: "#BFDBFE" },
+  timeOther: {
+    fontSize: 10,
+    color: "#94A3B8",
+    marginTop: 4,
+    marginLeft: 4,
+  },
   inputRow: {
     flexDirection: "row",
-    padding: 12,
-    backgroundColor: "#fff",
+    alignItems: "flex-end",
+    paddingHorizontal: LAYOUT.spacing.screen,
+    paddingTop: 10,
+    backgroundColor: "#FFFFFF",
     borderTopWidth: 1,
     borderTopColor: "#E2E8F0",
-    alignItems: "flex-end",
-    gap: 8,
   },
   input: {
     flex: 1,
+    marginRight: 8,
     borderWidth: 1,
     borderColor: INPUT_COLORS.border,
-    borderRadius: 12,
-    paddingHorizontal: 14,
+    borderRadius: 22,
+    paddingHorizontal: 16,
     paddingVertical: 10,
     maxHeight: 100,
     color: INPUT_COLORS.text,
-    backgroundColor: INPUT_COLORS.background,
+    backgroundColor: "#F8FAFC",
+    fontSize: 15,
   },
   sendBtn: {
     backgroundColor: "#2563EB",
     paddingHorizontal: 18,
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 22,
+    minWidth: 64,
+    alignItems: "center",
   },
-  sendDisabled: { opacity: 0.6 },
-  sendText: { color: "#fff", fontWeight: "700" },
+  sendDisabled: { opacity: 0.45 },
+  sendText: { color: "#fff", fontWeight: "700", fontSize: 14 },
 });

@@ -54,6 +54,7 @@ export const endPoints = {
   removepassengerurl: "/driver-rides/driver-remove-passenger",
   removeCourierurl: "/courier/remove-delivery",
   startrideurl: "/driver-rides/start-ride",
+  updateRideSeatsurl: "/driver-rides/update-seats",
   createpassengerrequesturl: "/passenger-rides/create-passenger-request",
   courierRequesturl: "/courier/create-courier-request",
   getallridesurl: "/rides/get-rides",

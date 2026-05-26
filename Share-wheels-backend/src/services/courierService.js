@@ -1,8 +1,10 @@
 const mongoose = require("mongoose");
 const Courier = require("../models/courierModel");
 const Ride = require("../models/rideModel");
+const User = require("../models/userModel");
 const { parseAmount } = require("../schemas/commonSchemas");
 const { ensureParticipantBoardingOtp } = require("./rideVerificationService");
+const { sendPushNotification } = require("../utils/firebaseAdmin");
 
 const createCourierRequest = async (user, body) => {
   const {
@@ -50,28 +52,93 @@ const requestCourier = async (user, body) => {
   }
   const ride = await Ride.findById(rideId);
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
-  if (ride.creator.toString() === user._id.toString()) return { status: 400, body: { success: false, message: "Cannot request own ride" } };
+  if (ride.creator.toString() === user._id.toString()) {
+    return { status: 400, body: { success: false, message: "Cannot request own ride" } };
+  }
+  if (!ride.CanCarryCourier) {
+    return {
+      status: 400,
+      body: { success: false, message: "This ride does not accept courier deliveries" },
+    };
+  }
 
   const parsedAmount = parseAmount(amount_will);
   if (parsedAmount === null || parsedAmount <= 0) {
     return { status: 400, body: { success: false, message: "Valid amount_will is required" } };
   }
 
+  const alreadyCourier = ride.all_deliveries?.some(
+    (c) => c.userId?.toString() === user._id.toString()
+  );
+  if (alreadyCourier) {
+    return { status: 400, body: { success: false, message: "Already a courier on this ride" } };
+  }
+
   const courierData = {
     userId: user._id,
     courierNumber: `CR-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-    from, to, courier_type, what_to_deliver, courier_img, amount_will: parsedAmount, date, timeSlot,
-    courier_receiver_details: { name: receiver_name, mobile: receiver_mobile, alternate_mobile: receiver_alternate_mobile, Address: receiver_address },
+    from,
+    to,
+    courier_type,
+    what_to_deliver,
+    courier_img,
+    amount_will: parsedAmount,
+    date,
+    timeSlot,
+    courier_receiver_details: {
+      name: receiver_name,
+      mobile: receiver_mobile,
+      alternate_mobile: receiver_alternate_mobile,
+      Address: receiver_address,
+    },
   };
-  if (ride.CanCarryCourier) {
+
+  if (ride.QuickReserve) {
     await ensureParticipantBoardingOtp(courierData, user._id);
     ride.all_deliveries.push(courierData);
     await ride.save();
-    return { status: 200, body: { success: true, message: "Courier directly assigned", data: ride.all_deliveries } };
+    const driver = await User.findById(ride.creator);
+    if (driver?.fcmToken) {
+      await sendPushNotification(
+        driver.fcmToken,
+        "New courier (Quick Reserve)",
+        `${user.name || "A courier"} booked delivery on your ride`,
+        { rideId: ride._id.toString(), type: "courier_joined" }
+      );
+    }
+    return {
+      status: 200,
+      body: {
+        success: true,
+        bookingStatus: "confirmed",
+        message: "Courier booking confirmed on this ride.",
+        data: ride.all_deliveries,
+      },
+    };
   }
+
   ride.users_request_Couriers.push(courierData);
   await ride.save();
-  return { status: 200, body: { success: true, message: "Courier request sent", data: ride.users_request_Couriers } };
+
+  const driver = await User.findById(ride.creator);
+  if (driver?.fcmToken) {
+    await sendPushNotification(
+      driver.fcmToken,
+      "New courier request",
+      `${user.name || "Someone"} requested courier delivery`,
+      { rideId: ride._id.toString(), type: "courier_request" }
+    );
+  }
+
+  return {
+    status: 200,
+    body: {
+      success: true,
+      bookingStatus: "pending_approval",
+      message: "Courier request sent. Waiting for driver approval.",
+      data: ride.users_request_Couriers,
+    },
+  };
 };
 
 const acceptCourier = async (user, { rideId, courierId }) => {

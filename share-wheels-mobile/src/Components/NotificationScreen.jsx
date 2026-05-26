@@ -6,6 +6,8 @@ import {
   FlatList,
   Image,
 } from "react-native";
+import ScreenHeader from "./ui/ScreenHeader";
+import ScreenContainer from "./ui/ScreenContainer";
 
 /* LOCAL ICONS */
 import rideIcon from "../assets/notificationpassenger.png";
@@ -103,8 +105,8 @@ const NotificationCard = ({ item }) => {
 
 const NotificationsScreen = () => {
   return (
-    <View style={styles.container}>
-      <Text style={styles.header}>Notifications</Text>
+    <ScreenContainer backgroundColor="#F8FAFC" style={styles.container}>
+      <ScreenHeader title="Notifications" />
       <Text style={styles.subHeader}>2 unread notifications</Text>
 
       <FlatList
@@ -113,7 +115,7 @@ const NotificationsScreen = () => {
         renderItem={({ item }) => <NotificationCard item={item} />}
         contentContainerStyle={{ paddingBottom: 20 }}
       />
-    </View>
+    </ScreenContainer>
   );
 };
 

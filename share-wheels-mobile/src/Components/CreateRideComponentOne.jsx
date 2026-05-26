@@ -79,7 +79,12 @@ const CreateRideComponentOne = ({
 
   return (
     <View style={styles.mainContainer}>
-      <KeyboardAwareScreen scrollable contentContainerStyle={styles.scrollContent}>
+      <KeyboardAwareScreen
+        scrollable
+        keyboardShouldPersistTaps="always"
+        scrollViewProps={{ keyboardDismissMode: "on-drag" }}
+        contentContainerStyle={styles.scrollContent}
+      >
           <VehicleInfo
             vehicleInfo={vehicleInfo}
             userName={userName}
@@ -153,9 +158,9 @@ const CreateRideComponentOne = ({
             subtitle="Requests accepted automatically"
             icon={require("../assets/reverse.png")}
             iconBg="#E6FFFA"
-            value={rideData.quickReserve}
+            value={rideData.QuickReserve}
             onChange={(value) =>
-              updateRideData("quickReserve", value)
+              updateRideData("QuickReserve", value)
             }
           />
       </KeyboardAwareScreen>

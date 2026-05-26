@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useDriverLocation } from "../hooks/useDriverLocation";
+import { useParticipantLocation } from "../hooks/useDriverLocation";
 import { getActiveRideTracking } from "../Utils/activeRideTracking";
 
 /**
- * Keeps sending driver GPS app-wide while a ride is marked active in storage.
+ * Keeps sending GPS app-wide while a ride is active (driver, passenger, or courier).
  */
 const DriverLocationTracker = () => {
   const [rideId, setRideId] = useState(null);
@@ -23,7 +23,7 @@ const DriverLocationTracker = () => {
     return () => clearInterval(interval);
   }, []);
 
-  useDriverLocation({
+  useParticipantLocation({
     enabled: !!rideId && !!token,
     rideId,
     token,

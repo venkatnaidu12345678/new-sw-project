@@ -24,6 +24,7 @@ import RideHistoryCourierview from "./RideHistoryCourierview";
 
 /* API */
 import { getMyRequests } from "../ApiService/ridesApiServices";
+import { getApiErrorMessage } from "../Utils/apiErrors";
 import { RideListSkeleton } from "./ui/Skeleton";
 import AnimatedLoad from "./ui/AnimatedLoad";
 import AnimatedTabs from "./ui/AnimatedTabs";
@@ -38,6 +39,7 @@ const MyRequest = () => {
   const [activeTab, setActiveTab] = useState("Passenger");
   const [rides, setRides] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState("");
 
   const [selectedRide, setSelectedRide] = useState(null);
   const [isSliderVisible, setSliderVisible] = useState(false);
@@ -54,8 +56,14 @@ const MyRequest = () => {
   const fetchRequests = async () => {
     try {
       setLoading(true);
+      setFetchError("");
 
       const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        setFetchError("Please sign in again.");
+        setRides([]);
+        return;
+      }
       const res = await getMyRequests(token);
 
       /* ✅ PASSENGER */
@@ -105,6 +113,7 @@ const MyRequest = () => {
       setRides([...passenger, ...courier]);
     } catch (err) {
       console.log("❌ FETCH ERROR:", err.message);
+      setFetchError(getApiErrorMessage(err, "Could not load your requests."));
       setRides([]);
     } finally {
       setLoading(false);
@@ -200,6 +209,10 @@ const MyRequest = () => {
         }
         style={{ flex: 1 }}
       >
+      {fetchError ? (
+        <Text style={styles.errorText}>{fetchError}</Text>
+      ) : null}
+
       <AnimatedTabs
         tabs={tabs}
         activeIndex={activeIndex}
@@ -213,7 +226,9 @@ const MyRequest = () => {
           renderItem={renderRide}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>No Requests Found</Text>
+            <Text style={styles.emptyText}>
+              {fetchError ? "" : "No Requests Found"}
+            </Text>
           }
           contentContainerStyle={{
             paddingBottom: getScrollBottomPadding(insets.bottom),
@@ -292,6 +307,15 @@ headerTitle: {
     marginTop: 40,
     color: "#64748B",
     fontSize: 15,
+  },
+
+  errorText: {
+    textAlign: "center",
+    marginTop: 12,
+    marginBottom: 8,
+    color: "#DC2626",
+    fontSize: 14,
+    paddingHorizontal: 16,
   },
 
   card: {

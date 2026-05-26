@@ -33,8 +33,23 @@ const UpcomingRide = ({ data, onPress }) => {
 
   const route = `${data?.from || ""} → ${data?.to || ""}`;
   const car = data?.vehicle?.type || "N/A";
-  const seats = data?.availableSeats || 0;
+  const seats =
+    data?.requires_seats ||
+    data?.activeData?.requires_seats ||
+    data?.availableSeats ||
+    0;
   const price = getRideDisplayFare(data);
+  const isPending = data?.bookingStatus === "pending_approval";
+  const statusLabel =
+    data?.status === "started"
+      ? "In progress"
+      : data?.isScheduleFuture && data?.status === "pending" && data?.myRole === "driver"
+      ? "Can start early"
+      : data?.isSchedulePassed && data?.status === "pending" && data?.myRole === "driver"
+      ? "Ready to start (late)"
+      : isPending
+      ? "Awaiting approval"
+      : null;
 
   const formattedDate = data?.date
     ? new Date(data.date).toLocaleDateString("en-IN", {
@@ -65,8 +80,23 @@ const UpcomingRide = ({ data, onPress }) => {
           <Text style={styles.driverName}>{data.creator.name}</Text>
         ) : null}
         <Text style={styles.subtitle}>
-          {car} | {seats} Seats | ₹{price}/Seat | {formattedDate}
+          {car} | {seats} seat{seats !== 1 ? "s" : ""} | ₹{price}
+          {data?.myRole === "passenger" && !isPending ? "/seat" : ""} | {formattedDate}
         </Text>
+        {statusLabel ? (
+          <Text
+            style={[
+              styles.statusPill,
+              isPending && styles.statusPending,
+              (data?.isSchedulePassed || data?.isScheduleFuture) &&
+                data?.status === "pending" &&
+                data?.myRole === "driver" &&
+                styles.statusLate,
+            ]}
+          >
+            {statusLabel}
+          </Text>
+        ) : null}
       </View>
 
       <View style={styles.right}>
@@ -120,6 +150,26 @@ const styles = StyleSheet.create({
     fontSize: LAYOUT.font.small,
     color: "#6B7280",
     marginTop: 2,
+  },
+  statusPill: {
+    marginTop: 6,
+    alignSelf: "flex-start",
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#2563EB",
+    backgroundColor: "#EFF6FF",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: "hidden",
+  },
+  statusPending: {
+    color: "#B45309",
+    backgroundColor: "#FFFBEB",
+  },
+  statusLate: {
+    color: "#1D4ED8",
+    backgroundColor: "#DBEAFE",
   },
 
   right: {

@@ -1,6 +1,13 @@
 import { useEffect, useRef } from "react";
 import { Platform, PermissionsAndroid, NativeModules } from "react-native";
 import { updateRideLocation } from "../ApiService/chatApiServices";
+import {
+  connectRideSocket,
+  joinRideRoom,
+  leaveRideRoom,
+  emitLocationViaSocket,
+  releaseRideSocket,
+} from "../services/rideSocket";
 
 import Geolocation from "@react-native-community/geolocation";
 
@@ -147,6 +154,7 @@ const sendCoords = async (token, rideId, latitude, longitude) => {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
     throw new Error("Invalid GPS coordinates");
   }
+  emitLocationViaSocket(rideId, latitude, longitude);
   const data = await updateRideLocation(token, rideId, latitude, longitude);
   if (__DEV__) {
     console.log("[GPS] sent", rideId, latitude, longitude, data?.success);
@@ -230,6 +238,13 @@ export const useParticipantLocation = ({ enabled, rideId, token }) => {
       }
 
       try {
+        await connectRideSocket(token);
+        joinRideRoom(rideId);
+      } catch (e) {
+        console.warn("[Socket] tracking connect failed:", e.message);
+      }
+
+      try {
         await pushDriverLocationNow(rideId, token);
       } catch (e) {
         console.warn("[GPS] initial ping:", e.message);
@@ -256,6 +271,8 @@ export const useParticipantLocation = ({ enabled, rideId, token }) => {
         Geolocation.clearWatch(watchId.current);
         watchId.current = null;
       }
+      leaveRideRoom(rideId);
+      releaseRideSocket();
     };
   }, [enabled, rideId, token]);
 };

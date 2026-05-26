@@ -5,14 +5,20 @@ const handle = async (res, fn) => {
     const result = await fn();
     return res.status(result.status).json(result.body);
   } catch (error) {
-    return res.status(500).json({ message: "Server error", error: error.message });
+    console.error("[rideController]", error.message, error.stack);
+    const detail = error.message || "Unexpected server error";
+    return res.status(500).json({
+      success: false,
+      message: detail,
+      error: detail,
+    });
   }
 };
 
 module.exports = {
   getRidesData: async (req, res) => handle(res, () => rideService.getRidesData(req.body)),
   createRide: async (req, res) => handle(res, () => rideService.createRide(req.user, req.body)),
-  getRides: async (req, res) => handle(res, () => rideService.getRides(req.query)),
+  getRides: async (req, res) => handle(res, () => rideService.getRides(req.query, req.user)),
   cancelRide: async (req, res) => handle(res, () => rideService.cancelRide(req.user, req.body)),
   sendPassengerRequest: async (req, res) => handle(res, () => rideService.sendPassengerRequest(req.user, req.body)),
   upcomingRides: async (req, res) => handle(res, () => rideService.listRidesByPhase(req.user, false)),

@@ -1,28 +1,11 @@
 import { baseUrl, endPoints } from '../Config';
 import { parseApiResponse } from '../Utils/parseApiResponse';
 import { appendImageFile, ensureCloudinaryUrl } from '../Utils/imageUpload';
+import { apiRequest } from '../Utils/apiRequest';
+import { getApiErrorMessage } from '../Utils/apiErrors';
 
 export const getUpcomingRides = async (token) => {
-  try {
-    const response = await fetch(`${baseUrl}${endPoints.upcomingRideurl}`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || "Failed to fetch upcoming rides");
-    }
-
-    return data;
-  } catch (error) {
-
-    throw error;
-  }
+  return apiRequest(`${baseUrl}${endPoints.upcomingRideurl}`, { token });
 };
 
 export const createRideApi = async (token, rideData) => {
@@ -485,39 +468,7 @@ export const endRide = async (token, payload) => {
   }
 };
 export const rideHistory = async (token) => {
-  try {
-    const response = await fetch(`${baseUrl}${endPoints.rideHistoryurl}`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    let result;
-
-    try {
-      result = await response.json();
-    } catch (err) {
-      console.log("Ride History Response is not JSON");
-      result = {};
-    }
-
-    console.log("Ride History Status:", response.status);
-    console.log("Ride History Response:", result);
-
-    if (!response.ok) {
-      throw new Error(
-        result?.error || result?.message || "Failed to fetch ride history"
-      );
-    }
-
-    return result;
-
-  } catch (error) {
-    console.error("Ride History API Error:", error);
-    throw error;
-  }
+  return apiRequest(`${baseUrl}${endPoints.rideHistoryurl}`, { token });
 };
 export const userProfile = async (token) => {
   if (!token) {
@@ -560,6 +511,26 @@ export const userProfile = async (token) => {
     throw {
       message: error.message || "Something went wrong",
     };
+  }
+};
+
+export const updateRideSeats = async (token, { rideId, totalSeats }) => {
+  try {
+    const response = await fetch(`${baseUrl}${endPoints.updateRideSeatsurl}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ rideId, totalSeats }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || data.error || "Failed to update seats");
+    }
+    return data;
+  } catch (error) {
+    throw new Error(error.message || "Failed to update seats");
   }
 };
 
@@ -761,46 +732,19 @@ export const pickPassengerApi = async (token, payload) => {
 };
 export const passengerSendRequestApi = async (token, payload) => {
   try {
-    const res = await fetch(
-      `${baseUrl}${endPoints.passengerSendRequesturl}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      }
-    );
-
-    let data = {};
-
-    try {
-      data = await res.json(); // ✅ safe parse
-    } catch (e) {
-      console.log("⚠️ JSON parse error");
-    }
-
-    console.log("🎯 Passenger API Response:", data);
-
-    if (!res.ok) {
-      return {
-        success: false,
-        message: data?.message || "Request failed",
-      };
-    }
-
-    return {
-      success: true,
-      ...data, // ✅ always return success flag
-    };
-
+    const data = await apiRequest(`${baseUrl}${endPoints.passengerSendRequesturl}`, {
+      token,
+      method: "POST",
+      body: {
+        ...payload,
+        requires_seats: Number(payload?.requires_seats) || 1,
+      },
+    });
+    return { success: true, ...data };
   } catch (error) {
-    console.log("❌ Passenger API Error:", error);
-
     return {
       success: false,
-      message: "Network error. Please try again.",
+      message: getApiErrorMessage(error, "Could not send booking request"),
     };
   }
 };

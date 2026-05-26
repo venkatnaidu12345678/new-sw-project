@@ -18,7 +18,7 @@ const KeyboardAwareScreen = ({
   contentContainerStyle,
   scrollable = false,
   keyboardVerticalOffset = 0,
-  keyboardShouldPersistTaps = "handled",
+  keyboardShouldPersistTaps = "always",
   scrollViewProps = {},
 }) => {
   const insets = useSafeAreaInsets();

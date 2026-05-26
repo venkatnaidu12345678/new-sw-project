@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import {
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { INPUT_COLORS } from "../theme/inputTheme";
+import { getApiErrorMessage } from "../Utils/apiErrors";
 import { launchCamera } from "react-native-image-picker";
 import { courierSendRequestApi,
   passengerSendRequestApi,
@@ -36,15 +37,29 @@ import neverCancelIcon from "../assets/nevercancelrideicon.png";
 import UserAvatar from "./ui/UserAvatar";
 import KeyboardAwareScreen from "./ui/KeyboardAwareScreen";
 import ScreenContainer from "./ui/ScreenContainer";
+import ScreenHeader from "./ui/ScreenHeader";
 import { LAYOUT } from "../theme/layout";
+import { profileData } from "../Navigation/AuthNavigator";
 
 if (Platform.OS === "android") {
   UIManager.setLayoutAnimationEnabledExperimental &&
     UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+const refUserId = (ref) =>
+  ref?._id?.toString?.() || ref?.toString?.() || "";
+
 const RideDetails = ({ navigation, route }) => {
   const { ride } = route.params || {};
+  const { ProfileDetails } = profileData();
+  const myUserId = refUserId(
+    ProfileDetails?._id ||
+      ProfileDetails?.id ||
+      ProfileDetails?.data?.personalInfo?._id ||
+      ProfileDetails?.data?.personalInfo?.id
+  );
+  const isOwnRide =
+    !!myUserId && !!ride?.creator && refUserId(ride.creator) === myUserId;
 
   /* 🔹 ACCORDION */
   const [showPassenger, setShowPassenger] = useState(true);
@@ -56,6 +71,13 @@ const RideDetails = ({ navigation, route }) => {
   const [showDate, setShowDate] = useState(false);
   const [showTime, setShowTime] = useState(false);
   const [seats, setSeats] = useState(1);
+  const [booking, setBooking] = useState(false);
+
+  const maxSeats = Math.max(0, Number(ride?.availableSeats) || 0);
+  const seatFare = Number(ride?.ride_amount) || 0;
+  const totalFare = seatFare * seats;
+  const quickReserve = !!ride?.QuickReserve;
+  const canCarryCourier = !!ride?.CanCarryCourier;
 
   /* 🔹 COURIER */
   const [courierData, setCourierData] = useState({
@@ -115,12 +137,16 @@ const RideDetails = ({ navigation, route }) => {
 
   /* 🔹 SEATS */
   const increaseSeats = () => {
-    if (seats < (ride.availableSeats || 1)) setSeats(seats + 1);
+    if (seats < maxSeats) setSeats(seats + 1);
   };
 
   const decreaseSeats = () => {
     if (seats > 1) setSeats(seats - 1);
   };
+
+  useEffect(() => {
+    if (maxSeats > 0 && seats > maxSeats) setSeats(maxSeats);
+  }, [maxSeats, seats]);
 
   /* 🔹 INPUT */
   const handleCourierChange = (key, value) => {
@@ -150,45 +176,68 @@ const RideDetails = ({ navigation, route }) => {
     );
   };
   const handleBookPassenger = async () => {
+    if (booking) return;
+    if (isOwnRide) {
+      Alert.alert(
+        "Your ride",
+        "You are the driver for this ride. You cannot book as a passenger on your own trip."
+      );
+      return;
+    }
     try {
       const token = await AsyncStorage.getItem("token");
 
       if (!token) {
-        Alert.alert("Error", "Login required");
+        Alert.alert("Sign in required", "Please log in to book a seat.");
         return;
       }
 
-      const payload = {
+      if (maxSeats < 1) {
+        Alert.alert("No seats", "This ride has no seats available.");
+        return;
+      }
+
+      setBooking(true);
+      const response = await passengerSendRequestApi(token, {
         rideId: ride._id,
         requires_seats: seats,
-      };
-      console.log("payload:",payload)
+      });
 
-      const response = await passengerSendRequestApi(token, payload);
-
-      if (response?.message) {
-      Alert.alert(
-        "Success",
-        response.message,
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              navigation.navigate("Dashboard"); // ✅ NAVIGATION HERE
+      if (response?.success) {
+        const title =
+          response.bookingStatus === "confirmed" ? "Booking confirmed" : "Request sent";
+        Alert.alert(
+          title,
+          response.message ||
+            `Your request for ${seats} seat(s) (₹${response.calculated_amount ?? totalFare}) was sent to the driver.`,
+          [
+            {
+              text: "OK",
+              onPress: () => navigation.navigate("Dashboard"),
             },
-          },
-        ],
-        { cancelable: false }
-      );
-    } else {
-      Alert.alert("Error", response?.message || "Failed");
+          ],
+          { cancelable: false }
+        );
+      } else {
+        Alert.alert(
+          "Booking failed",
+          getApiErrorMessage(response, "Could not send your booking request.")
+        );
+      }
+    } catch (error) {
+      Alert.alert("Booking failed", getApiErrorMessage(error));
+    } finally {
+      setBooking(false);
     }
-  } catch (error) {
-    console.log(error);
-    Alert.alert("Error", "Something went wrong");
-  }
-};
+  };
   const handleBookCourier = async () => {
+    if (isOwnRide) {
+      Alert.alert(
+        "Your ride",
+        "You are the driver for this ride. Couriers cannot be added by the driver on the same trip."
+      );
+      return;
+    }
     try {
       const token = await AsyncStorage.getItem("token");
 
@@ -239,9 +288,11 @@ const RideDetails = ({ navigation, route }) => {
 
       console.log("📦 Response:", response);
 
-     if (response?.success) {
+      if (response?.success) {
+      const courierTitle =
+        response.bookingStatus === "confirmed" ? "Booking confirmed" : "Request sent";
       Alert.alert(
-        "Success",
+        courierTitle,
         response.message || "Courier booked successfully",
         [
           {
@@ -265,11 +316,13 @@ const RideDetails = ({ navigation, route }) => {
           receiver_address: "",
         });
       } else {
-        Alert.alert("Error", response?.message || "Booking failed");
+        Alert.alert(
+          "Booking failed",
+          getApiErrorMessage(response, "Courier booking failed.")
+        );
       }
     } catch (error) {
-      console.log("❌ Error:", error);
-      Alert.alert("Error", "Something went wrong");
+      Alert.alert("Booking failed", getApiErrorMessage(error));
     }
   };
 
@@ -282,13 +335,7 @@ const RideDetails = ({ navigation, route }) => {
         contentContainerStyle={styles.scrollContent}
       >
 
-        {/* HEADER */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Image source={backIcon} style={styles.backIcon} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Ride Details</Text>
-        </View>
+        <ScreenHeader title="Ride Details" />
 
         {/* DATE */}
         <View style={styles.dateRow}>
@@ -317,10 +364,10 @@ const RideDetails = ({ navigation, route }) => {
           <View style={styles.passengerRow}>
             <Image source={passengerIcon} style={styles.passengerIcon} />
             <Text style={styles.passengerText}>
-              {ride.availableSeats || 0} seats
+              {maxSeats} seat{maxSeats !== 1 ? "s" : ""} available
             </Text>
           </View>
-          <Text style={styles.price}>₹{ride.ride_amount || 0}</Text>
+          <Text style={styles.price}>₹{seatFare}/seat</Text>
         </View>
 
         {/* DRIVER */}
@@ -346,13 +393,28 @@ const RideDetails = ({ navigation, route }) => {
           </View>
         </View>
 
-        {/* WARNING */}
-        <View style={styles.warningBox}>
-          <Image source={bookingInfoIcon} style={styles.infoIcon} />
-          <Text style={styles.warningText}>
-            Booking is confirmed only after driver approval
-          </Text>
-        </View>
+        {isOwnRide ? (
+          <View style={[styles.warningBox, styles.ownRideBox]}>
+            <Image source={bookingInfoIcon} style={styles.infoIcon} />
+            <Text style={styles.ownRideText}>
+              This is your ride as the driver. Manage passengers from Upcoming Rides — you cannot book yourself as a passenger.
+            </Text>
+          </View>
+        ) : quickReserve ? (
+          <View style={[styles.warningBox, styles.quickReserveBox]}>
+            <Image source={bookingInfoIcon} style={styles.infoIcon} />
+            <Text style={styles.quickReserveText}>
+              Quick Reserve — your booking is confirmed instantly (no driver approval needed).
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.warningBox}>
+            <Image source={bookingInfoIcon} style={styles.infoIcon} />
+            <Text style={styles.warningText}>
+              Driver must approve your booking before you are on the ride.
+            </Text>
+          </View>
+        )}
 
         {/* PREFERENCES */}
         <View style={styles.card}>
@@ -367,6 +429,8 @@ const RideDetails = ({ navigation, route }) => {
           </View>
         </View>
 
+        {!isOwnRide && (
+        <>
         {/* PASSENGER */}
         <TouchableOpacity style={styles.accordionHeader} onPress={togglePassenger}>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -381,25 +445,39 @@ const RideDetails = ({ navigation, route }) => {
           <View style={styles.accordionContent}> 
             <View style={styles.seatBox}>
               <Image source={seatsicon} style={styles.courierIcon} />
-              <TouchableOpacity onPress={decreaseSeats}>
-                <Text style={styles.seatBtn}>−</Text>
+              <TouchableOpacity onPress={decreaseSeats} disabled={seats <= 1}>
+                <Text style={[styles.seatBtn, seats <= 1 && styles.seatBtnDisabled]}>−</Text>
               </TouchableOpacity>
 
-              <Text style={styles.seatCount}>{seats}</Text>
+              <Text style={styles.seatCount}>
+                {maxSeats < 1
+                  ? "No seats left"
+                  : `${seats} / ${maxSeats} seat${maxSeats !== 1 ? "s" : ""}`}
+              </Text>
 
-              <TouchableOpacity onPress={increaseSeats}>
-                <Text style={styles.seatBtn}>+</Text>
+              <TouchableOpacity onPress={increaseSeats} disabled={seats >= maxSeats}>
+                <Text style={[styles.seatBtn, seats >= maxSeats && styles.seatBtnDisabled]}>+</Text>
               </TouchableOpacity>
             </View>
+            <Text style={styles.fareHint}>
+              Total: ₹{totalFare} ({seats} × ₹{seatFare})
+            </Text>
 
-            <TouchableOpacity style={styles.primaryBtn}onPress={handleBookPassenger}>
-              <Text style={styles.btnText}>Book Passenger</Text>
+            <TouchableOpacity
+              style={[styles.primaryBtn, booking && styles.primaryBtnDisabled]}
+              onPress={handleBookPassenger}
+              disabled={booking || maxSeats < 1}
+            >
+              <Text style={styles.btnText}>
+                {booking ? "Sending…" : "Book Passenger"}
+              </Text>
             </TouchableOpacity>
             
           </View>
         )}
 
-        {/* COURIER */}
+        {canCarryCourier && (
+        <>
         <TouchableOpacity style={styles.accordionHeader} onPress={toggleCourier}>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
             <Image source={courierIcon} style={styles.courierIcon} />
@@ -486,6 +564,10 @@ const RideDetails = ({ navigation, route }) => {
 
           </View>
         )}
+        </>
+        )}
+        </>
+        )}
 
       </ScrollView>
     </KeyboardAwareScreen>
@@ -526,6 +608,10 @@ const styles = StyleSheet.create({
   infoText: { color: "#374151" },
   warningBox: { flexDirection: "row", backgroundColor: "#FEF3C7", marginHorizontal: 16, padding: 12, borderRadius: 12, alignItems: "center" },
   warningText: { flex: 1, marginLeft: 10, color: "#92400E" },
+  quickReserveBox: { backgroundColor: "#DCFCE7" },
+  quickReserveText: { flex: 1, marginLeft: 10, color: "#166534", fontWeight: "600" },
+  ownRideBox: { backgroundColor: "#EFF6FF" },
+  ownRideText: { flex: 1, marginLeft: 10, color: "#1E40AF", fontWeight: "600" },
   sectionTitle: { fontSize: 16, fontWeight: "600", marginBottom: 10 },
   prefRow: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
   prefIcon: { width: 22, height: 22, marginRight: 8 },
@@ -575,7 +661,16 @@ const styles = StyleSheet.create({
   },
   seatBox: { flexDirection: "row", justifyContent: "center", alignItems: "center", backgroundColor: "#FFF", padding: 10, borderRadius: 10, marginBottom: 20,marginTop:10 },
   seatBtn: { fontSize: 22, paddingHorizontal: 10 },
-  seatCount: { fontSize: 16, fontWeight: "600" },
+  seatCount: { fontSize: 16, fontWeight: "600", minWidth: 100, textAlign: "center" },
+  seatBtnDisabled: { opacity: 0.35 },
+  fareHint: {
+    textAlign: "center",
+    color: "#475569",
+    marginBottom: 14,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  primaryBtnDisabled: { opacity: 0.6 },
   courierIcon: { width: 20, height: 20, marginRight: 8 },
   imageUpload: { backgroundColor: "#EEF2FF", padding: 12, borderRadius: 10, alignItems: "center", marginBottom: 12 },
   imageUploadText: { color: "#2563EB", fontWeight: "600" },

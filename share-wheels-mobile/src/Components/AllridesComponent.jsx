@@ -17,8 +17,16 @@ import { RideListSkeleton } from "./ui/Skeleton";
 import AnimatedLoad from "./ui/AnimatedLoad";
 import AdPlacement from "./ads/AdPlacement";
 
-const AllridesComponent = ({ rides = [], loading, navigation }) => {
-  if (!loading && (!rides || rides.length === 0)) {
+const refId = (ref) =>
+  ref?._id?.toString?.() || ref?.toString?.() || "";
+
+const AllridesComponent = ({ rides = [], loading, navigation, currentUserId }) => {
+  const visibleRides = (rides || []).filter((item) => {
+    if (!currentUserId) return true;
+    return refId(item?.creator) !== refId(currentUserId);
+  });
+
+  if (!loading && visibleRides.length === 0) {
     return <Text style={styles.centerText}>No rides found</Text>;
   }
 
@@ -96,7 +104,7 @@ const AllridesComponent = ({ rides = [], loading, navigation }) => {
         style={{ flex: 1 }}
       >
         <FlatList
-          data={rides}
+          data={visibleRides}
           ListHeaderComponent={<AdPlacement placement="search_results" />}
           keyExtractor={(item, index) =>
             item?._id ? item._id.toString() : index.toString()

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -10,44 +10,42 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 
-import ProfilePage from "../Components/HeaderImage";
-import NotificationIcon from "../Components/NotificationIcon";
 import SearchLocation from "../Components/SearchLocation";
 import UpcomingRide from "../Components/UpcomingRide";
 import CreatePage from "../Components/CreateRequestIcon";
 import AllridesComponent from "../Components/AllridesComponent";
 import TermsPopup from "../Components/TermsPopup";
 import ScreenContainer from "../Components/ui/ScreenContainer";
+import ScreenHeader from "../Components/ui/ScreenHeader";
+import DashboardTopNav from "../Components/dashboard/DashboardTopNav";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LAYOUT, getScrollBottomPadding } from "../theme/layout";
 
 import { profileData } from "../Navigation/AuthNavigator";
 import { getUpcomingRides, getAllRides } from "../ApiService/ridesApiServices";
+import { getApiErrorMessage } from "../Utils/apiErrors";
 import { RideListSkeleton } from "../Components/ui/Skeleton";
 import AnimatedLoad from "../Components/ui/AnimatedLoad";
 import AdPlacement from "../Components/ads/AdPlacement";
 import { useAds } from "../context/AdsContext";
 
-// Locations
 const locations = [
-  // Andhra Pradesh
   "Visakhapatnam","Vijayawada","Guntur","Nellore","Kurnool","Tirupati","Rajahmundry",
   "Kakinada","Anantapur","Kadapa","Eluru","Ongole","Chittoor","Machilipatnam","Adoni",
   "Tenali","Proddatur","Bhimavaram","Tadepalligudem","Narasaraopet","Vizianagaram",
   "Srikakulam","Amalapuram","Gudivada","Hindupur","Dharmavaram","Madanapalle","Nandyal",
   "Puttur","Palakollu","Kavali","Markapur","Rayachoti","Kadiri","Chilakaluripet","Repalle",
   "Bapatla","Parvathipuram",
-  // Telangana
   "Hyderabad","Warangal","Nizamabad","Karimnagar","Khammam","Ramagundam","Mahbubnagar",
   "Nalgonda","Adilabad","Siddipet","Suryapet","Miryalaguda","Jagtial","Mancherial","Kamareddy",
   "Kothagudem","Bhongir","Wanaparthy","Vikarabad","Nagarkurnool","Gadwal","Medak","Sangareddy",
-  "Zaheerabad","Shamshabad","Chevella","Tandur","Peddapalli","Huzurabad","Kodad"
+  "Zaheerabad","Shamshabad","Chevella","Tandur","Peddapalli","Huzurabad","Kodad",
 ];
 
 const DashboardPage = () => {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const { refreshUpcomingRides, ProfileDetails,setRefresh } = profileData();
+  const { refreshUpcomingRides, ProfileDetails, setRefresh } = profileData();
 
   const [fromValue, setFromValue] = useState("");
   const [toValue, setToValue] = useState("");
@@ -69,9 +67,13 @@ const DashboardPage = () => {
   const animation = useRef(new Animated.Value(1)).current;
 
   const user = ProfileDetails?.data?.personalInfo;
+  const myUserId =
+    ProfileDetails?._id ||
+    ProfileDetails?.id ||
+    user?._id ||
+    user?.id;
   const { refreshAds } = useAds();
 
-  // FETCH UPCOMING RIDES
   const fetchUpcomingRides = useCallback(async () => {
     try {
       setLoadingUpcoming(true);
@@ -79,13 +81,15 @@ const DashboardPage = () => {
       if (!token) return;
 
       const resp = await getUpcomingRides(token);
-      const upcomingOnly = (resp?.rides || []).filter(
-        (ride) => ride?.status === "pending"
+      const upcomingOnly = (resp?.rides || []).filter((ride) =>
+        ["pending", "started"].includes(ride?.status)
       );
       setRides(upcomingOnly);
+      setErrorMsg("");
     } catch (err) {
       console.log("Error fetching upcoming rides:", err.message);
-      setErrorMsg("Failed to load upcoming rides.");
+      setErrorMsg(getApiErrorMessage(err, "Failed to load upcoming rides."));
+      setRides([]);
     } finally {
       setLoadingUpcoming(false);
     }
@@ -98,7 +102,6 @@ const DashboardPage = () => {
     }, [fetchUpcomingRides, refreshUpcomingRides, refreshAds])
   );
 
-  // HANDLE SEARCH
   const handleSearch = async () => {
     collapseFilters();
 
@@ -110,6 +113,7 @@ const DashboardPage = () => {
     try {
       setLoadingAllRides(true);
       setShowAllRides(true);
+      setErrorMsg("");
 
       const token = await AsyncStorage.getItem("token");
       if (!token) {
@@ -124,9 +128,11 @@ const DashboardPage = () => {
       };
 
       const resp = await getAllRides(token, filters);
-      setAllRides(resp);
+      const list = Array.isArray(resp) ? resp : resp?.rides || [];
+      setAllRides(list);
     } catch (err) {
       console.log("Get All Rides Error:", err?.message);
+      setErrorMsg(getApiErrorMessage(err, "Could not search rides."));
       setAllRides([]);
     } finally {
       setLoadingAllRides(false);
@@ -174,12 +180,9 @@ const DashboardPage = () => {
 
   const filterLocations = (text, field) => {
     expandFilters();
-
     if (field === "FROM") setFromValue(text);
     if (field === "TO") setToValue(text);
-
     setActiveField(field);
-
     const filtered = locations.filter((item) =>
       item.toLowerCase().includes(text.toLowerCase())
     );
@@ -206,13 +209,37 @@ const DashboardPage = () => {
 
   const terms = ProfileDetails?.data?.terms;
 
-  const listHeader = (
-    <>
-      <View style={styles.header}>
-        <ProfilePage user={user} />
-        <NotificationIcon />
-      </View>
+  const searchProps = {
+    fromValue,
+    toValue,
+    activeField,
+    suggestions,
+    date,
+    showDate,
+    showFilters,
+    dropdownTop,
+    animatedHeight,
+    animatedOpacity,
+    setFromValue,
+    setToValue,
+    setActiveField,
+    setSuggestions,
+    setDate,
+    setShowDate,
+    expandFilters,
+    collapseFilters,
+    filterLocations,
+    selectLocation,
+    handleSearch,
+    onFocus: (field) => {
+      setIsFocused(true);
+      setActiveField(field);
+    },
+    onDismissSuggestions: () => setSuggestions([]),
+  };
 
+  const scrollListHeader = (
+    <>
       {!isFocused && (
         <Text style={styles.title}>Where do you plan to go today?</Text>
       )}
@@ -221,31 +248,7 @@ const DashboardPage = () => {
 
       {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
 
-      <SearchLocation
-        fromValue={fromValue}
-        toValue={toValue}
-        activeField={activeField}
-        suggestions={suggestions}
-        date={date}
-        showDate={showDate}
-        showFilters={showFilters}
-        dropdownTop={dropdownTop}
-        animatedHeight={animatedHeight}
-        animatedOpacity={animatedOpacity}
-        setFromValue={setFromValue}
-        setToValue={setToValue}
-        setActiveField={setActiveField}
-        setSuggestions={setSuggestions}
-        setDate={setDate}
-        setShowDate={setShowDate}
-        expandFilters={expandFilters}
-        collapseFilters={collapseFilters}
-        filterLocations={filterLocations}
-        selectLocation={selectLocation}
-        handleSearch={handleSearch}
-        onFocus={() => setIsFocused(true)}
-        onBlur={() => setIsFocused(false)}
-      />
+      <SearchLocation {...searchProps} />
 
       <AdPlacement placement="home_video" />
 
@@ -255,73 +258,60 @@ const DashboardPage = () => {
   );
 
   return (
-    <ScreenContainer edges={["top"]} backgroundColor="#fff" style={styles.container}>
+    <ScreenContainer edges={["top"]} backgroundColor="#F8FAFC" style={styles.screen}>
       {terms === false ? <TermsPopup setRefresh={setRefresh} /> : null}
 
-      {showAllRides ? (
-        <View style={styles.flex}>
-          <View style={styles.header}>
-            <ProfilePage user={user} />
-            <NotificationIcon />
+      {/* Fixed top nav — does not scroll */}
+      <DashboardTopNav user={user} />
+
+      <View style={styles.body}>
+        {showAllRides ? (
+          <View style={styles.flex}>
+            <ScreenHeader
+              title="Search results"
+              onBack={() => {
+                setShowAllRides(false);
+                setAllRides([]);
+                setErrorMsg("");
+              }}
+            />
+            <SearchLocation {...searchProps} />
+            <View style={styles.clearRow}>
+              <TouchableOpacity onPress={handleClear}>
+                <Text style={styles.clearText}>Clear</Text>
+              </TouchableOpacity>
+            </View>
+            <AllridesComponent
+              rides={allRides}
+              loading={loadingAllRides}
+              navigation={navigation}
+              currentUserId={myUserId}
+            />
           </View>
-          <SearchLocation
-            fromValue={fromValue}
-            toValue={toValue}
-            activeField={activeField}
-            suggestions={suggestions}
-            date={date}
-            showDate={showDate}
-            showFilters={showFilters}
-            dropdownTop={dropdownTop}
-            animatedHeight={animatedHeight}
-            animatedOpacity={animatedOpacity}
-            setFromValue={setFromValue}
-            setToValue={setToValue}
-            setActiveField={setActiveField}
-            setSuggestions={setSuggestions}
-            setDate={setDate}
-            setShowDate={setShowDate}
-            expandFilters={expandFilters}
-            collapseFilters={collapseFilters}
-            filterLocations={filterLocations}
-            selectLocation={selectLocation}
-            handleSearch={handleSearch}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-          />
-          <View style={styles.clearRow}>
-            <TouchableOpacity onPress={handleClear}>
-              <Text style={styles.clearText}>Clear</Text>
-            </TouchableOpacity>
-          </View>
-          <AllridesComponent
-            rides={allRides}
-            loading={loadingAllRides}
-            navigation={navigation}
-          />
-        </View>
-      ) : (
-        <AnimatedLoad
-          loading={loadingUpcoming}
-          skeleton={<RideListSkeleton count={2} variant="upcoming" />}
-          style={styles.flex}
-        >
-          <FlatList
-            data={rides}
-            keyExtractor={(item, index) => `${item._id}-${index}`}
-            renderItem={renderRide}
-            ListHeaderComponent={listHeader}
-            ListEmptyComponent={
-              <Text style={styles.emptyRides}>No upcoming rides</Text>
-            }
-            contentContainerStyle={{
-              paddingBottom: getScrollBottomPadding(insets.bottom, 72),
-            }}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          />
-        </AnimatedLoad>
-      )}
+        ) : (
+          <AnimatedLoad
+            loading={loadingUpcoming}
+            skeleton={<RideListSkeleton count={2} variant="upcoming" />}
+            style={styles.flex}
+          >
+            <FlatList
+              data={rides}
+              keyExtractor={(item, index) => `${item._id}-${index}`}
+              renderItem={renderRide}
+              ListHeaderComponent={scrollListHeader}
+              ListEmptyComponent={
+                <Text style={styles.emptyRides}>No upcoming rides</Text>
+              }
+              contentContainerStyle={{
+                paddingBottom: getScrollBottomPadding(insets.bottom, 72),
+              }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="always"
+              keyboardDismissMode="on-drag"
+            />
+          </AnimatedLoad>
+        )}
+      </View>
 
       {!isFocused && (
         <View style={styles.createButtonWrapper}>
@@ -335,27 +325,26 @@ const DashboardPage = () => {
 export default React.memo(DashboardPage);
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: "#fff",
+    paddingHorizontal: 0,
+  },
+  body: {
+    flex: 1,
     paddingHorizontal: LAYOUT.spacing.screen,
   },
   flex: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: LAYOUT.spacing.sm,
-    marginBottom: LAYOUT.spacing.md,
-  },
   title: {
     fontSize: LAYOUT.font.title,
     fontWeight: "700",
     marginBottom: LAYOUT.spacing.md,
+    color: LAYOUT.colors.text,
   },
   section: {
     fontSize: LAYOUT.font.section,
     fontWeight: "700",
     marginVertical: LAYOUT.spacing.md,
+    color: LAYOUT.colors.text,
   },
   createButtonWrapper: {
     position: "absolute",

@@ -82,7 +82,7 @@ const buildHtml = (markers, path, center) => {
  * Leaflet map in WebView — shows driver, passengers, couriers on active ride.
  */
 const LeafletRideMap = ({ tracking, myRole, style, height = 280 }) => {
-  const { html, loading } = useMemo(() => {
+  const { html, loading, mapKey } = useMemo(() => {
     const lt = tracking?.liveTracking || tracking || {};
     const participants = lt.participantLocations || [];
     const driverLoc = toPoint(lt.driverLocation);
@@ -122,9 +122,14 @@ const LeafletRideMap = ({ tracking, myRole, style, height = 280 }) => {
     const first = markers[0];
     const center = first ? [first.lat, first.lng] : DEFAULT_CENTER;
 
+    const mapKey = markers
+      .map((m) => `${m.role}:${m.lat?.toFixed(5)},${m.lng?.toFixed(5)}`)
+      .join("|");
+
     return {
       html: buildHtml(markers, path, center),
       loading: !markers.length && !path.length,
+      mapKey,
     };
   }, [tracking, myRole]);
 
@@ -139,6 +144,7 @@ const LeafletRideMap = ({ tracking, myRole, style, height = 280 }) => {
   return (
     <View style={[styles.wrap, { height }, style]}>
       <WebView
+        key={mapKey || "empty"}
         originWhitelist={["*"]}
         source={{ html }}
         style={styles.webview}

@@ -19,6 +19,7 @@ import BackButton from "../Components/BackButton";
 
 /* API */
 import { rideHistory } from "../ApiService/ridesApiServices";
+import { getApiErrorMessage } from "../Utils/apiErrors";
 import { RideListSkeleton } from "./ui/Skeleton";
 import AnimatedLoad from "./ui/AnimatedLoad";
 import AnimatedTabs from "./ui/AnimatedTabs";
@@ -50,6 +51,7 @@ const RideHistory = () => {
   const [selectedRide, setSelectedRide] = useState(null);
   const [isSliderVisible, setSliderVisible] = useState(false);
   const [activeFilter, setActiveFilter] = useState("All");
+  const [errorMsg, setErrorMsg] = useState("");
 
   // 🔄 AUTO REFRESH ON SCREEN FOCUS
   useFocusEffect(
@@ -69,7 +71,10 @@ const RideHistory = () => {
       const res = await rideHistory(token);
 
       if (res?.rides) {
-        const data = res.rides.map((ride) => ({
+        const completedOnly = (res.rides || []).filter(
+          (r) => r.status === "completed"
+        );
+        const data = completedOnly.map((ride) => ({
           ...ride,
           id: ride._id,
           role:
@@ -89,12 +94,17 @@ const RideHistory = () => {
 
         setRides(data);
         setFilteredRides(data);
+        setErrorMsg("");
       } else {
         setRides([]);
         setFilteredRides([]);
+        setErrorMsg("");
       }
     } catch (e) {
       console.log("Error:", e);
+      setErrorMsg(getApiErrorMessage(e, "Failed to load ride history."));
+      setRides([]);
+      setFilteredRides([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -192,6 +202,8 @@ const RideHistory = () => {
         }
         style={{ flex: 1 }}
       >
+      {errorMsg ? <Text style={styles.errorBanner}>{errorMsg}</Text> : null}
+
       <AnimatedTabs
         tabs={FILTER_TABS}
         activeIndex={activeFilterIndex}
@@ -270,6 +282,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#6B7280",
     fontWeight: "500",
+  },
+  errorBanner: {
+    color: "#B91C1C",
+    backgroundColor: "#FEF2F2",
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 12,
+    fontSize: 13,
   },
 
   filters: { flexDirection: "row", marginBottom: 16 },

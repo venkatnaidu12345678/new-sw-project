@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.post("/get-rides-data", rideController.getRidesData);
 router.post("/create-ride", authMiddleware, rideController.createRide);
-router.get("/get-rides", rideController.getRides);
+router.get("/get-rides", authMiddleware, rideController.getRides);
 router.post("/ride/cancel", authMiddleware, rideController.cancelRide);
 router.post("/passenger/send-request", authMiddleware, rideController.sendPassengerRequest);
 router.get("/upcoming-rides", authMiddleware, rideController.upcomingRides);

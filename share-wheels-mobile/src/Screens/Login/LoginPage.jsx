@@ -7,6 +7,7 @@ import AuthScreenLayout from "../../Components/auth/AuthScreenLayout";
 import { loginApi } from "../../ApiService/AuthApiService";
 import { validateEmail, validatePassword } from "../../Utils";
 import { AUTH_COLORS } from "../../theme/authTheme";
+import { getApiErrorMessage } from "../../Utils/apiErrors";
 
 const LoginPage = ({ navigation, triggerAuth }) => {
   const [email, setEmail] = useState("");
@@ -38,10 +39,13 @@ const LoginPage = ({ navigation, triggerAuth }) => {
         }
         triggerAuth?.();
       } else {
-        Alert.alert("Login failed", res?.message || "Invalid email or password");
+        Alert.alert(
+          "Login failed",
+          getApiErrorMessage(res, "Invalid email or password")
+        );
       }
-    } catch {
-      Alert.alert("Error", "Could not connect to server. Try again.");
+    } catch (err) {
+      Alert.alert("Error", getApiErrorMessage(err, "Could not connect to server. Try again."));
     } finally {
       setLoading(false);
     }

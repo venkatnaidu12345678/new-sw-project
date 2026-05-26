@@ -4,9 +4,9 @@ import {
   TextInput,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   Text,
   Animated,
+  Pressable,
 } from "react-native";
 
 import Icon from "react-native-vector-icons/Ionicons";
@@ -14,12 +14,11 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { INPUT_COLORS } from "../theme/inputTheme";
 import { LAYOUT } from "../theme/layout";
 
-/* ✅ IMPORT FROM UTILS */
 import {
   validateForm,
   validateLocation,
   validateDate,
-} from "../Utils"; // adjust path if needed
+} from "../Utils";
 
 const SearchLocation = ({
   fromValue,
@@ -28,7 +27,6 @@ const SearchLocation = ({
   date,
   showDate,
   showFilters,
-  dropdownTop,
   animatedHeight,
   animatedOpacity,
   setFromValue,
@@ -39,11 +37,11 @@ const SearchLocation = ({
   selectLocation,
   handleSearch,
   onFocus,
-  onBlur,
+  onDismissSuggestions,
+  activeField,
 }) => {
   const [errors, setErrors] = useState({});
 
-  /* ---------------- SEARCH HANDLER ---------------- */
   const onSearchPress = () => {
     const validationErrors = validateForm({
       from: {
@@ -67,77 +65,71 @@ const SearchLocation = ({
     handleSearch();
   };
 
+  const renderSuggestions = (field) => {
+    if (activeField !== field || !suggestions?.length) return null;
+
+    return (
+      <View style={styles.inlineDropdown}>
+        {suggestions.map((item, index) => (
+          <Pressable
+            key={`${field}-${item}-${index}`}
+            style={({ pressed }) => [
+              styles.suggestion,
+              pressed && styles.suggestionPressed,
+            ]}
+            onPress={() => {
+              selectLocation(item);
+              setErrors((prev) => ({ ...prev, from: "", to: "" }));
+              onDismissSuggestions?.();
+            }}
+          >
+            <Text style={styles.suggestionText}>{item}</Text>
+          </Pressable>
+        ))}
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
-      {/* FROM */}
       <View style={styles.inputWrapper}>
         <TextInput
           placeholder="From — pickup city"
           placeholderTextColor={INPUT_COLORS.placeholder}
           value={fromValue}
+          blurOnSubmit={false}
           onChangeText={(text) => {
             setFromValue(text);
             filterLocations(text, "FROM");
-
-            // ✅ clear error
             setErrors((prev) => ({ ...prev, from: "" }));
           }}
-          onFocus={onFocus}
-          onBlur={onBlur}
+          onFocus={() => onFocus?.("FROM")}
           style={styles.input}
         />
         <Icon name="radio-button-on" size={18} color="#999" />
       </View>
       {errors.from && <Text style={styles.error}>{errors.from}</Text>}
+      {renderSuggestions("FROM")}
 
-      {/* TO */}
       <View style={styles.inputWrapper}>
         <TextInput
           placeholder="To — destination city"
           placeholderTextColor={INPUT_COLORS.placeholder}
           value={toValue}
+          blurOnSubmit={false}
           onChangeText={(text) => {
             setToValue(text);
             filterLocations(text, "TO");
-
-            // ✅ clear error
             setErrors((prev) => ({ ...prev, to: "" }));
           }}
-          onFocus={onFocus}
-          onBlur={onBlur}
+          onFocus={() => onFocus?.("TO")}
           style={styles.input}
         />
         <Icon name="radio-button-on" size={18} color="#3BB77E" />
       </View>
       {errors.to && <Text style={styles.error}>{errors.to}</Text>}
+      {renderSuggestions("TO")}
 
-      {/* DROPDOWN */}
-      {suggestions.length > 0 && (
-        <View style={[styles.dropdownContainer, { top: dropdownTop }]}>
-          <ScrollView keyboardShouldPersistTaps="handled">
-            {suggestions.map((item, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.suggestion}
-                onPress={() => {
-                  selectLocation(item);
-
-                  // ✅ clear errors after selection
-                  setErrors((prev) => ({
-                    ...prev,
-                    from: "",
-                    to: "",
-                  }));
-                }}
-              >
-                <Text style={styles.suggestionText}>{item}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {/* DATE + SEARCH */}
       {showFilters && (
         <Animated.View
           style={{
@@ -146,7 +138,6 @@ const SearchLocation = ({
             opacity: animatedOpacity,
           }}
         >
-          {/* DATE BUTTON */}
           <TouchableOpacity
             style={styles.inputWrapper}
             onPress={() => setShowDate(true)}
@@ -158,38 +149,27 @@ const SearchLocation = ({
           </TouchableOpacity>
           {errors.date && <Text style={styles.error}>{errors.date}</Text>}
 
-          {/* DATE PICKER */}
           {showDate && (
-  <DateTimePicker
-    value={date || new Date()}
-    mode="date"
-    display="default"
+            <DateTimePicker
+              value={date || new Date()}
+              mode="date"
+              display="default"
+              minimumDate={new Date()}
+              onChange={(event, selectedDate) => {
+                if (event.type === "dismissed") {
+                  setShowDate(false);
+                  return;
+                }
+                setShowDate(false);
+                if (selectedDate) {
+                  setDate(selectedDate);
+                  setErrors((prev) => ({ ...prev, date: "" }));
+                }
+              }}
+            />
+          )}
 
-    // ✅ IMPORTANT: block past dates
-    minimumDate={new Date()}
-
-    onChange={(event, selectedDate) => {
-      if (event.type === "dismissed") {
-        setShowDate(false);
-        return;
-      }
-
-      setShowDate(false);
-
-      if (selectedDate) {
-        setDate(selectedDate);
-        setErrors((prev) => ({ ...prev, date: "" }));
-      }
-    }}
-  />
-)}
-          
-
-          {/* SEARCH BUTTON */}
-          <TouchableOpacity
-            style={styles.searchButton}
-            onPress={onSearchPress}
-          >
+          <TouchableOpacity style={styles.searchButton} onPress={onSearchPress}>
             <Text style={styles.searchText}>Search</Text>
           </TouchableOpacity>
         </Animated.View>
@@ -200,13 +180,10 @@ const SearchLocation = ({
 
 export default SearchLocation;
 
-/* ---------------- STYLES ---------------- */
-
 const styles = StyleSheet.create({
   container: {
     marginVertical: 10,
   },
-
   inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
@@ -219,19 +196,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     zIndex: 1,
   },
-
   input: {
     flex: 1,
     fontSize: 15,
     color: INPUT_COLORS.text,
   },
-
   dateText: {
     flex: 1,
     fontSize: 15,
     color: INPUT_COLORS.text,
   },
-
   searchButton: {
     backgroundColor: "#2563EB",
     paddingVertical: LAYOUT.spacing.md,
@@ -240,37 +214,36 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: LAYOUT.spacing.sm,
   },
-
   searchText: {
     color: "#fff",
     fontSize: LAYOUT.font.body,
     fontWeight: "600",
   },
-
-  dropdownContainer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
+  inlineDropdown: {
     backgroundColor: "#fff",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E5E7EB",
     maxHeight: 200,
-    zIndex: 1000,
+    marginBottom: 8,
     elevation: 6,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    overflow: "hidden",
   },
-
   suggestion: {
     padding: 14,
     borderBottomWidth: 1,
     borderBottomColor: "#F1F1F1",
   },
-
+  suggestionPressed: {
+    backgroundColor: "#F1F5F9",
+  },
   suggestionText: {
     fontSize: 15,
     color: "#111",
   },
-
   error: {
     color: "red",
     fontSize: 12,

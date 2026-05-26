@@ -13,7 +13,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
 
 /* ICON */
-import backIcon from "../assets/backicon.png";
+import ScreenHeader from "../Components/ui/ScreenHeader";
 
 /* COMPONENTS */
 import ToggleComponent from "../Components/ToggleComponent";
@@ -128,24 +128,16 @@ const PassengerRequest = () => {
       contentContainerStyle={styles.container}
     >
 
-        {/* 🔙 BACK + TITLE */}
-        <View style={styles.headerRow}>
-          <TouchableOpacity
-            onPress={() => {
-              if (navigation.canGoBack()) {
-                navigation.goBack();
-              } else {
-                navigation.navigate("Request");
-              }
-            }}
-          >
-            <Image source={backIcon} style={styles.backIcon} />
-          </TouchableOpacity>
-
-          <Text style={styles.headerTitle}>
-            Create Passenger Request
-          </Text>
-        </View>
+        <ScreenHeader
+          title="Create Passenger Request"
+          onBack={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate("Request");
+            }
+          }}
+        />
 
         {/* FORM TITLE */}
        

@@ -9,6 +9,13 @@ const {
   ensureParticipantBoardingOtp,
   assertAllParticipantsVerified,
 } = require("./rideVerificationService");
+const { canStartOutsideSchedule } = require("../utils/rideScheduleUtils");
+
+const getBookedSeats = (ride) =>
+  (ride.passengers || []).reduce(
+    (sum, p) => sum + (Number(p.requires_seats) || 0),
+    0
+  );
 
 const acceptPassengerRequest = async (user, { rideId, passenger_userId }) => {
   if (!rideId || !passenger_userId) return { status: 400, body: { message: "rideId & passenger_userId required" } };
@@ -17,6 +24,15 @@ const acceptPassengerRequest = async (user, { rideId, passenger_userId }) => {
   if (ride.creator.toString() !== user._id.toString()) return { status: 403, body: { message: "Only ride creator can accept requests" } };
   const reqObj = ride.passenger_requested_ride.find((item) => item.userId.toString() === passenger_userId.toString());
   if (!reqObj) return { status: 404, body: { message: "Passenger request not found" } };
+  const seatsNeeded = Number(reqObj.requires_seats) || 1;
+  if (seatsNeeded > ride.availableSeats) {
+    return {
+      status: 400,
+      body: {
+        message: `Not enough seats available (only ${ride.availableSeats} left)`,
+      },
+    };
+  }
   const passengerEntry = {
     userId: reqObj.userId,
     requires_seats: reqObj.requires_seats,
@@ -26,6 +42,7 @@ const acceptPassengerRequest = async (user, { rideId, passenger_userId }) => {
   };
   await ensureParticipantBoardingOtp(passengerEntry, reqObj.userId);
   ride.passengers.push(passengerEntry);
+  ride.availableSeats -= seatsNeeded;
   ride.passenger_requested_ride = ride.passenger_requested_ride.filter((item) => item.userId.toString() !== passenger_userId.toString());
   await ride.save();
   await UserRides.findOneAndUpdate(
@@ -82,9 +99,26 @@ const startRide = async (user, { rideId }) => {
   const ride = await Ride.findById(rideId);
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
   if (ride.creator.toString() !== userId.toString()) return { status: 403, body: { success: false, message: "Only ride creator can start the ride" } };
-  if (ride.status !== "pending") return { status: 400, body: { success: false, message: "Ride cannot be started" } };
-  const verifyBlock = assertAllParticipantsVerified(ride);
-  if (verifyBlock) return verifyBlock;
+  if (ride.status !== "pending") {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message:
+          ride.status === "started"
+            ? "Ride is already in progress"
+            : ride.status === "completed"
+              ? "Ride is already completed"
+              : "Ride cannot be started in its current state",
+      },
+    };
+  }
+
+  // Allow start before or after scheduled time — skip OTP gate when not exactly on schedule
+  if (!canStartOutsideSchedule(ride)) {
+    const verifyBlock = assertAllParticipantsVerified(ride);
+    if (verifyBlock) return verifyBlock;
+  }
   ride.status = "started";
   ride.liveTracking = {
     isActive: true,
@@ -191,4 +225,80 @@ const pickCourier = async (user, { rideId, courierId }) => {
   return { status: 200, body: { success: true, message: "Courier picked successfully", data: { courier, ride } } };
 };
 
-module.exports = { acceptPassengerRequest, rejectPassengerRequest, removePassenger, startRide, endRide, enrouteRequests, pickCourier };
+/**
+ * Driver sets total vehicle seat capacity (available + already booked).
+ */
+const updateRideSeats = async (user, { rideId, totalSeats }) => {
+  if (!rideId) {
+    return { status: 400, body: { success: false, message: "rideId is required" } };
+  }
+  const total = Number(totalSeats);
+  if (!Number.isFinite(total) || total < 1) {
+    return {
+      status: 400,
+      body: { success: false, message: "totalSeats must be at least 1" },
+    };
+  }
+  if (total > 20) {
+    return {
+      status: 400,
+      body: { success: false, message: "Maximum 20 seats allowed per ride" },
+    };
+  }
+
+  const ride = await Ride.findById(rideId);
+  if (!ride) {
+    return { status: 404, body: { success: false, message: "Ride not found" } };
+  }
+  if (ride.creator.toString() !== user._id.toString()) {
+    return {
+      status: 403,
+      body: { success: false, message: "Only the driver can update seats" },
+    };
+  }
+  if (!["pending", "started"].includes(ride.status)) {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message: "Seats can only be updated before the ride is completed",
+      },
+    };
+  }
+
+  const bookedSeats = getBookedSeats(ride);
+  if (total < bookedSeats) {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message: `Cannot set below ${bookedSeats} seat(s) already booked by passengers`,
+      },
+    };
+  }
+
+  ride.availableSeats = total - bookedSeats;
+  await ride.save();
+
+  return {
+    status: 200,
+    body: {
+      success: true,
+      message: "Seats updated",
+      totalSeats: total,
+      bookedSeats,
+      availableSeats: ride.availableSeats,
+    },
+  };
+};
+
+module.exports = {
+  acceptPassengerRequest,
+  rejectPassengerRequest,
+  removePassenger,
+  startRide,
+  endRide,
+  enrouteRequests,
+  pickCourier,
+  updateRideSeats,
+};

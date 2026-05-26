@@ -1,22 +1,20 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRoute } from "@react-navigation/native";
 import BackButton from "../Components/BackButton";
 import ScreenContainer from "../Components/ui/ScreenContainer";
 import LeafletRideMap from "../Components/maps/LeafletRideMap";
-import { getRideTracking } from "../ApiService/chatApiServices";
 import { useParticipantLocation } from "../hooks/useDriverLocation";
+import { useRideTracking } from "../hooks/useRideTracking";
 
 const RideLiveMap = () => {
   const route = useRoute();
   const { rideId, rideTitle, myRole, rideStatus } = route.params || {};
   const [token, setToken] = useState(null);
-  const [tracking, setTracking] = useState(null);
-  const [loading, setLoading] = useState(true);
 
   const isStarted =
-    rideStatus === "started" || rideStatus === "Started" || tracking?.status === "started";
+    rideStatus === "started" || rideStatus === "Started";
 
   useParticipantLocation({
     enabled: isStarted && !!token && !!rideId,
@@ -24,31 +22,21 @@ const RideLiveMap = () => {
     token,
   });
 
-  const loadTracking = useCallback(async () => {
-    if (!token || !rideId) return;
-    try {
-      const res = await getRideTracking(token, rideId);
-      setTracking(res);
-    } catch (e) {
-      console.warn("[map] tracking:", e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [token, rideId]);
+  const { tracking, loading } = useRideTracking({
+    rideId,
+    token,
+    enabled: isStarted && !!token && !!rideId,
+  });
 
   useEffect(() => {
     AsyncStorage.getItem("token").then(setToken);
   }, []);
 
-  useEffect(() => {
-    if (token) loadTracking();
-  }, [token, loadTracking]);
-
-  useEffect(() => {
-    if (!token || !isStarted) return undefined;
-    const poll = setInterval(loadTracking, 5000);
-    return () => clearInterval(poll);
-  }, [token, isStarted, loadTracking]);
+  const participantCount =
+    tracking?.liveTracking?.participantLocations?.filter(
+      (p) => p.role !== "driver"
+    ).length || 0;
+  const hasDriver = !!tracking?.liveTracking?.driverLocation;
 
   return (
     <ScreenContainer backgroundColor="#F8FAFC" style={styles.container}>
@@ -64,7 +52,12 @@ const RideLiveMap = () => {
 
       {!isStarted ? (
         <Text style={styles.hint}>Map is available after the ride has started.</Text>
-      ) : null}
+      ) : (
+        <View style={styles.liveBadge}>
+          <View style={styles.liveDot} />
+          <Text style={styles.liveText}>Live via socket</Text>
+        </View>
+      )}
 
       {loading ? (
         <ActivityIndicator style={{ marginTop: 40 }} size="large" color="#2563EB" />
@@ -77,13 +70,26 @@ const RideLiveMap = () => {
         />
       )}
 
+      {isStarted && !loading && (
+        <Text style={styles.statusLine}>
+          {hasDriver ? "Driver on map" : "Waiting for driver GPS…"}
+          {participantCount > 0
+            ? ` · ${participantCount} passenger/courier on map`
+            : ""}
+        </Text>
+      )}
+
       <View style={styles.legend}>
         <Text style={styles.legendItem}>🚗 Driver</Text>
         <Text style={styles.legendItem}>👤 Passenger</Text>
         <Text style={styles.legendItem}>📦 Courier</Text>
       </View>
       <Text style={styles.note}>
-        Your location is shared while the ride is in progress. Gold ring = you.
+        {myRole === "driver"
+          ? "You share your location; passengers and couriers appear as they share GPS."
+          : myRole === "courier"
+            ? "You share your location and can see the driver (and other riders) in real time."
+            : "You share your location and can see the driver (and other riders) in real time."}
       </Text>
     </ScreenContainer>
   );
@@ -103,7 +109,31 @@ const styles = StyleSheet.create({
   title: { fontSize: 18, fontWeight: "700" },
   subtitle: { fontSize: 13, color: "#64748B" },
   hint: { color: "#D97706", marginBottom: 12, fontSize: 13 },
+  liveBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "#DCFCE7",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginBottom: 10,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#16A34A",
+    marginRight: 6,
+  },
+  liveText: { fontSize: 12, fontWeight: "700", color: "#166534" },
   map: { marginTop: 8 },
+  statusLine: {
+    fontSize: 12,
+    color: "#475569",
+    marginTop: 10,
+    textAlign: "center",
+  },
   legend: {
     flexDirection: "row",
     justifyContent: "space-around",

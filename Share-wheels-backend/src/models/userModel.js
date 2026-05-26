@@ -50,13 +50,12 @@ userSchema.pre("save", async function assignUserNo() {
   throw new Error("Could not generate unique user number");
 });
 
-userSchema.pre("findOneAndUpdate", function blockUserNoChange(next) {
+userSchema.pre("findOneAndUpdate", function blockUserNoChange() {
   const update = this.getUpdate() || {};
   const set = update.$set || update;
   if (set.userNo !== undefined) {
-    return next(new Error("userNo cannot be changed"));
+    throw new Error("userNo cannot be changed");
   }
-  next();
 });
 
 module.exports = mongoose.model("User", userSchema);

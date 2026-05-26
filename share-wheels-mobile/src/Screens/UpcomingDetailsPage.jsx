@@ -29,6 +29,7 @@ import {
   driverrejectpassengerrequest,
   listVerificationParticipants,
   verifyBoardingParticipant,
+  updateRideSeats,
 } from "../ApiService/ridesApiServices";
 import seat from "../assets/seatIcon.png";
 import car from "../assets/car.png";
@@ -40,6 +41,13 @@ import kondapurIcon from "../assets/kondapuricon.png";
 import lineIcon from "../assets/lineicon.png";
 import UserAvatar from "../Components/ui/UserAvatar";
 import ScreenContainer from "../Components/ui/ScreenContainer";
+import ScreenHeader from "../Components/ui/ScreenHeader";
+import ParticipantCard from "../Components/ParticipantCard";
+import DriverContactCard from "../Components/DriverContactCard";
+import EditableRideSeats from "../Components/EditableRideSeats";
+import MessageIndicator from "../Components/ui/MessageIndicator";
+import { getRideChatMessages } from "../ApiService/chatApiServices";
+import { profileData } from "../Navigation/AuthNavigator";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LAYOUT, getScrollBottomPadding, scale } from "../theme/layout";
 import { DS } from "../theme/designSystem";
@@ -59,6 +67,13 @@ import {
   setActiveRideTracking,
   clearActiveRideTracking,
 } from "../Utils/activeRideTracking";
+import {
+  isRideScheduledTimePassed,
+  isRideScheduledTimeFuture,
+  formatScheduledStart,
+} from "../Utils/rideSchedule";
+import { getApiErrorMessage } from "../Utils/apiErrors";
+import { openPhoneCall } from "../Utils/phoneCall";
 
 const UpcomingDetailsPage = ({ route }) => {
   const navigation = useNavigation();
@@ -73,7 +88,9 @@ const UpcomingDetailsPage = ({ route }) => {
   const [activeSlider, setActiveSlider] = useState(null);
   const [loadingRide, setLoadingRide] = useState(false);
   const [rideActionLoading, setRideActionLoading] = useState(false);
-  const [rideStarted, setRideStarted] = useState(rideData?.ride_status === "started");
+  const [rideStarted, setRideStarted] = useState(
+    rideData?.status === "started" || rideData?.ride_status === "started"
+  );
   const [passengers, setPassengers] = useState([])
   const [selectedPassenger, setSelectedPassenger] = useState(null);
   const [couriers, setCouriers] = useState([]);
@@ -87,6 +104,13 @@ const UpcomingDetailsPage = ({ route }) => {
   const [myBoarding, setMyBoarding] = useState(null);
   const [verifyTarget, setVerifyTarget] = useState(null);
   const [verifyLoading, setVerifyLoading] = useState(false);
+  const [seatsSaving, setSeatsSaving] = useState(false);
+  const [chatUnread, setChatUnread] = useState({ driver: 0 });
+  const { ProfileDetails } = profileData();
+  const myUserId =
+    ProfileDetails?._id ||
+    ProfileDetails?.id ||
+    ProfileDetails?.data?.personalInfo?._id;
 
   useEffect(() => {
     AsyncStorage.getItem("token").then(setDriverToken);
@@ -94,7 +118,74 @@ const UpcomingDetailsPage = ({ route }) => {
 
   const rideIdStr = rideData?._id?.toString?.() || rideData?._id;
 
+  const countIncoming = (messages, userId) => {
+    if (!messages?.length || !userId) return 0;
+    const uid = userId.toString();
+    return messages.filter(
+      (m) => (m.senderId?._id || m.senderId)?.toString() !== uid
+    ).length;
+  };
+
+  const loadChatUnread = useCallback(async () => {
+    if (!driverToken || !rideIdStr) return;
+    try {
+      const creatorId =
+        rideData?.creator?._id || rideData?.creator?.id || rideData?.creator;
+      const directRes = creatorId
+        ? await getRideChatMessages(driverToken, rideIdStr, creatorId)
+        : { messages: [] };
+      setChatUnread({
+        driver: countIncoming(directRes?.messages, myUserId),
+      });
+    } catch {
+      /* ignore */
+    }
+  }, [driverToken, rideIdStr, isDriver, rideData?.creator, myUserId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadChatUnread();
+    }, [loadChatUnread])
+  );
+
+  const handleCall = (phone, label = "contact") => {
+    openPhoneCall(phone, label);
+  };
+
+  const bookedSeats = (passengers || []).reduce(
+    (sum, p) => sum + (Number(p?.requires_seats) || 0),
+    0
+  );
+
+  const canEditSeats =
+    isDriver &&
+    (rideStatus === "pending" || rideStatus === "started");
+
+  const handleSaveSeats = async (totalSeats) => {
+    try {
+      setSeatsSaving(true);
+      const token = await AsyncStorage.getItem("token");
+      const res = await updateRideSeats(token, {
+        rideId: rideData?._id,
+        totalSeats,
+      });
+      setRideData((prev) => ({
+        ...prev,
+        availableSeats: res.availableSeats,
+      }));
+      Alert.alert("Updated", res.message || "Seats updated successfully");
+    } catch (err) {
+      Alert.alert("Could not update seats", err.message);
+    } finally {
+      setSeatsSaving(false);
+    }
+  };
+
   const isRideStarted = rideStatus === "started";
+  const schedulePassed =
+    rideData?.isSchedulePassed ?? isRideScheduledTimePassed(rideData);
+  const scheduleEarly =
+    rideData?.isScheduleFuture ?? isRideScheduledTimeFuture(rideData);
 
   useParticipantLocation({
     enabled: isRideStarted && !!driverToken && !!rideIdStr,
@@ -102,12 +193,14 @@ const UpcomingDetailsPage = ({ route }) => {
     token: driverToken,
   });
 
-  // Resume GPS for rides already started (e.g. before this fix was deployed)
+  // Background GPS for driver, passengers, and couriers while ride is active
   useEffect(() => {
-    if (isDriver && rideStatus === "started" && rideIdStr) {
+    if (rideStatus === "completed" || rideStatus === "cancelled") {
+      clearActiveRideTracking();
+    } else if (isRideStarted && rideIdStr) {
       setActiveRideTracking(rideIdStr);
     }
-  }, [isDriver, rideStatus, rideIdStr]);
+  }, [isRideStarted, rideStatus, rideIdStr]);
 
   const roleColor = isDriver ? "#007AFF" : isCourier ? "#F59E0B" : "#10B981";
 
@@ -117,10 +210,6 @@ const UpcomingDetailsPage = ({ route }) => {
     myRole: isDriver ? "driver" : isCourier ? "courier" : "passenger",
     rideStatus: rideStatus || rideData?.status,
   });
-
-  const openGroupChat = () => {
-    navigation.navigate("RideChat", rideNavParams());
-  };
 
   const openDirectChat = (peer) => {
     const peerUser = peer?.userId || peer;
@@ -294,27 +383,12 @@ const UpcomingDetailsPage = ({ route }) => {
     }
   };
 
-  const handleStartRide = async () => {
-    if (rideActionLoading || rideStatus === "started") return;
-
-    if (isDriver && verification && verification.pending > 0) {
-      Alert.alert(
-        "Verification required",
-        `Verify ${verification.pending} passenger(s)/courier(s) before starting the ride.`,
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Enter OTP", onPress: openOtpSlider },
-        ]
-      );
-      return;
-    }
-
+  const runStartRide = async () => {
     try {
       setRideActionLoading(true);
       setLoadingRide(true);
 
       const coords = await ensureLocationReadyForRide();
-
       const token = await AsyncStorage.getItem("token");
 
       const response = await startride(token, {
@@ -336,18 +410,52 @@ const UpcomingDetailsPage = ({ route }) => {
         }
         Alert.alert("Success", response.message);
       } else {
-        Alert.alert("Error", response?.message || "Could not start ride");
+        Alert.alert("Error", getApiErrorMessage(response, "Could not start ride"));
       }
     } catch (error) {
+      const msg = getApiErrorMessage(error, "");
       Alert.alert(
-        "Location required",
-        error?.message ||
+        msg.toLowerCase().includes("location") ? "Location required" : "Could not start ride",
+        msg ||
           "Enable location permission and GPS before starting a ride."
       );
     } finally {
       setLoadingRide(false);
       setRideActionLoading(false);
     }
+  };
+
+  const handleStartRide = () => {
+    if (rideActionLoading || rideStatus === "started") return;
+
+    if (isDriver && verification?.pending > 0 && !schedulePassed && !scheduleEarly) {
+      Alert.alert(
+        "Verification required",
+        `Verify ${verification.pending} passenger(s)/courier(s) before starting, or start anyway.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Enter OTP", onPress: openOtpSlider },
+          { text: "Start anyway", onPress: runStartRide },
+        ]
+      );
+      return;
+    }
+
+    if (isDriver && verification?.pending > 0 && (schedulePassed || scheduleEarly)) {
+      Alert.alert(
+        scheduleEarly ? "Start early?" : "Start ride?",
+        scheduleEarly
+          ? `Scheduled for ${formatScheduledStart(rideData)}. ${verification.pending} participant(s) not verified — you can still start now.`
+          : `${verification.pending} participant(s) not verified — you can still start now.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Start ride", onPress: runStartRide },
+        ]
+      );
+      return;
+    }
+
+    runStartRide();
   };
 
   const handleEndRide = async () => {
@@ -375,16 +483,12 @@ const UpcomingDetailsPage = ({ route }) => {
   };
   console.log('ridestat:', rideStatus)
   const handleContactDriver = () => {
-    const driverPhone =
-      rideData?.driver?.phone ||
-      rideData?.phone ||
-      rideData?.AlternatePhoneNumber;
-
-    if (driverPhone) {
-      Linking.openURL(`tel:${driverPhone}`);
-    } else {
-      Alert.alert("Driver phone number not available");
-    }
+    handleCall(
+      rideData?.creator?.mobile ||
+        rideData?.driver?.phone ||
+        rideData?.phone,
+      "driver"
+    );
   };
 
   const getUser = (item) => {
@@ -460,7 +564,16 @@ const UpcomingDetailsPage = ({ route }) => {
       backgroundColor="#fff"
       style={{ paddingHorizontal: LAYOUT.spacing.screen }}
     >
-      {/* 🔒 FIXED HEADER */}
+      <ScreenHeader title="Ride details" />
+
+      {rideData?.QuickReserve && isDriver && (
+        <View style={styles.quickReserveBanner}>
+          <Text style={styles.quickReserveBannerText}>
+            Quick Reserve is ON — passengers & couriers join without your approval
+          </Text>
+        </View>
+      )}
+
       <View style={styles.buttonContainer}>
         <TouchableOpacity
           style={[styles.roleButton, { backgroundColor: roleColor + "20" }]}
@@ -482,20 +595,14 @@ const UpcomingDetailsPage = ({ route }) => {
           </TouchableOpacity>
         )}
 
-        {isDriver ? (
+        {!isDriver && (
           <TouchableOpacity
-            style={[styles.otpButton, { borderColor: "#2563EB", marginLeft: 8 }]}
-            onPress={openGroupChat}
-          >
-            <Text style={[styles.otpText, { color: "#2563EB" }]}>Group</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={[styles.otpButton, { borderColor: "#2563EB", marginLeft: 8 }]}
+            style={[styles.otpButton, styles.chipWithBadge, { borderColor: "#2563EB", marginLeft: 8 }]}
             onPress={() => openDirectChat({ userId: rideData?.creator, role: "driver" })}
             disabled={!rideData?.creator}
           >
-            <Text style={[styles.otpText, { color: "#2563EB" }]}>Driver</Text>
+            <Text style={[styles.otpText, { color: "#2563EB" }]}>💬 Message</Text>
+            <MessageIndicator count={chatUnread.driver} style={styles.chipBadge} />
           </TouchableOpacity>
         )}
         {isRideStarted && (
@@ -512,12 +619,33 @@ const UpcomingDetailsPage = ({ route }) => {
       <ScrollView
         contentContainerStyle={{
           padding: 2,
-          paddingBottom: getScrollBottomPadding(insets.bottom, scale(72)),
+          paddingBottom: getScrollBottomPadding(
+            insets.bottom,
+            isDriver ? scale(72) : scale(16)
+          ),
         }}
         showsVerticalScrollIndicator={false}
       >
 
-        {isDriver && rideStatus === "pending" && verification?.total > 0 && (
+        {isDriver && rideStatus === "pending" && scheduleEarly && (
+          <View style={[styles.verificationBanner, { backgroundColor: "#EFF6FF" }]}>
+            <Text style={styles.verificationBannerText}>
+              Scheduled for {formatScheduledStart(rideData)} — you can start this ride early.
+            </Text>
+          </View>
+        )}
+
+        {isDriver && rideStatus === "pending" && schedulePassed && (
+          <View style={[styles.verificationBanner, { backgroundColor: "#EFF6FF" }]}>
+            <Text style={styles.verificationBannerText}>
+              Scheduled time has passed — you can still start this ride now.
+            </Text>
+          </View>
+        )}
+
+        {isDriver &&
+          (rideStatus === "pending" || rideStatus === "started") &&
+          verification?.total > 0 && (
           <View
             style={[
               styles.verificationBanner,
@@ -530,8 +658,12 @@ const UpcomingDetailsPage = ({ route }) => {
           >
             <Text style={styles.verificationBannerText}>
               {verification.allVerified
-                ? "All passengers and couriers verified. You can start the ride."
-                : `${verification.pending} of ${verification.total} still need OTP verification.`}
+                ? rideStatus === "started"
+                  ? "All passengers and couriers verified."
+                  : "All passengers and couriers verified. You can start the ride."
+                : rideStatus === "started"
+                  ? `${verification.pending} of ${verification.total} still need OTP verification — verify anytime during the ride.`
+                  : `${verification.pending} of ${verification.total} still need OTP verification.`}
             </Text>
           </View>
         )}
@@ -582,12 +714,22 @@ const UpcomingDetailsPage = ({ route }) => {
             </Text>
           </View>
 
-          <View style={[styles.card, { backgroundColor: "#FFF7ED" }]}>
-            <Text style={styles.label}>
-              <Image source={seat} style={styles.icon} /> Available Seats
-            </Text>
-            <Text style={styles.value}>{rideData?.availableSeats}</Text>
-          </View>
+          {isDriver ? (
+            <EditableRideSeats
+              availableSeats={rideData?.availableSeats}
+              bookedSeats={bookedSeats}
+              canEdit={canEditSeats}
+              saving={seatsSaving}
+              onSave={handleSaveSeats}
+            />
+          ) : (
+            <View style={[styles.card, { backgroundColor: "#FFF7ED" }]}>
+              <Text style={styles.label}>
+                <Image source={seat} style={styles.icon} /> Available Seats
+              </Text>
+              <Text style={styles.value}>{rideData?.availableSeats}</Text>
+            </View>
+          )}
 
           <View style={[styles.card, { backgroundColor: "#F0FDFA" }]}>
             <Text style={styles.label}>
@@ -617,160 +759,108 @@ const UpcomingDetailsPage = ({ route }) => {
         {/* DRIVER VIEW */}
         {isDriver && (
           <>
-            <Text style={styles.section}>My Passenger</Text>
+            <Text style={styles.section}>My Passengers</Text>
 
             {detailsLoading ? (
               <ActivityIndicator size="large" color="#007AFF" />
             ) : passengers.length === 0 ? (
-              <Text style={{ textAlign: "center" }}>No Passengers</Text>
+              <Text style={styles.emptyList}>No passengers yet</Text>
             ) : (
-              passengers.map((item, index) => (
-                <View key={index} style={styles.myPassengerCard}>
-                  <View style={styles.myRow}>
-                      <UserAvatar user={item?.userId} size={50} />
-
-                    <View style={{ flex: 1, marginHorizontal: 10 }}>
-                      <Text style={styles.name}>
-                        {item?.userId?.name || "Passenger"}
-                      </Text>
-                      <Text style={styles.userNoText}>
-                        ID: {item?.userId?.userNo || "—"}
-                        {item?.isBoardingVerified ? " • Verified ✓" : " • Pending"}
-                      </Text>
-
-                      <Text style={styles.pickup}>
-                        {item?.userId?.email || "No email"}
-                      </Text>
-
-                      <Text style={styles.pickup}>
-                        Pickup: {rideData?.from}
-                      </Text>
-                      <View style={styles.buttonRow}>
-                        {!item?.isBoardingVerified && rideStatus === "pending" && (
-                          <TouchableOpacity
-                            style={styles.verifyChip}
-                            onPress={() => {
-                              setVerifyTarget({
-                                name: item?.userId?.name,
-                                userNo: item?.userId?.userNo,
-                                role: "passenger",
-                              });
-                              setActiveSlider("otp");
-                            }}
-                          >
-                            <Text style={styles.verifyChipText}>Verify</Text>
-                          </TouchableOpacity>
-                        )}
-                        <TouchableOpacity style={styles.callButton}>
-                          <Text style={styles.callText}>Call</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.chatChip}
-                          onPress={() =>
-                            openDirectChat({ userId: item.userId, role: "passenger" })
-                          }
-                        >
-                          <Text style={styles.chatChipText}>Message</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={styles.removeButton}
-                          onPress={() => {
-                            setSelectedPassenger(item);
-                            setActiveSlider("removePassenger");
-                          }}
-                        >
-                          <Text style={styles.removeText}>Remove</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-
-                    <View style={styles.priceContainer}>
-                      <Image source={caricon} style={styles.carIcon} />
-                      <Text style={styles.priceText}>
-                        ₹{getPassengerFare(item)}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              ))
+              <ScrollView
+                nestedScrollEnabled
+                style={styles.participantListScroll}
+                contentContainerStyle={styles.participantListContent}
+                showsVerticalScrollIndicator
+                keyboardShouldPersistTaps="handled"
+              >
+                {passengers.map((item, index) => (
+                  <ParticipantCard
+                    key={item._id || item.userId?._id || index}
+                    user={item?.userId}
+                    role="passenger"
+                    subtitleLines={[
+                      item?.userId?.email || "No email",
+                      `Pickup: ${rideData?.from}`,
+                      `${item?.requires_seats || 1} seat(s)`,
+                    ]}
+                    fare={getPassengerFare(item)}
+                    fareLabel="Fare"
+                    verified={!!item?.isBoardingVerified}
+                    showVerify={
+                      !item?.isBoardingVerified &&
+                      (rideStatus === "pending" || rideStatus === "started")
+                    }
+                    onVerify={() => {
+                      setVerifyTarget({
+                        name: item?.userId?.name,
+                        userNo: item?.userId?.userNo,
+                        role: "passenger",
+                      });
+                      setActiveSlider("otp");
+                    }}
+                    onCall={() =>
+                      handleCall(item?.userId?.mobile, "passenger")
+                    }
+                    onMessage={() =>
+                      openDirectChat({ userId: item.userId, role: "passenger" })
+                    }
+                    onRemove={() => {
+                      setSelectedPassenger(item);
+                      setActiveSlider("removePassenger");
+                    }}
+                  />
+                ))}
+              </ScrollView>
             )}
-
 
             <Text style={styles.section}>My Couriers</Text>
 
             {detailsLoading ? (
               <ActivityIndicator size="large" color="#007AFF" />
             ) : couriers.length === 0 ? (
-              <Text style={{ textAlign: "center" }}>No Couriers</Text>
+              <Text style={styles.emptyList}>No couriers yet</Text>
             ) : (
-              couriers.map((item, index) => (
-                <View key={index} style={styles.myPassengerCard}>
-                  <View style={styles.myRow}>
-                      <UserAvatar user={item?.userId} size={50} />
-
-                    <View style={{ flex: 1, marginHorizontal: 10 }}>
-                      <Text style={styles.name}>
-                        {item?.userId?.name || "Courier"}
-                      </Text>
-                      <Text style={styles.userNoText}>
-                        ID: {item?.userId?.userNo || "—"}
-                        {item?.isBoardingVerified ? " • Verified ✓" : " • Pending"}
-                      </Text>
-
-                      <Text style={styles.pickup}>
-                        {item?.userId?.email || "No email"}
-                      </Text>
-
-                      <Text style={styles.pickup}>
-                        Parcel: {item?.weight || "N/A"} kg
-                      </Text>
-
-                      <View style={styles.buttonRow}>
-                        {!item?.isBoardingVerified && rideStatus === "pending" && (
-                          <TouchableOpacity
-                            style={styles.verifyChip}
-                            onPress={() => {
-                              setVerifyTarget({
-                                name: item?.userId?.name,
-                                userNo: item?.userId?.userNo,
-                                role: "courier",
-                              });
-                              setActiveSlider("otp");
-                            }}
-                          >
-                            <Text style={styles.verifyChipText}>Verify</Text>
-                          </TouchableOpacity>
-                        )}
-                        <TouchableOpacity style={styles.callButton}>
-                          <Text style={styles.callText}>Call</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.chatChip}
-                          onPress={() =>
-                            openDirectChat({ userId: item.userId, role: "courier" })
-                          }
-                        >
-                          <Text style={styles.chatChipText}>Message</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.removeButton}
-                          onPress={() => handleRemoveCourier(item._id)}
-                        >
-                          <Text style={styles.removeText}>Remove</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-
-                    <View style={styles.priceContainer}>
-                      <Image source={courier} style={styles.carIcon} />
-                      <Text style={styles.priceText}>
-                        ₹{item?.amount_will}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              ))
+              <ScrollView
+                nestedScrollEnabled
+                style={styles.participantListScroll}
+                contentContainerStyle={styles.participantListContent}
+                showsVerticalScrollIndicator
+                keyboardShouldPersistTaps="handled"
+              >
+                {couriers.map((item, index) => (
+                  <ParticipantCard
+                    key={item._id || item.userId?._id || index}
+                    user={item?.userId}
+                    role="courier"
+                    subtitleLines={[
+                      item?.userId?.email || "No email",
+                      `Parcel: ${item?.weight || item?.what_to_deliver || "N/A"}`,
+                    ]}
+                    fare={item?.amount_will || 0}
+                    fareLabel="Amount"
+                    verified={!!item?.isBoardingVerified}
+                    showVerify={
+                      !item?.isBoardingVerified &&
+                      (rideStatus === "pending" || rideStatus === "started")
+                    }
+                    onVerify={() => {
+                      setVerifyTarget({
+                        name: item?.userId?.name,
+                        userNo: item?.userId?.userNo,
+                        role: "courier",
+                      });
+                      setActiveSlider("otp");
+                    }}
+                    onCall={() =>
+                      handleCall(item?.userId?.mobile, "courier")
+                    }
+                    onMessage={() =>
+                      openDirectChat({ userId: item.userId, role: "courier" })
+                    }
+                    onRemove={() => handleRemoveCourier(item._id)}
+                  />
+                ))}
+              </ScrollView>
             )}
             {/* SEND REQUEST */}
             <TouchableOpacity
@@ -782,7 +872,8 @@ const UpcomingDetailsPage = ({ route }) => {
               </Text>
             </TouchableOpacity>
 
-            {/* REQUESTS */}
+            {!rideData?.QuickReserve && (
+            <>
             <Text style={styles.section}>Passenger Requests</Text>
 
             {detailsLoading ? (
@@ -906,84 +997,28 @@ const UpcomingDetailsPage = ({ route }) => {
             );
   })
 )}
+            </>
+            )}
           </>
-
         )}
         {!isDriver && (
           <>
-            <Text style={styles.section}>Your Driver</Text>
-
-            <View style={styles.driverCard}>
-              <View style={styles.driverRow}>
-                <UserAvatar user={rideData?.creator} size={50} />
-
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.name}>
-                    {rideData?.creator?.name || "Driver"}
-                  </Text>
-
-                  <Text style={styles.pickup}>
-                    {rideData?.creator?.email || "No email"}
-                  </Text>
-
-                  <Text style={styles.pickup}>
-                    {rideData?.creator?.mobile || "No phone"}
-                  </Text>
-                  <TouchableOpacity
-                    style={[styles.chatChip, { marginTop: 8, alignSelf: "flex-start" }]}
-                    onPress={() =>
-                      openDirectChat({ userId: rideData?.creator, role: "driver" })
-                    }
-                  >
-                    <Text style={styles.chatChipText}>Message driver</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.driverCarRow}>
-                <Image source={caricon} style={styles.carIcon} />
-                <Text style={styles.carText}>
-                  {rideData?.vehicle?.company} ({rideData?.vehicle?.car_no})
-                </Text>
-              </View>
-            </View>
+            <Text style={styles.section}>
+              {isCourier ? "Ride Driver" : "Your Driver"}
+            </Text>
+            <DriverContactCard
+              driver={rideData?.creator}
+              vehicle={rideData?.vehicle}
+              messageUnread={chatUnread.driver}
+              onMessage={() =>
+                openDirectChat({ userId: rideData?.creator, role: "driver" })
+              }
+              onCall={() => handleCall(rideData?.creator?.mobile, "driver")}
+            />
           </>
         )}
         {isCourier && (
           <>
-            <Text style={styles.section}>Ride Driver</Text>
-
-            <View style={styles.driverCard}>
-              <View style={styles.driverRow}>
-                <UserAvatar user={rideData?.creator} size={50} />
-
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.name}>
-                    {rideData?.creator?.name || "Driver"}
-                  </Text>
-
-                  <Text style={styles.pickup}>
-                    {rideData?.creator?.mobile || "No phone"}
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.callButton}
-                  onPress={() => handleCall(rideData?.creator?.mobile)}
-                >
-                  <Text style={styles.callText}>Call</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.chatChip}
-                  onPress={() =>
-                    openDirectChat({ userId: rideData?.creator, role: "driver" })
-                  }
-                >
-                  <Text style={styles.chatChipText}>Message</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
             {/* Parcel Info */}
             <Text style={styles.section}>Your Parcel</Text>
 
@@ -1104,35 +1139,34 @@ const UpcomingDetailsPage = ({ route }) => {
       </BottomSlider>
 
 
-      <FixedButton
-        title={
-          !rideStatus
-            ? "Loading..."
-            : rideStatus === "pending"
-              ? "Start Ride"
+      {isDriver && (
+        <FixedButton
+          title={
+            !rideStatus
+              ? "Loading..."
+              : rideStatus === "pending"
+                ? "Start Ride"
+                : rideStatus === "started"
+                  ? "Complete Ride"
+                  : "Ride Completed"
+          }
+          onPress={
+            rideStatus === "pending"
+              ? handleStartRide
               : rideStatus === "started"
-                ? "Complete Ride"
-                : "Ride Completed"
-        }
-        onPress={
-          rideStatus === "pending"
-            ? handleStartRide
-            : rideStatus === "started"
-              ? handleEndRide
-              : null
-        }
-        disabled={
-          !rideStatus ||
-          rideStatus === "completed" ||
-          loadingRide ||
-          (isDriver &&
-            rideStatus === "pending" &&
-            verification?.total > 0 &&
-            !verification?.allVerified)
-        }
-        loading={loadingRide}
-        bottomInset={insets.bottom + scale(8)}
-      />
+                ? handleEndRide
+                : null
+          }
+          disabled={
+            !rideStatus ||
+            rideStatus === "completed" ||
+            rideStatus === "cancelled" ||
+            loadingRide
+          }
+          loading={loadingRide}
+          bottomInset={insets.bottom + scale(8)}
+        />
+      )}
     </ScreenContainer>
   );
 };
@@ -1143,9 +1177,20 @@ const styles = StyleSheet.create({
 
   buttonContainer: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    flexWrap: "wrap",
+    alignItems: "center",
     marginBottom: LAYOUT.spacing.md,
     marginTop: LAYOUT.spacing.sm,
+    gap: 8,
+  },
+  chipWithBadge: {
+    position: "relative",
+    paddingRight: 14,
+  },
+  chipBadge: {
+    position: "absolute",
+    top: -6,
+    right: -4,
   },
 
   roleButton: {
@@ -1351,6 +1396,20 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginTop: 16,
   },
+  quickReserveBanner: {
+    backgroundColor: "#DCFCE7",
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#86EFAC",
+  },
+  quickReserveBannerText: {
+    color: "#166534",
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "center",
+  },
   sendRequestBtn: {
     backgroundColor: "#E8F0FF",
     paddingVertical: 12,
@@ -1508,5 +1567,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     marginLeft: 6,
+  },
+  participantListScroll: {
+    maxHeight: scale(300),
+    marginBottom: LAYOUT.spacing.md,
+    borderWidth: 1,
+    borderColor: LAYOUT.colors.border,
+    borderRadius: LAYOUT.radius?.lg || 14,
+    backgroundColor: "#FAFBFC",
+  },
+  participantListContent: {
+    padding: LAYOUT.spacing.sm,
+    paddingBottom: LAYOUT.spacing.md,
+  },
+  emptyList: {
+    textAlign: "center",
+    color: LAYOUT.colors.textMuted,
+    marginBottom: LAYOUT.spacing.md,
+    fontSize: 14,
   },
 });

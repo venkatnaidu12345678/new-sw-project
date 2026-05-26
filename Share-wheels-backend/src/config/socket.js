@@ -50,6 +50,27 @@ const createServerWithSocket = (app) => {
       if (socket.userType === "admin") socket.join("admin:tracking");
     });
 
+    socket.on("updateLocation", async (payload, ack) => {
+      try {
+        if (socket.userType !== "user") return;
+        const rideId = payload?.rideId;
+        if (!rideId) return;
+        const rideTrackingService = require("../services/rideTrackingService");
+        const result = await rideTrackingService.updateParticipantLocation(
+          socket.user,
+          rideId,
+          payload
+        );
+        if (typeof ack === "function") {
+          ack(result.body || { success: result.status === 200 });
+        }
+      } catch (err) {
+        if (typeof ack === "function") {
+          ack({ success: false, message: err.message || "Location update failed" });
+        }
+      }
+    });
+
     socket.on("disconnect", () => {
       console.log("Socket disconnected", socket.id);
     });
