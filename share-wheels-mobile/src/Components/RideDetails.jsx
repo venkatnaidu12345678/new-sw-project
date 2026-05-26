@@ -35,6 +35,7 @@ import bookingInfoIcon from "../assets/yourbookingicon.png";
 import verifiedProfileIcon from "../assets/verifiedprofile.png";
 import neverCancelIcon from "../assets/nevercancelrideicon.png";
 import UserAvatar from "./ui/UserAvatar";
+import VehicleInfoStrip from "./VehicleInfoStrip";
 import KeyboardAwareScreen from "./ui/KeyboardAwareScreen";
 import ScreenContainer from "./ui/ScreenContainer";
 import ScreenHeader from "./ui/ScreenHeader";
@@ -391,6 +392,10 @@ const RideDetails = ({ navigation, route }) => {
             <Image source={neverCancelIcon} style={styles.infoIcon} />
             <Text style={styles.infoText}>Never cancels rides</Text>
           </View>
+
+          {ride?.vehicle ? (
+            <VehicleInfoStrip vehicle={ride.vehicle} compact />
+          ) : null}
         </View>
 
         {isOwnRide ? (

@@ -5,6 +5,7 @@ import AuthButton from "../../Components/AuthButton";
 import AuthTextInput from "../../Components/AuthTextInput";
 import AuthScreenLayout from "../../Components/auth/AuthScreenLayout";
 import { loginApi } from "../../ApiService/AuthApiService";
+import { syncFcmTokenWithBackend } from "../../Notifications/registerToken";
 import { validateEmail, validatePassword } from "../../Utils";
 import { AUTH_COLORS } from "../../theme/authTheme";
 import { getApiErrorMessage } from "../../Utils/apiErrors";
@@ -37,6 +38,7 @@ const LoginPage = ({ navigation, triggerAuth }) => {
         if (res.user?.name) {
           await AsyncStorage.setItem("USER_NAME", res.user.name);
         }
+        await syncFcmTokenWithBackend();
         triggerAuth?.();
       } else {
         Alert.alert(

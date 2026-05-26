@@ -30,6 +30,7 @@ import AnimatedLoad from "./ui/AnimatedLoad";
 import AnimatedTabs from "./ui/AnimatedTabs";
 import FadePanel from "./ui/FadePanel";
 import { useFocusEffect } from "@react-navigation/native";
+import { useMyRequestsSocket } from "../hooks/useAppSocket";
 import ScreenContainer from "./ui/ScreenContainer";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LAYOUT, getScrollBottomPadding } from "../theme/layout";
@@ -47,13 +48,7 @@ const MyRequest = () => {
   const tabs = ["Passenger", "Courier"];
   const activeIndex = tabs.indexOf(activeTab);
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchRequests();
-    }, [])
-  );
-
-  const fetchRequests = async () => {
+  const fetchRequests = useCallback(async () => {
     try {
       setLoading(true);
       setFetchError("");
@@ -66,8 +61,14 @@ const MyRequest = () => {
       }
       const res = await getMyRequests(token);
 
-      /* ✅ PASSENGER */
-      const passenger = (res?.passengerRequests || []).map((item) => ({
+      /* ✅ PASSENGER — only open / unassigned requests */
+      const passenger = (res?.passengerRequests || [])
+        .filter(
+          (item) =>
+            (!item.status || item.status === "pending") &&
+            !item.assignedRide
+        )
+        .map((item) => ({
         id: item.requestId,
         role: "Passenger",
         from: item.from,
@@ -88,8 +89,14 @@ const MyRequest = () => {
         raw: item,
       }));
 
-      /* ✅ COURIER */
-      const courier = (res?.courierRequests || []).map((item) => ({
+      /* ✅ COURIER — hide once a driver has picked the parcel */
+      const courier = (res?.courierRequests || [])
+        .filter(
+          (item) =>
+            ["pending", "request_to_driver"].includes(item.status) &&
+            !item.assignedRide
+        )
+        .map((item) => ({
         id: item.requestId,
         role: "Courier",
         from: item.from,
@@ -118,7 +125,15 @@ const MyRequest = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchRequests();
+    }, [fetchRequests])
+  );
+
+  useMyRequestsSocket(fetchRequests);
 
   const getBorderColor = (role) =>
     role === "Passenger" ? "#16A34A" : "#F97316";

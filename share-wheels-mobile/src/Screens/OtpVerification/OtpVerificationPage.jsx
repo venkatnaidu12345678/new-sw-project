@@ -12,6 +12,8 @@ import AuthButton from "../../Components/AuthButton";
 import KeyboardAwareScreen from "../../Components/ui/KeyboardAwareScreen";
 import { INPUT_COLORS } from "../../theme/inputTheme";
 import { verifyOtpApi } from "../../ApiService/AuthApiService";
+import { getDeviceToken } from "../../Notifications/FCMService";
+import { syncFcmTokenWithBackend } from "../../Notifications/registerToken";
 
 const OTP_LENGTH = 6;
 
@@ -66,9 +68,11 @@ console.log(route.params)
     }
 
     try {
+      const fcmToken = await getDeviceToken();
       const payload = {
         userId: route.params?.userId,
         otp: enteredOtp,
+        ...(fcmToken ? { fcmToken } : {}),
       };
 
       const res = await verifyOtpApi(payload);
@@ -76,6 +80,7 @@ console.log(route.params)
       if (res?.token) {
         await AsyncStorage.setItem("token", res.token);
         await AsyncStorage.setItem("user", JSON.stringify(res.user));
+        await syncFcmTokenWithBackend();
 
         triggerAuth(); // ✅ TRIGGER AUTH CHECK
       } else {

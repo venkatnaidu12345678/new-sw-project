@@ -18,7 +18,7 @@ import RideHistoryCourierview from "../Components/RideHistoryCourierview";
 import BackButton from "../Components/BackButton";
 
 /* API */
-import { rideHistory } from "../ApiService/ridesApiServices";
+import { rideHistory, rideDetails } from "../ApiService/ridesApiServices";
 import { getApiErrorMessage } from "../Utils/apiErrors";
 import { RideListSkeleton } from "./ui/Skeleton";
 import AnimatedLoad from "./ui/AnimatedLoad";
@@ -52,6 +52,7 @@ const RideHistory = () => {
   const [isSliderVisible, setSliderVisible] = useState(false);
   const [activeFilter, setActiveFilter] = useState("All");
   const [errorMsg, setErrorMsg] = useState("");
+  const [detailsLoading, setDetailsLoading] = useState(false);
 
   // 🔄 AUTO REFRESH ON SCREEN FOCUS
   useFocusEffect(
@@ -125,21 +126,55 @@ const RideHistory = () => {
     else setFilteredRides(rides.filter((r) => r.role === filter));
   };
 
-  const handlePress = (item) => {
+  const loadRideDetails = async (item) => {
+    const rideId = item?.id || item?._id;
+    if (!rideId) return item;
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) return item;
+      const res = await rideDetails(token, rideId);
+      const detail = res?.data;
+      if (!detail) return item;
+      return {
+        ...item,
+        status: detail.status ?? item.status,
+        passengers: detail.passengers ?? item.passengers,
+        all_deliveries: detail.all_deliveries ?? item.all_deliveries,
+        vehicle: detail.vehicle ?? item.vehicle,
+        creator: detail.creator ?? item.creator,
+        courierSnapshot: item.activeData ?? item.courierSnapshot,
+      };
+    } catch (e) {
+      console.warn("[history] details:", e.message);
+      return item;
+    }
+  };
+
+  const handlePress = async (item) => {
     setSelectedRide(item);
     setSliderVisible(true);
+    setDetailsLoading(true);
+    const enriched = await loadRideDetails(item);
+    setSelectedRide(enriched);
+    setDetailsLoading(false);
   };
 
   const renderSliderContent = () => {
     if (!selectedRide) return null;
 
     if (selectedRide.role === "Driver")
-      return <RideHistoryDriverview ride={selectedRide} />;
+      return (
+        <RideHistoryDriverview ride={selectedRide} loading={detailsLoading} />
+      );
 
     if (selectedRide.role === "Passenger")
-      return <RideHistoryPassengerview ride={selectedRide} />;
+      return (
+        <RideHistoryPassengerview ride={selectedRide} loading={detailsLoading} />
+      );
 
-    return <RideHistoryCourierview ride={selectedRide} />;
+    return (
+      <RideHistoryCourierview ride={selectedRide} loading={detailsLoading} />
+    );
   };
 
   const renderItem = ({ item }) => {

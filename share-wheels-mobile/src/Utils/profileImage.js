@@ -17,7 +17,10 @@ export const getProfileImageUri = (user) => {
 
   for (const value of candidates) {
     if (typeof value === "string" && value.trim()) {
-      const trimmed = value.trim();
+      let trimmed = value.trim();
+      if (trimmed.startsWith("//")) {
+        trimmed = `https:${trimmed}`;
+      }
       if (isRemoteImageUrl(trimmed) || trimmed.startsWith("file://")) {
         return trimmed;
       }

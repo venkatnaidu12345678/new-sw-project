@@ -5,6 +5,7 @@ import passengerIcon from "../assets/upcomingperson.png";
 import courierIcon from "../assets/courier.png";
 import { getRideDisplayFare } from "../Utils/fareUtils";
 import UserAvatar from "./ui/UserAvatar";
+import { formatVehicleLabel } from "./VehicleInfoStrip";
 import { LAYOUT } from "../theme/layout";
 
 const UpcomingRide = ({ data, onPress }) => {
@@ -32,7 +33,8 @@ const UpcomingRide = ({ data, onPress }) => {
   const roleIcon = roleIcons[data?.myRole];
 
   const route = `${data?.from || ""} → ${data?.to || ""}`;
-  const car = data?.vehicle?.type || "N/A";
+  const car =
+    formatVehicleLabel(data?.vehicle) || data?.vehicle?.type || "Vehicle";
   const seats =
     data?.requires_seats ||
     data?.activeData?.requires_seats ||

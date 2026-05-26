@@ -3,6 +3,7 @@ const { Server } = require("socket.io");
 const jwt = require("jsonwebtoken");
 const User = require("../models/userModel");
 const Admin = require("../models/adminModel");
+const { enrouteRoomKey } = require("../utils/socketEmit");
 
 const createServerWithSocket = (app) => {
   const server = http.createServer(app);
@@ -38,12 +39,30 @@ const createServerWithSocket = (app) => {
   io.on("connection", (socket) => {
     console.log("Socket connected", socket.id, socket.userType);
 
+    if (socket.userType === "user" && socket.user?._id) {
+      socket.join(`user:${socket.user._id.toString()}`);
+    }
+
     socket.on("joinRide", (rideId) => {
       if (rideId) socket.join(`ride:${rideId}`);
     });
 
     socket.on("leaveRide", (rideId) => {
       if (rideId) socket.leave(`ride:${rideId}`);
+    });
+
+    socket.on("joinEnroute", (payload = {}) => {
+      const { from, to, date } = payload;
+      if (from && to) {
+        socket.join(enrouteRoomKey(from, to, date));
+      }
+    });
+
+    socket.on("leaveEnroute", (payload = {}) => {
+      const { from, to, date } = payload;
+      if (from && to) {
+        socket.leave(enrouteRoomKey(from, to, date));
+      }
     });
 
     socket.on("joinAdminTracking", () => {

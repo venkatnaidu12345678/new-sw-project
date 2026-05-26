@@ -1,120 +1,120 @@
-import React from "react";
+import React, { useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
-  Image,
+  TouchableOpacity,
+  RefreshControl,
+  ActivityIndicator,
 } from "react-native";
-import ScreenHeader from "./ui/ScreenHeader";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import ScreenContainer from "./ui/ScreenContainer";
+import ScreenHeader from "./ui/ScreenHeader";
+import { useNotifications } from "../context/NotificationsContext";
+import { handleNotificationOpen } from "../Notifications/notificationNavigation";
+import { LAYOUT } from "../theme/layout";
 
-/* LOCAL ICONS */
-import rideIcon from "../assets/notificationpassenger.png";
-import passengerIcon from "../assets/notificationride.png";
-import courierIcon from "../assets/notificationcourier.png";
-
-const notifications = [
-  {
-    id: "1",
-    type: "ride_request",
-    title: "Ride Request from Amit Kumar",
-    message: "Wants to join your ride from Madhapur to Kondapur",
-    time: "5 mins ago",
-    role: "ride",
-  },
-  {
-    id: "2",
-    type: "ride_accepted",
-    title: "Ride Accepted!",
-    message: "Venkat accepted your ride request to Hitech City",
-    time: "15 mins ago",
-    role: "passenger",
-  },
-  {
-    id: "3",
-    type: "courier_request",
-    title: "Courier Request from Priya",
-    message: "Wants you to deliver a package to Kondapur",
-    time: "1 hour ago",
-    role: "courier",
-  },
-  {
-    id: "4",
-    type: "courier_accepted",
-    title: "Courier Accepted!",
-    message: "Rajesh will deliver your package to Hitech City",
-    time: "2 hours ago",
-    role: "courier",
-  },
-];
-
-/* ROLE BASED CONFIG */
-const getRoleStyles = (role) => {
-  switch (role) {
-    case "ride":
-      return {
-        bg: "#E8F1FF",
-        border: "#4A90E2",
-        icon: rideIcon,
-      };
-    case "passenger":
-      return {
-        bg: "#EAFBF1",
-        border: "#34C759",
-        icon: passengerIcon,
-      };
-    case "courier":
-      return {
-        bg: "#FFF6E5",
-        border: "#F5A623",
-        icon: courierIcon,
-      };
-    default:
-      return {
-        bg: "#F5F5F5",
-        border: "#ccc",
-        icon: rideIcon,
-      };
+const formatTime = (dateStr) => {
+  try {
+    return new Date(dateStr).toLocaleString([], {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
   }
 };
 
-const NotificationCard = ({ item }) => {
-  const stylesByRole = getRoleStyles(item.role);
-
-  return (
-    <View
-      style={[
-        styles.card,
-        {
-          backgroundColor: stylesByRole.bg,
-          borderColor: stylesByRole.border,
-        },
-      ]}
-    >
-      <Image source={stylesByRole.icon} style={styles.icon} />
-
-      <View style={{ flex: 1 }}>
-        <Text style={styles.title}>{item.title}</Text>
-        <Text style={styles.message}>{item.message}</Text>
-        <Text style={styles.time}>{item.time}</Text>
-      </View>
+const NotificationCard = ({ item, onPress }) => (
+  <TouchableOpacity
+    style={[styles.card, !item.read && styles.cardUnread]}
+    onPress={() => onPress(item)}
+    activeOpacity={0.85}
+  >
+    <View style={styles.cardRow}>
+      <Text style={styles.title} numberOfLines={1}>
+        {item.title}
+      </Text>
+      {!item.read ? <View style={styles.dot} /> : null}
     </View>
-  );
-};
+    <Text style={styles.body} numberOfLines={3}>
+      {item.body}
+    </Text>
+    <Text style={styles.time}>{formatTime(item.createdAt)}</Text>
+  </TouchableOpacity>
+);
 
 const NotificationsScreen = () => {
-  return (
-    <ScreenContainer backgroundColor="#F8FAFC" style={styles.container}>
-      <ScreenHeader title="Notifications" />
-      <Text style={styles.subHeader}>2 unread notifications</Text>
+  const navigation = useNavigation();
+  const {
+    notifications,
+    unreadCount,
+    loading,
+    refresh,
+    markRead,
+    markAllRead,
+  } = useNotifications();
 
-      <FlatList
-        data={notifications}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <NotificationCard item={item} />}
-        contentContainerStyle={{ paddingBottom: 20 }}
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh])
+  );
+
+  const handlePress = async (item) => {
+    if (!item.read) {
+      await markRead(item._id);
+    }
+    const data = {
+      ...(item.data || {}),
+      type: item.type,
+      notificationId: item._id,
+      title: item.title,
+      body: item.body,
+    };
+    await handleNotificationOpen(navigation, { data });
+  };
+
+  return (
+    <ScreenContainer style={styles.container}>
+      <ScreenHeader
+        title="Notifications"
+        rightElement={
+          unreadCount > 0 ? (
+            <TouchableOpacity onPress={markAllRead}>
+              <Text style={styles.markAll}>Mark all read</Text>
+            </TouchableOpacity>
+          ) : null
+        }
       />
+
+      <Text style={styles.subHeader}>
+        {unreadCount > 0
+          ? `${unreadCount} unread`
+          : "You're all caught up"}
+      </Text>
+
+      {loading && notifications.length === 0 ? (
+        <ActivityIndicator style={{ marginTop: 32 }} color="#2563EB" />
+      ) : (
+        <FlatList
+          data={notifications}
+          keyExtractor={(item) => item._id}
+          renderItem={({ item }) => (
+            <NotificationCard item={item} onPress={handlePress} />
+          )}
+          refreshControl={
+            <RefreshControl refreshing={loading} onRefresh={refresh} />
+          }
+          ListEmptyComponent={
+            <Text style={styles.empty}>No notifications yet</Text>
+          }
+          contentContainerStyle={styles.list}
+        />
+      )}
     </ScreenContainer>
   );
 };
@@ -124,51 +124,66 @@ export default NotificationsScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
-    padding: 26,
+    paddingHorizontal: LAYOUT.spacing.screen,
   },
-
-  header: {
-    fontSize: 22,
-    fontWeight: "bold",
-    marginBottom: 4,
-  },
-
   subHeader: {
-    color: "#888",
-    marginBottom: 16,
-  },
-
-  card: {
-    flexDirection: "row",
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1.5,
+    fontSize: 13,
+    color: "#64748B",
     marginBottom: 12,
+  },
+  markAll: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#2563EB",
+  },
+  list: {
+    paddingBottom: 40,
+  },
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  cardUnread: {
+    borderColor: "#93C5FD",
+    backgroundColor: "#F8FAFC",
+  },
+  cardRow: {
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
   },
-
-  icon: {
-    width: 32,
-    height: 32,
-    marginRight: 12,
-    resizeMode: "contain",
-  },
-
   title: {
     fontSize: 15,
-    fontWeight: "600",
-    marginBottom: 4,
+    fontWeight: "700",
+    color: "#0F172A",
+    flex: 1,
   },
-
-  message: {
-    fontSize: 13,
-    color: "#555",
-    marginBottom: 4,
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#2563EB",
+    marginLeft: 8,
   },
-
+  body: {
+    fontSize: 14,
+    color: "#475569",
+    lineHeight: 20,
+  },
   time: {
-    fontSize: 12,
-    color: "#999",
+    fontSize: 11,
+    color: "#94A3B8",
+    marginTop: 8,
+  },
+  empty: {
+    textAlign: "center",
+    color: "#64748B",
+    marginTop: 48,
+    fontSize: 15,
   },
 });

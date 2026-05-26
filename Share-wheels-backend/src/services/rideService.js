@@ -6,7 +6,7 @@ const Courier = require("../models/courierModel");
 const PassengerRide = require("../models/passengerRideModel");
 const { parseAmount } = require("../schemas/commonSchemas");
 const { ensureParticipantBoardingOtp } = require("./rideVerificationService");
-const { sendPushNotification } = require("../utils/firebaseAdmin");
+const { notifyUser } = require("./notificationService");
 const {
   isRideScheduledTimePassed,
   isRideScheduledTimeFuture,
@@ -50,7 +50,13 @@ const createRide = async (user, payload) => {
     date: rideDate,
     AlternatePhoneNumber: AlternatePhoneNumber ? String(AlternatePhoneNumber) : undefined,
     startTime,
-    vehicle,
+    vehicle: {
+      type: vehicle.type || "car",
+      company: vehicle.company || "",
+      model: vehicle.model || "",
+      car_image: vehicle.car_image || "",
+      car_no: vehicle.car_no || "",
+    },
     ride_amount: parsedAmount,
     CanCarryCourier,
     QuickReserve,
@@ -136,15 +142,12 @@ const addPassengerDirectly = async (ride, user, seats, total_amount) => {
     { upsert: true }
   );
 
-  const driver = await User.findById(ride.creator);
-  if (driver?.fcmToken) {
-    await sendPushNotification(
-      driver.fcmToken,
-      "New passenger (Quick Reserve)",
-      `${user.name || "A passenger"} booked ${seats} seat(s) on your ride`,
-      { rideId: ride._id.toString(), type: "passenger_joined" }
-    );
-  }
+  await notifyUser(ride.creator, {
+    title: "New passenger (Quick Reserve)",
+    body: `${user.name || "A passenger"} booked ${seats} seat(s) on your ride`,
+    type: "passenger_joined",
+    data: { rideId: ride._id.toString() },
+  });
 
   return passengerEntry;
 };
@@ -233,15 +236,12 @@ const sendPassengerRequest = async (user, { rideId, requires_seats }) => {
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
 
-  const driver = await User.findById(ride.creator);
-  if (driver?.fcmToken) {
-    await sendPushNotification(
-      driver.fcmToken,
-      "New passenger request",
-      `${user.name || "Someone"} requested ${seats} seat(s)`,
-      { rideId: ride._id.toString(), type: "passenger_request" }
-    );
-  }
+  await notifyUser(ride.creator, {
+    title: "New passenger request",
+    body: `${user.name || "Someone"} requested ${seats} seat(s)`,
+    type: "passenger_request",
+    data: { rideId: ride._id.toString() },
+  });
 
   return {
     status: 200,
@@ -422,7 +422,10 @@ const sanitizeParticipant = (entry, viewerId) => {
 const getRideDetails = async (rideId, viewerId) => {
   if (!mongoose.Types.ObjectId.isValid(rideId)) return { status: 400, body: { success: false, message: "Invalid Ride ID" } };
   const ride = await Ride.findById(rideId)
-    .select("passengers all_deliveries passenger_requested_ride users_request_Couriers status creator")
+    .select(
+      "passengers all_deliveries passenger_requested_ride users_request_Couriers status creator vehicle from to date startTime ride_amount availableSeats"
+    )
+    .populate("creator", USER_FIELDS)
     .populate("passengers.userId", USER_FIELDS)
     .populate("all_deliveries.userId", USER_FIELDS)
     .populate("passenger_requested_ride.userId", USER_FIELDS)
@@ -471,6 +474,14 @@ const getRideDetails = async (rideId, viewerId) => {
       success: true,
       data: {
         status: ride.status,
+        vehicle: ride.vehicle,
+        creator: ride.creator,
+        from: ride.from,
+        to: ride.to,
+        date: ride.date,
+        startTime: ride.startTime,
+        ride_amount: ride.ride_amount,
+        availableSeats: ride.availableSeats,
         passengers,
         all_deliveries,
         passenger_requested_ride: ride.passenger_requested_ride,
@@ -490,7 +501,11 @@ const getRideDetails = async (rideId, viewerId) => {
 const getMyRequests = async (user) => {
   const userId = new mongoose.Types.ObjectId(user._id);
 
-  const passengerData = await PassengerRide.find({ creator: userId, status: "pending" }).lean();
+  const passengerData = await PassengerRide.find({
+    creator: userId,
+    status: "pending",
+    $or: [{ assigned_to: { $exists: false } }, { "assigned_to.rideId": null }],
+  }).lean();
   const standalonePassengerRequests = passengerData.map((p) => ({
     requestId: p._id,
     passengerRideId: p._id,
@@ -511,7 +526,7 @@ const getMyRequests = async (user) => {
     .lean();
 
   const rideJoinRequests = (userRidesDoc?.my_pending_ride_requests || [])
-    .filter((r) => !r.status || r.status === "pending")
+    .filter((r) => (!r.status || r.status === "pending") && r.rideId)
     .map((r) => ({
       requestId: r.rideId?._id || r.rideId,
       rideId: r.rideId?._id || r.rideId,
@@ -529,8 +544,14 @@ const getMyRequests = async (user) => {
 
   const passengerRequests = [...standalonePassengerRequests, ...rideJoinRequests];
 
-  const courierRequestsData = await Courier.find({ creator: userId, courier_status: { $in: ["pending", "request_to_driver"] } }).lean();
-  const courierRequests = courierRequestsData.map((c) => ({
+  const courierRequestsData = await Courier.find({
+    creator: userId,
+    courier_status: { $in: ["pending", "request_to_driver"] },
+    "driver_assigned_courier.rideId": { $exists: false },
+  }).lean();
+  const courierRequests = courierRequestsData
+    .filter((c) => !c.driver_assigned_courier?.rideId)
+    .map((c) => ({
     requestId: c._id,
     courierNumber: c.courierNumber,
     from: c.from,

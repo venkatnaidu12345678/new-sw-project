@@ -110,6 +110,7 @@ const vehicleOnRideSchema = new mongoose.Schema(
   {
     type: { type: String, default: "car" },
     company: { type: String, default: "" },
+    model: { type: String, default: "" },
     car_image: { type: String, default: "" },
     car_no: { type: String, default: "" },
   },

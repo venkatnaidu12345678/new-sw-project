@@ -139,13 +139,19 @@ const DashboardPage = () => {
     }
   };
 
-  const handleClear = () => {
+  const exitSearchResults = () => {
     setFromValue("");
     setToValue("");
     setSuggestions([]);
     setShowAllRides(false);
     setAllRides([]);
     setErrorMsg("");
+    setIsFocused(false);
+    expandFilters();
+  };
+
+  const dismissSuggestions = () => {
+    setSuggestions([]);
   };
 
   const handleRidePress = useCallback(
@@ -204,7 +210,13 @@ const DashboardPage = () => {
   const dropdownTop = activeField === "FROM" ? 70 : 142;
 
   const renderRide = ({ item }) => (
-    <UpcomingRide data={item} onPress={() => handleRidePress(item)} />
+    <UpcomingRide
+      data={item}
+      onPress={() => {
+        dismissSuggestions();
+        handleRidePress(item);
+      }}
+    />
   );
 
   const terms = ProfileDetails?.data?.terms;
@@ -235,7 +247,7 @@ const DashboardPage = () => {
       setIsFocused(true);
       setActiveField(field);
     },
-    onDismissSuggestions: () => setSuggestions([]),
+    onDismissSuggestions: dismissSuggestions,
   };
 
   const scrollListHeader = (
@@ -267,20 +279,8 @@ const DashboardPage = () => {
       <View style={styles.body}>
         {showAllRides ? (
           <View style={styles.flex}>
-            <ScreenHeader
-              title="Search results"
-              onBack={() => {
-                setShowAllRides(false);
-                setAllRides([]);
-                setErrorMsg("");
-              }}
-            />
+            <ScreenHeader title="Search results" onBack={exitSearchResults} />
             <SearchLocation {...searchProps} />
-            <View style={styles.clearRow}>
-              <TouchableOpacity onPress={handleClear}>
-                <Text style={styles.clearText}>Clear</Text>
-              </TouchableOpacity>
-            </View>
             <AllridesComponent
               rides={allRides}
               loading={loadingAllRides}
@@ -308,6 +308,7 @@ const DashboardPage = () => {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="always"
               keyboardDismissMode="on-drag"
+              onScrollBeginDrag={dismissSuggestions}
             />
           </AnimatedLoad>
         )}
@@ -350,16 +351,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: LAYOUT.spacing.lg,
     right: LAYOUT.spacing.lg,
-  },
-  clearRow: {
-    alignItems: "flex-end",
-    marginBottom: 10,
-  },
-  clearText: {
-    color: "#2563EB",
-    fontSize: 16,
-    fontWeight: "600",
-    textDecorationLine: "underline",
   },
   errorText: {
     color: "#B91C1C",

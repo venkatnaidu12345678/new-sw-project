@@ -4,7 +4,15 @@ const PassengerRide = require("../models/passengerRideModel");
 const UserRides = require("../models/userRides");
 const Courier = require("../models/courierModel");
 const User = require("../models/userModel");
-const { sendPushNotification } = require("../utils/firebaseAdmin");
+const { notifyUser } = require("./notificationService");
+const { getRideDetails } = require("./rideService");
+const {
+  emitToUser,
+  emitRideParticipantsUpdated,
+  emitMyRequestsUpdated,
+  emitEnrouteRequestRemoved,
+  emitRideRequestUpdated,
+} = require("../utils/socketEmit");
 const {
   ensureParticipantBoardingOtp,
   assertAllParticipantsVerified,
@@ -54,9 +62,25 @@ const acceptPassengerRequest = async (user, { rideId, passenger_userId }) => {
     { upsert: true }
   );
   const driver = await User.findById(user._id);
-  const passenger = await User.findById(passenger_userId);
-  if (passenger?.fcmToken) await sendPushNotification(passenger.fcmToken, "Ride Request Accepted 🚗", ` ${driver.name} Accepted Your Request `, { rideId: ride._id.toString(), type: "ride_accept" });
-  return { status: 200, body: { status: true, message: "Passenger request accepted", passengers: ride.passengers } };
+  await notifyUser(passenger_userId, {
+    title: "Ride request accepted",
+    body: `${driver?.name || "Driver"} accepted your request`,
+    type: "ride_accept",
+    data: { rideId: ride._id.toString() },
+  });
+  emitRideParticipantsUpdated(ride._id, {
+    action: "passenger_accepted",
+    userId: passenger_userId.toString(),
+  });
+  emitRideRequestUpdated(ride._id, { action: "passenger_accepted" });
+  emitMyRequestsUpdated(passenger_userId, {
+    action: "ride_request_accepted",
+    rideId: ride._id.toString(),
+  });
+  return {
+    status: 200,
+    body: { success: true, status: true, message: "Passenger request accepted", passengers: ride.passengers },
+  };
 };
 
 const rejectPassengerRequest = async (user, { rideId, passenger_userId }) => {
@@ -70,9 +94,21 @@ const rejectPassengerRequest = async (user, { rideId, passenger_userId }) => {
   ride.passenger_requested_ride = ride.passenger_requested_ride.filter((item) => item.userId.toString() !== passenger_userId.toString());
   await ride.save();
   const driver = await User.findById(user._id);
-  const passenger = await User.findById(passenger_userId);
-  if (passenger?.fcmToken) await sendPushNotification(passenger.fcmToken, "Ride Request Rejected ", `${driver?.name} rejected your ride request`, { rideId: ride._id.toString(), type: "ride_reject" });
-  return { status: 200, body: { status: true, message: "Passenger request rejected & moved to droput list", droput_Passengers: ride.droput_Passengers } };
+  await notifyUser(passenger_userId, {
+    title: "Ride request declined",
+    body: `${driver?.name || "Driver"} declined your request`,
+    type: "ride_reject",
+    data: { rideId: ride._id.toString() },
+  });
+  emitRideRequestUpdated(ride._id, { action: "passenger_rejected" });
+  emitMyRequestsUpdated(passenger_userId, {
+    action: "ride_request_rejected",
+    rideId: ride._id.toString(),
+  });
+  return {
+    status: 200,
+    body: { success: true, status: true, message: "Passenger request rejected & moved to droput list", droput_Passengers: ride.droput_Passengers },
+  };
 };
 
 const removePassenger = async (user, { rideId, passenger_userId }) => {
@@ -87,8 +123,12 @@ const removePassenger = async (user, { rideId, passenger_userId }) => {
   ride.passengers = ride.passengers.filter((p) => p.userId.toString() !== passenger_userId.toString());
   await ride.save();
   await UserRides.findOneAndUpdate({ creator: passenger_userId }, { $pull: { driver_accepted_ride_requests: { rideId: ride._id } } });
-  const removedUser = await User.findById(passenger_userId);
-  if (removedUser?.fcmToken) await sendPushNotification(removedUser.fcmToken, "Removed from Ride ⚠️", "You have been removed from the ride by the driver.", { rideId: ride._id.toString(), type: "ride_removed" });
+  await notifyUser(passenger_userId, {
+    title: "Removed from ride",
+    body: "You have been removed from the ride by the driver.",
+    type: "ride_removed",
+    data: { rideId: ride._id.toString() },
+  });
   return { status: 200, body: { status: true, message: "Passenger removed successfully", availableSeats: ride.availableSeats, passengers: ride.passengers } };
 };
 
@@ -168,8 +208,12 @@ const enrouteRequests = async (user, { from, to, date }) => {
   const startOfDay = new Date(selectedDate); startOfDay.setHours(0, 0, 0, 0);
   const endOfDay = new Date(selectedDate); endOfDay.setHours(23, 59, 59, 999);
   const passengers = await PassengerRide.find({
-    from: { $regex: `^${from}$`, $options: "i" }, to: { $regex: `^${to}$`, $options: "i" },
-    status: "pending", creator: { $ne: user._id }, date: { $gte: startOfDay, $lte: endOfDay },
+    from: { $regex: `^${from}$`, $options: "i" },
+    to: { $regex: `^${to}$`, $options: "i" },
+    status: "pending",
+    creator: { $ne: user._id },
+    date: { $gte: startOfDay, $lte: endOfDay },
+    $or: [{ assigned_to: { $exists: false } }, { "assigned_to.rideId": null }],
   }).populate("creator", "name gender profile_img");
   const passengerRequests = passengers.map((p) => ({
     request_type: "passenger",
@@ -183,8 +227,13 @@ const enrouteRequests = async (user, { from, to, date }) => {
     date: p.date,
   }));
   const couriers = await Courier.find({
-    from: { $regex: `^${from}$`, $options: "i" }, to: { $regex: `^${to}$`, $options: "i" }, creator: { $ne: user._id },
-    courier_status: { $in: ["pending", "request_to_driver"] }, "date.startDate": { $lte: selectedDate }, $or: [{ "date.endDate": { $gte: selectedDate } }, { "date.endDate": null }],
+    from: { $regex: `^${from}$`, $options: "i" },
+    to: { $regex: `^${to}$`, $options: "i" },
+    creator: { $ne: user._id },
+    courier_status: { $in: ["pending", "request_to_driver"] },
+    "driver_assigned_courier.rideId": { $exists: false },
+    "date.startDate": { $lte: selectedDate },
+    $or: [{ "date.endDate": { $gte: selectedDate } }, { "date.endDate": null }],
   }).populate("creator", "name gender profile_img");
   const courierRequests = couriers.map((c) => ({ request_type: "courier", courierId: c._id, courierNumber: c.courierNumber, name: c.creator?.name || "", gender: c.creator?.gender || "", profile: c.creator?.profile_img || "", courier_type: c.courier_type, what_to_deliver: c.what_to_deliver, amount: c.amount_will, timeSlot: c.timeSlot }));
   const allRequests = [...passengerRequests, ...courierRequests];
@@ -218,11 +267,56 @@ const pickCourier = async (user, { rideId, courierId }) => {
   };
   await ensureParticipantBoardingOtp(courierEntry, courier.creator);
   ride.all_deliveries.push(courierEntry);
+  ride.users_request_Couriers = (ride.users_request_Couriers || []).filter(
+    (r) => r.userId?.toString() !== courier.creator.toString()
+  );
   await ride.save();
+
+  await UserRides.findOneAndUpdate(
+    { creator: courier.creator },
+    { $pull: { my_pending_ride_requests: { rideId: ride._id } } }
+  );
   const driver = await User.findById(user.id);
-  const courierOwner = await User.findById(courier.creator);
-  if (courierOwner?.fcmToken) await sendPushNotification(courierOwner.fcmToken, "Courier Assigned 📦", `${driver?.name} picked your courier`, { rideId: ride._id.toString(), courierId: courier._id.toString(), type: "courier_assigned" });
-  return { status: 200, body: { success: true, message: "Courier picked successfully", data: { courier, ride } } };
+  await notifyUser(courier.creator, {
+    title: "Courier assigned",
+    body: `${driver?.name || "Driver"} picked your courier delivery`,
+    type: "courier_assigned",
+    data: {
+      rideId: ride._id.toString(),
+      courierId: courier._id.toString(),
+    },
+  });
+
+  emitRideParticipantsUpdated(ride._id, {
+    action: "courier_picked",
+    courierId: courier._id.toString(),
+    userId: courier.creator.toString(),
+  });
+  emitMyRequestsUpdated(courier.creator, {
+    action: "courier_assigned",
+    courierId: courier._id.toString(),
+    rideId: ride._id.toString(),
+  });
+  emitEnrouteRequestRemoved(courier.from, courier.to, courier.date?.startDate || courier.date, {
+    courierId: courier._id.toString(),
+    type: "courier",
+  });
+  emitToUser(user._id, "rideParticipantsUpdated", {
+    rideId: ride._id.toString(),
+    action: "courier_picked",
+  });
+
+  const detailsRes = await getRideDetails(rideId, user._id);
+
+  return {
+    status: 200,
+    body: {
+      success: true,
+      message: "Courier picked successfully",
+      data: { courier, ride },
+      details: detailsRes.body?.data || null,
+    },
+  };
 };
 
 /**

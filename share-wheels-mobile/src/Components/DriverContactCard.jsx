@@ -1,9 +1,9 @@
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import UserAvatar from "./ui/UserAvatar";
 import { LAYOUT } from "../theme/layout";
 import { openPhoneCall } from "../Utils/phoneCall";
-import caricon from "../assets/caricon.png";
+import VehicleInfoStrip from "./VehicleInfoStrip";
 
 const MessageBadge = ({ count }) => {
   if (!count) return null;
@@ -54,15 +54,7 @@ const DriverContactCard = ({
           </View>
         </View>
 
-        {vehicle?.company || vehicle?.car_no ? (
-          <View style={styles.vehicleRow}>
-            <Image source={caricon} style={styles.carIcon} />
-            <Text style={styles.vehicleText}>
-              {[vehicle?.company, vehicle?.model].filter(Boolean).join(" ")}
-              {vehicle?.car_no ? ` · ${vehicle.car_no}` : ""}
-            </Text>
-          </View>
-        ) : null}
+        <VehicleInfoStrip vehicle={vehicle} />
 
         <View style={styles.actions}>
           <TouchableOpacity
@@ -150,25 +142,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#64748B",
     marginTop: 2,
-  },
-  vehicleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: LAYOUT.spacing.sm,
-    paddingTop: LAYOUT.spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
-  },
-  carIcon: {
-    width: 20,
-    height: 20,
-    marginRight: 8,
-    resizeMode: "contain",
-  },
-  vehicleText: {
-    fontSize: 13,
-    color: "#475569",
-    flex: 1,
   },
   actions: {
     flexDirection: "row",

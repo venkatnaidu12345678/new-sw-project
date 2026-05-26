@@ -683,9 +683,12 @@ export const pickCourierApi = async (token, payload) => {
     const text = await res.text();
 
     try {
-      return JSON.parse(text);
+      const data = JSON.parse(text);
+      if (!res.ok) {
+        return { success: false, message: data?.message || "Request failed" };
+      }
+      return { success: true, ...data };
     } catch {
-
       return { success: false, message: "Invalid server response" };
     }
   } catch (error) {
@@ -720,7 +723,10 @@ export const pickPassengerApi = async (token, payload) => {
       };
     }
 
-    return data; // ✅ return API response
+    return {
+      success: true,
+      ...data,
+    };
   } catch (error) {
     console.log("❌ Passenger API Error:", error);
 

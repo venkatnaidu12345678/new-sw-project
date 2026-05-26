@@ -1,7 +1,35 @@
 const mongoose = require("mongoose");
 const Ride = require("../models/rideModel");
 const RideMessage = require("../models/rideMessageModel");
+const User = require("../models/userModel");
 const { canAccessRideChat, getRideParticipantRole } = require("./rideAccessHelper");
+const { notifyUser } = require("./notificationService");
+
+const USER_CHAT_FIELDS = "name profile_img";
+
+const attachSenderAvatars = async (messages) => {
+  if (!messages?.length) return messages;
+  const ids = [
+    ...new Set(
+      messages
+        .map((m) => m.senderId?.toString?.() || String(m.senderId || ""))
+        .filter(Boolean)
+    ),
+  ];
+  if (!ids.length) return messages;
+  const users = await User.find({ _id: { $in: ids } })
+    .select(USER_CHAT_FIELDS)
+    .lean();
+  const byId = Object.fromEntries(users.map((u) => [u._id.toString(), u]));
+  return messages.map((m) => {
+    const sender = byId[m.senderId?.toString?.() || String(m.senderId || "")];
+    return {
+      ...m,
+      senderAvatar: sender?.profile_img || null,
+      senderName: m.senderName || sender?.name || "User",
+    };
+  });
+};
 
 const emitChat = (rideId, payload) => {
   if (global.io) {
@@ -50,10 +78,12 @@ const getMessages = async (user, rideId, { peerId } = {}) => {
     filter = groupThreadFilter(rideId);
   }
 
-  const messages = await RideMessage.find(filter)
+  let messages = await RideMessage.find(filter)
     .sort({ createdAt: 1 })
     .limit(200)
     .lean();
+
+  messages = await attachSenderAvatars(messages);
 
   return { status: 200, body: { success: true, messages, peerId: peerId || null } };
 };
@@ -106,12 +136,30 @@ const sendMessage = async (user, rideId, { message, recipientId }) => {
     senderId: doc.senderId.toString(),
     senderName: doc.senderName,
     senderRole: doc.senderRole,
+    senderAvatar: user.profile_img || null,
     recipientId: doc.recipientId?.toString() || null,
     message: doc.message,
     createdAt: doc.createdAt,
   };
 
   emitChat(rideId, payload);
+
+  if (recipient) {
+    const preview =
+      text.length > 120 ? `${text.slice(0, 117)}...` : text;
+    await notifyUser(recipient, {
+      title: user.name || "New message",
+      body: preview,
+      type: "chat_message",
+      data: {
+        rideId: rideId.toString(),
+        peerId: user._id.toString(),
+        peerName: user.name || "User",
+        peerRole: role,
+        senderAvatar: user.profile_img || "",
+      },
+    });
+  }
 
   return { status: 200, body: { success: true, message: payload } };
 };

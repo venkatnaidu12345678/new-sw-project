@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Image,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
 
 /* ICONS */
@@ -13,21 +14,34 @@ import car from "../assets/car.png";
 import dateIcon from "../assets/dateIcon.png";
 import clock from "../assets/clock2.png";
 import UserAvatar from "./ui/UserAvatar";
+import VehicleInfoStrip from "./VehicleInfoStrip";
 import madhapurIcon from "../assets/madhapuricon.png";
 import kondapurIcon from "../assets/kondapuricon.png";
 import starIcon from "../assets/staricon.png";
+import { getRideDisplayFare } from "../Utils/fareUtils";
 
-const RideHistoryPassengerView = ({ ride }) => {
+const RideHistoryPassengerView = ({ ride, loading }) => {
   if (!ride) return null;
 
-  /* FORMAT DATE */
-  const formattedDate = new Date(ride.date).toLocaleDateString();
+  const formattedDate =
+    ride.formattedDate ||
+    (ride.date ? new Date(ride.date).toLocaleDateString() : "—");
 
-  /* FORMAT TIME */
-  const formattedTime = new Date(ride.startTime).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const formattedTime =
+    ride.formattedTime ||
+    (ride.startTime
+      ? new Date(ride.startTime).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "—");
+
+  const seats =
+    ride.requires_seats ||
+    ride.activeData?.requires_seats ||
+    ride.seats ||
+    1;
+  const totalFare = getRideDisplayFare(ride);
 
   return (
     <View style={styles.container}>
@@ -36,6 +50,9 @@ const RideHistoryPassengerView = ({ ride }) => {
         <Text style={styles.headerTitle}>Ride Details</Text>
       </View>
 
+      {loading ? (
+        <ActivityIndicator style={{ marginTop: 24 }} color="#2563EB" />
+      ) : (
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 100 }}
@@ -66,35 +83,39 @@ const RideHistoryPassengerView = ({ ride }) => {
           <InfoCard
             icon={car}
             label="Car Type"
-            value={ride?.vehicle?.company || "Car"}
+            value={
+              [ride?.vehicle?.company, ride?.vehicle?.model, ride?.vehicle?.car_no]
+                .filter(Boolean)
+                .join(" · ") || "Car"
+            }
             bg="#F3E8FF"
           />
 
           <InfoCard
             icon={seat}
             label="Seats"
-            value={ride.seats}
+            value={String(seats)}
             bg="#FFF7ED"
           />
 
           <InfoCard
             icon={dateIcon}
             label="Date"
-            value={ride.date}
+            value={formattedDate}
             bg="#ECFEFF"
           />
 
           <InfoCard
             icon={clock}
             label="Start Time"
-            value={ride.time}
+            value={formattedTime}
             bg="#EFF6FF"
             full
           />
         </View>
 
-        {/* DRIVER */}
-        <Text style={styles.sectionTitle}>Driver</Text>
+        {/* DRIVER & VEHICLE */}
+        <Text style={styles.sectionTitle}>Driver & Vehicle</Text>
 
         <View style={styles.driverCard}>
           <UserAvatar user={ride?.creator} size={52} />
@@ -104,6 +125,9 @@ const RideHistoryPassengerView = ({ ride }) => {
               {ride?.creator?.name || "Driver"}
             </Text>
             <Text style={styles.driverRole}>Driver</Text>
+            {ride?.creator?.mobile ? (
+              <Text style={styles.driverMeta}>{ride.creator.mobile}</Text>
+            ) : null}
           </View>
 
           <View style={styles.driverRating}>
@@ -111,13 +135,18 @@ const RideHistoryPassengerView = ({ ride }) => {
             <Image source={starIcon} style={styles.star} />
           </View>
         </View>
+
+        {ride?.vehicle ? (
+          <VehicleInfoStrip vehicle={ride.vehicle} />
+        ) : null}
       </ScrollView>
+      )}
 
       {/* TOTAL FARE */}
       <View style={styles.totalCard}>
         <View>
           <Text style={styles.totalLabel}>Total Fare</Text>
-          <Text style={styles.totalAmount}>₹{ride.ride_amount}</Text>
+          <Text style={styles.totalAmount}>₹{totalFare}</Text>
         </View>
       </View>
     </View>
@@ -270,6 +299,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#6B7280",
     marginTop: 2,
+  },
+
+  driverMeta: {
+    fontSize: 12,
+    color: "#475569",
+    marginTop: 4,
   },
 
   driverRating: {

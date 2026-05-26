@@ -1,52 +1,58 @@
-import { Alert, Platform } from "react-native";
+import { Platform } from "react-native";
 import messaging from "@react-native-firebase/messaging";
+import { displayForegroundNotification } from "./displayLocalNotification";
 
 export async function requestUserPermission() {
-  const authStatus = await messaging().requestPermission();
-  const enabled =
-    authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-    authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-
-  console.log("FCM permission status:", authStatus);
-
-  if (!enabled) {
-    console.warn("Firebase Cloud Messaging permission not granted.");
+  if (Platform.OS === "ios") {
+    const authStatus = await messaging().requestPermission();
+    const enabled =
+      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+    if (enabled) {
+      await messaging().registerDeviceForRemoteMessages();
+    }
+    return enabled;
   }
 
-  return enabled;
+  if (Platform.OS === "android" && Platform.Version >= 33) {
+    const { PermissionsAndroid } = require("react-native");
+    const granted = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+    );
+    return granted === PermissionsAndroid.RESULTS.GRANTED;
+  }
+
+  return true;
 }
 
 export async function getDeviceToken() {
   try {
-    const token = await messaging().getToken();
-    console.log("FCM device token:", token);
-    return token;
+    if (Platform.OS === "ios") {
+      const registered = messaging().isDeviceRegisteredForRemoteMessages;
+      if (!registered) {
+        await messaging().registerDeviceForRemoteMessages();
+      }
+    }
+    return await messaging().getToken();
   } catch (error) {
-    console.error("Failed to fetch FCM token:", error);
+    console.warn("[FCM] getToken failed:", error.message);
     return null;
   }
 }
 
 export function registerForegroundHandler(onMessage) {
-  return messaging().onMessage(async remoteMessage => {
-    console.log("FCM foreground message:", remoteMessage);
-
-    if (remoteMessage?.notification) {
-      const title = remoteMessage.notification.title || "Notification";
-      const body = remoteMessage.notification.body || "";
-
-      if (Platform.OS === "ios" || Platform.OS === "android") {
-        Alert.alert(title, body);
-      }
+  return messaging().onMessage(async (remoteMessage) => {
+    try {
+      await displayForegroundNotification(remoteMessage);
+    } catch (e) {
+      console.warn("[FCM] foreground display:", e.message);
     }
-
     onMessage?.(remoteMessage);
   });
 }
 
 export function registerNotificationOpenedApp(onNotification) {
-  return messaging().onNotificationOpenedApp(remoteMessage => {
-    console.log("Notification opened from background state:", remoteMessage);
+  return messaging().onNotificationOpenedApp((remoteMessage) => {
     onNotification?.(remoteMessage);
   });
 }
@@ -54,11 +60,23 @@ export function registerNotificationOpenedApp(onNotification) {
 export async function handleInitialNotification(onNotification) {
   const remoteMessage = await messaging().getInitialNotification();
   if (remoteMessage) {
-    console.log("Notification opened from quit state:", remoteMessage);
     onNotification?.(remoteMessage);
   }
+  return remoteMessage;
 }
 
-messaging().setBackgroundMessageHandler(async remoteMessage => {
-  console.log("FCM background message:", remoteMessage);
-});
+export function registerTokenRefreshHandler(onToken) {
+  return messaging().onTokenRefresh((token) => {
+    onToken?.(token);
+  });
+}
+
+export async function configureIosForegroundPresentation() {
+  if (Platform.OS === "ios") {
+    await messaging().setForegroundPresentationOptions({
+      alert: true,
+      badge: true,
+      sound: true,
+    });
+  }
+}

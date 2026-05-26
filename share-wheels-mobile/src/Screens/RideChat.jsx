@@ -21,6 +21,7 @@ import { profileData } from "../Navigation/AuthNavigator";
 import { useParticipantLocation } from "../hooks/useDriverLocation";
 import { INPUT_COLORS } from "../theme/inputTheme";
 import { LAYOUT } from "../theme/layout";
+import { getProfileImageUri, profileFromUrl } from "../Utils/profileImage";
 
 const ROLE_COLORS = {
   driver: "#2563EB",
@@ -40,6 +41,7 @@ const RideChat = () => {
     peerId,
     peerName,
     peerRole,
+    peerProfileImg,
   } = route.params || {};
   const { ProfileDetails } = profileData();
   const myId = ProfileDetails?._id || ProfileDetails?.id;
@@ -55,6 +57,26 @@ const RideChat = () => {
   const isRideStarted =
     rideStatus === "started" || rideStatus === "Started";
   const peerColor = ROLE_COLORS[peerRole] || "#64748B";
+  const peerAvatarUser = profileFromUrl(peerProfileImg) || {
+    name: peerName,
+    profile_img: peerProfileImg,
+  };
+
+  const avatarForMessage = (item, isMine) => {
+    if (isMine) return myProfile;
+    const fromMsg = getProfileImageUri({
+      profile_img: item.senderAvatar,
+      name: item.senderName,
+    });
+    if (fromMsg) return { profile_img: fromMsg, name: item.senderName };
+    if (
+      (item.senderId?._id || item.senderId)?.toString?.() ===
+      peerId?.toString?.()
+    ) {
+      return peerAvatarUser;
+    }
+    return { name: item.senderName, profile_img: item.senderAvatar };
+  };
 
   useEffect(() => {
     if (!peerId) {
@@ -132,17 +154,14 @@ const RideChat = () => {
             </View>
             <Text style={styles.timeMine}>{timeStr}</Text>
           </View>
-          <UserAvatar user={myProfile} size={32} />
+          <UserAvatar user={avatarForMessage(item, true)} size={32} />
         </View>
       );
     }
 
     return (
       <View style={styles.rowOther}>
-        <UserAvatar
-          user={{ name: item.senderName, profile_img: item.senderAvatar }}
-          size={32}
-        />
+        <UserAvatar user={avatarForMessage(item, false)} size={32} />
         <View style={styles.colOther}>
           <Text style={styles.senderLabel}>
             {item.senderName || peerName || "User"}
@@ -168,7 +187,12 @@ const RideChat = () => {
 
   return (
     <ScreenContainer backgroundColor="#F1F5F9" edges={["top", "bottom"]} style={styles.screen}>
-      <ScreenHeader title={peerName || "Chat"} />
+      <ScreenHeader
+        title={peerName || "Chat"}
+        rightElement={
+          <UserAvatar user={peerAvatarUser} size={36} borderColor="#CBD5E1" />
+        }
+      />
 
       <View style={styles.peerBar}>
         <View style={[styles.peerDot, { backgroundColor: peerColor }]} />

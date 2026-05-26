@@ -25,6 +25,8 @@ import { verifyTokenApi } from "../ApiService/AuthApiService";
 import DriverLocationTracker from "../Components/DriverLocationTracker";
 import { clearAuthSession } from "../Utils/authSession";
 import { MIN_BOOTSTRAP_SPLASH_MS } from "../theme/splashTiming";
+import { NotificationsProvider } from "../context/NotificationsContext";
+import { useAppSocketConnection } from "../hooks/useAppSocket";
 
 const Stack = createNativeStackNavigator();
 const ProfileContext = createContext(null);
@@ -44,6 +46,8 @@ const AuthNavigator = () => {
   const [userData, setUserData] = useState(null);
   const [refreshUpcomingRides, setRefreshUpcomingrides] = useState(true);
   const [ProfileDetails, SetProfileDetails] = useState(null);
+
+  useAppSocketConnection(isAuthenticated);
 
   const getProfileData = async (token) => {
     try {
@@ -122,6 +126,7 @@ const AuthNavigator = () => {
         logout,
       }}
     >
+      <NotificationsProvider isAuthenticated={isAuthenticated}>
       {isAuthenticated ? <DriverLocationTracker /> : null}
       <Stack.Navigator screenOptions={authScreenOptions}>
         {!isAuthenticated ? (
@@ -167,6 +172,7 @@ const AuthNavigator = () => {
           </>
         )}
       </Stack.Navigator>
+      </NotificationsProvider>
     </ProfileContext.Provider>
   );
 };

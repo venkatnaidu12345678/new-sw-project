@@ -1,8 +1,8 @@
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import UserAvatar from "./ui/UserAvatar";
+import CourierParcelPreview from "./CourierParcelPreview";
 import { LAYOUT } from "../theme/layout";
-import { DS } from "../theme/designSystem";
 
 const ROLE_COLORS = {
   passenger: { bg: "#EFF6FF", accent: "#2563EB", label: "Passenger" },
@@ -16,6 +16,7 @@ const ParticipantCard = ({
   user,
   role = "passenger",
   subtitleLines = [],
+  courier,
   fare,
   fareLabel = "Fare",
   verified,
@@ -53,6 +54,9 @@ const ParticipantCard = ({
               {line}
             </Text>
           ))}
+          {role === "courier" && courier ? (
+            <CourierParcelPreview courier={courier} compact />
+          ) : null}
         </View>
         <View style={styles.fareBox}>
           <Text style={styles.fareLabel}>{fareLabel}</Text>

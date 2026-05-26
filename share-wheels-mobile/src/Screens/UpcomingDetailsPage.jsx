@@ -44,6 +44,10 @@ import ScreenContainer from "../Components/ui/ScreenContainer";
 import ScreenHeader from "../Components/ui/ScreenHeader";
 import ParticipantCard from "../Components/ParticipantCard";
 import DriverContactCard from "../Components/DriverContactCard";
+import VehicleInfoStrip from "../Components/VehicleInfoStrip";
+import CourierParcelPreview, {
+  formatCourierParcelLine,
+} from "../Components/CourierParcelPreview";
 import EditableRideSeats from "../Components/EditableRideSeats";
 import MessageIndicator from "../Components/ui/MessageIndicator";
 import { getRideChatMessages } from "../ApiService/chatApiServices";
@@ -74,6 +78,7 @@ import {
 } from "../Utils/rideSchedule";
 import { getApiErrorMessage } from "../Utils/apiErrors";
 import { openPhoneCall } from "../Utils/phoneCall";
+import { useRideSocket } from "../hooks/useAppSocket";
 
 const UpcomingDetailsPage = ({ route }) => {
   const navigation = useNavigation();
@@ -91,10 +96,12 @@ const UpcomingDetailsPage = ({ route }) => {
   const [rideStarted, setRideStarted] = useState(
     rideData?.status === "started" || rideData?.ride_status === "started"
   );
-  const [passengers, setPassengers] = useState([])
+  const [passengers, setPassengers] = useState([]);
   const [selectedPassenger, setSelectedPassenger] = useState(null);
   const [couriers, setCouriers] = useState([]);
-  const [reloadapi, setReloadApi] = useState(true)
+  const [localAvailableSeats, setLocalAvailableSeats] = useState(
+    rideData?.availableSeats
+  );
   const [courierRequests, setCourierRequests] = useState([]);
   const [passengerRequests, setPassengerRequests] = useState([]);
   const [rideStatus, setRideStatus] = useState(rideData?.status || "");
@@ -106,17 +113,81 @@ const UpcomingDetailsPage = ({ route }) => {
   const [verifyLoading, setVerifyLoading] = useState(false);
   const [seatsSaving, setSeatsSaving] = useState(false);
   const [chatUnread, setChatUnread] = useState({ driver: 0 });
+  const [rideMeta, setRideMeta] = useState({});
   const { ProfileDetails } = profileData();
   const myUserId =
     ProfileDetails?._id ||
     ProfileDetails?.id ||
     ProfileDetails?.data?.personalInfo?._id;
 
+  const displayVehicle = rideMeta?.vehicle || rideData?.vehicle;
+  const displayCreator = rideMeta?.creator || rideData?.creator;
+
   useEffect(() => {
     AsyncStorage.getItem("token").then(setDriverToken);
   }, []);
 
   const rideIdStr = rideData?._id?.toString?.() || rideData?._id;
+
+  const applyRideDetails = useCallback((data) => {
+    if (!data) return;
+    setPassengers(data.passengers || []);
+    setCouriers(data.all_deliveries || []);
+    setPassengerRequests(data.passenger_requested_ride || []);
+    setCourierRequests(data.users_request_Couriers || []);
+    if (data.status != null) setRideStatus(data.status);
+    setVerification(data.verification || null);
+    setMyBoarding(data.myBoarding || null);
+    if (data.vehicle || data.creator) {
+      setRideMeta({
+        vehicle: data.vehicle,
+        creator: data.creator,
+      });
+    }
+    if (data.availableSeats != null) {
+      setLocalAvailableSeats(data.availableSeats);
+    }
+  }, []);
+
+  const fetchRideDetails = useCallback(async () => {
+    const token = await AsyncStorage.getItem("token");
+    const rideId = rideData?._id;
+    if (!token || !rideId) return;
+
+    try {
+      setDetailsLoading(true);
+      const res = await rideDetails(token, rideId);
+      if (res?.success === true) {
+        applyRideDetails(res.data);
+      }
+    } catch (err) {
+      console.log("Ride details error:", err.message);
+    } finally {
+      setDetailsLoading(false);
+    }
+  }, [rideData?._id, applyRideDetails]);
+
+  useRideSocket(rideIdStr, {
+    onParticipantsUpdated: fetchRideDetails,
+    onRequestUpdated: fetchRideDetails,
+  });
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchRideDetails();
+    }, [fetchRideDetails])
+  );
+
+  const handleEnroutePickSuccess = useCallback(
+    (_item, response) => {
+      if (response?.details) {
+        applyRideDetails(response.details);
+      }
+      fetchRideDetails();
+      if (refreshRides) refreshRides();
+    },
+    [applyRideDetails, fetchRideDetails, refreshRides]
+  );
 
   const countIncoming = (messages, userId) => {
     if (!messages?.length || !userId) return 0;
@@ -169,10 +240,10 @@ const UpcomingDetailsPage = ({ route }) => {
         rideId: rideData?._id,
         totalSeats,
       });
-      setRideData((prev) => ({
-        ...prev,
-        availableSeats: res.availableSeats,
-      }));
+      if (res?.availableSeats != null) {
+        setLocalAvailableSeats(res.availableSeats);
+      }
+      fetchRideDetails();
       Alert.alert("Updated", res.message || "Seats updated successfully");
     } catch (err) {
       Alert.alert("Could not update seats", err.message);
@@ -219,6 +290,7 @@ const UpcomingDetailsPage = ({ route }) => {
       ...rideNavParams(),
       peerId,
       peerName: peerUser?.name || "User",
+      peerProfileImg: peerUser?.profile_img,
       peerRole:
         peer?.role ||
         (peerId?.toString?.() === rideData?.creator?._id?.toString?.()
@@ -241,7 +313,7 @@ const UpcomingDetailsPage = ({ route }) => {
       .then((res) => {
         if (res?.status) {
           Alert.alert("Success", res.message);
-          setReloadApi((prev) => !prev); // refresh data
+          fetchRideDetails();
         } else {
           Alert.alert("Error", res?.message || "Something went wrong");
         }
@@ -250,43 +322,7 @@ const UpcomingDetailsPage = ({ route }) => {
         console.log("Accept Error:", err);
         Alert.alert("Error", err.message);
       });
-  }, []);
-
-
-  const getRideDetails = async () => {
-    try {
-      setDetailsLoading(true);
-      const token = await AsyncStorage.getItem("token");
-
-      const rideId = rideData?._id; // ✅ FIXED
-
-      if (!rideId) return;
-
-      const res = await rideDetails(token, rideId);
-      console.log("res", res);
-
-      if (res?.success == true) {
-        setPassengers(res?.data?.passengers || []);
-        setCouriers(res?.data?.all_deliveries || []);
-        setPassengerRequests(res?.data?.passenger_requested_ride);
-        setCourierRequests(res?.data?.users_request_Couriers);
-        setRideStatus(res?.data?.status);
-        setVerification(res?.data?.verification || null);
-        setMyBoarding(res?.data?.myBoarding || null);
-      }
-    } catch (err) {
-      console.log("Error 👉", err.message);
-    }
-    finally {
-      setDetailsLoading(false); // ✅ STOP LOADING
-    }
-  };
-
-  useFocusEffect(
-    useCallback(() => {
-      getRideDetails();
-    }, [reloadapi])
-  );
+  }, [fetchRideDetails, rideData?._id]);
 
   const handleRemovePassenger = async (passengerId) => {
     try {
@@ -298,7 +334,7 @@ const UpcomingDetailsPage = ({ route }) => {
       const response = await removepassenger(token, payload);
       if (response?.status) {
         Alert.alert("Removed", response.message);
-        setReloadApi(!reloadapi)
+        fetchRideDetails();
       } else {
         Alert.alert("Error", response.message);
       }
@@ -311,7 +347,6 @@ const UpcomingDetailsPage = ({ route }) => {
     }
   };
 
-
   const handleRejectPassenger = async (passengerId) => {
     try {
       const token = await AsyncStorage.getItem("token");
@@ -323,7 +358,7 @@ const UpcomingDetailsPage = ({ route }) => {
 
       if (res?.status) {
         Alert.alert("Removed", res.message);
-        setReloadApi(!reloadapi)
+        fetchRideDetails();
       } else {
         Alert.alert("Error", res?.message);
       }
@@ -371,7 +406,7 @@ const UpcomingDetailsPage = ({ route }) => {
           participants: res.verification.participants,
         });
       }
-      setReloadApi(!reloadapi);
+      fetchRideDetails();
       if (res?.verification?.allVerified) {
         setActiveSlider(null);
         setVerifyTarget(null);
@@ -508,7 +543,7 @@ const UpcomingDetailsPage = ({ route }) => {
 
       if (response?.success) {
         Alert.alert("Success", response.message);
-        setReloadApi(!reloadapi);
+        fetchRideDetails();
       } else {
         Alert.alert("Error", response?.message);
       }
@@ -529,7 +564,7 @@ const UpcomingDetailsPage = ({ route }) => {
 
       if (response?.success) {
         Alert.alert("Success", response.message);
-        setReloadApi(!reloadapi);
+        fetchRideDetails();
       } else {
         Alert.alert("Error", response?.message);
       }
@@ -549,7 +584,7 @@ const UpcomingDetailsPage = ({ route }) => {
 
       if (response?.success) {
         Alert.alert("Success", response.message);
-        setReloadApi(!reloadapi);
+        fetchRideDetails();
       } else {
         Alert.alert("Error", response?.message);
       }
@@ -705,18 +740,30 @@ const UpcomingDetailsPage = ({ route }) => {
 
         {/* INFO */}
         <View style={styles.infoCards}>
-          <View style={[styles.card, { backgroundColor: "#F3E8FF" }]}>
-            <Text style={styles.label}>
-              <Image source={car} style={styles.icon} /> Car Type
-            </Text>
-            <Text style={styles.value}>
-              {rideData?.vehicle?.company} ({rideData?.vehicle?.car_no})
-            </Text>
-          </View>
+          {!isDriver && displayVehicle ? (
+            <View style={[styles.card, styles.fullWidth, { backgroundColor: "#F3E8FF" }]}>
+              <Text style={styles.label}>
+                <Image source={car} style={styles.icon} /> Vehicle
+              </Text>
+              <VehicleInfoStrip vehicle={displayVehicle} compact />
+            </View>
+          ) : (
+            <View style={[styles.card, { backgroundColor: "#F3E8FF" }]}>
+              <Text style={styles.label}>
+                <Image source={car} style={styles.icon} /> Car Type
+              </Text>
+              <Text style={styles.value}>
+                {displayVehicle?.company || rideData?.vehicle?.company || "—"}
+                {displayVehicle?.car_no || rideData?.vehicle?.car_no
+                  ? ` (${displayVehicle?.car_no || rideData?.vehicle?.car_no})`
+                  : ""}
+              </Text>
+            </View>
+          )}
 
           {isDriver ? (
             <EditableRideSeats
-              availableSeats={rideData?.availableSeats}
+              availableSeats={localAvailableSeats}
               bookedSeats={bookedSeats}
               canEdit={canEditSeats}
               saving={seatsSaving}
@@ -727,7 +774,7 @@ const UpcomingDetailsPage = ({ route }) => {
               <Text style={styles.label}>
                 <Image source={seat} style={styles.icon} /> Available Seats
               </Text>
-              <Text style={styles.value}>{rideData?.availableSeats}</Text>
+              <Text style={styles.value}>{localAvailableSeats}</Text>
             </View>
           )}
 
@@ -832,9 +879,10 @@ const UpcomingDetailsPage = ({ route }) => {
                     key={item._id || item.userId?._id || index}
                     user={item?.userId}
                     role="courier"
+                    courier={item}
                     subtitleLines={[
                       item?.userId?.email || "No email",
-                      `Parcel: ${item?.weight || item?.what_to_deliver || "N/A"}`,
+                      item?.userId?.mobile || "",
                     ]}
                     fare={item?.amount_will || 0}
                     fareLabel="Amount"
@@ -964,12 +1012,13 @@ const UpcomingDetailsPage = ({ route }) => {
                     </Text>
 
                     <Text style={styles.requestSub}>
-                      Parcel • {item?.weight || "N/A"} kg
+                      {formatCourierParcelLine(item)}
                     </Text>
 
                     <Text style={styles.requestPickup}>
                       {user?.email || "No email"}
                     </Text>
+                    <CourierParcelPreview courier={item} compact />
                   </View>
                 </View>
 
@@ -1007,8 +1056,8 @@ const UpcomingDetailsPage = ({ route }) => {
               {isCourier ? "Ride Driver" : "Your Driver"}
             </Text>
             <DriverContactCard
-              driver={rideData?.creator}
-              vehicle={rideData?.vehicle}
+              driver={displayCreator}
+              vehicle={displayVehicle}
               messageUnread={chatUnread.driver}
               onMessage={() =>
                 openDirectChat({ userId: rideData?.creator, role: "driver" })
@@ -1024,21 +1073,11 @@ const UpcomingDetailsPage = ({ route }) => {
 
             {couriers.map((item, index) => (
               <View key={index} style={styles.myPassengerCard}>
-                <View style={styles.myRow}>
-                  <UserAvatar user={rideData?.creator} size={50} />
-
-                  <View style={{ flex: 1, marginHorizontal: 10 }}>
-                    <Text style={styles.name}>Parcel Details</Text>
-
-                    <Text style={styles.pickup}>
-                      Weight: {item?.weight || "N/A"} kg
-                    </Text>
-
-                    <Text style={styles.pickup}>
-                      Amount: ₹{getCourierFare(item)}
-                    </Text>
-                  </View>
-                </View>
+                <Text style={styles.name}>Your Parcel</Text>
+                <CourierParcelPreview courier={item} />
+                <Text style={styles.pickup}>
+                  Amount: ₹{getCourierFare(item)}
+                </Text>
               </View>
             ))}
 
@@ -1124,6 +1163,7 @@ const UpcomingDetailsPage = ({ route }) => {
             to={rideData?.to}
             date={rideData?.date}
             rideId={rideData?._id}
+            onPickSuccess={handleEnroutePickSuccess}
           />
         )}
 

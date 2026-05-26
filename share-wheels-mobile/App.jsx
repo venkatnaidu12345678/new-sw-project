@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from "react";
-import { StatusBar, StyleSheet, View } from "react-native";
+import React, { useEffect, useRef, useCallback } from "react";
+import { StatusBar, StyleSheet, DeviceEventEmitter } from "react-native";
+import { NOTIFICATIONS_REFRESH_EVENT } from "./src/context/NotificationsContext";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
   SafeAreaProvider,
@@ -11,48 +12,79 @@ import AuthNavigator from "./src/Navigation/AuthNavigator";
 import { AdsProvider } from "./src/context/AdsContext";
 import {
   requestUserPermission,
-  getDeviceToken,
   registerForegroundHandler,
   registerNotificationOpenedApp,
   handleInitialNotification,
+  configureIosForegroundPresentation,
 } from "./src/Notifications/FCMService";
+import { ensureNotificationChannel } from "./src/Notifications/displayLocalNotification";
+import { registerNotifeeForegroundPress } from "./src/Notifications/displayLocalNotification";
+import { handleNotificationOpen } from "./src/Notifications/notificationNavigation";
+import { consumePendingNotificationOpen } from "./src/Notifications/notifeeBackground";
 
 export default function App() {
   const navigationRef = useRef(null);
 
+  const onNotificationOpen = useCallback((remoteMessage) => {
+    if (!remoteMessage || !navigationRef.current) return;
+    handleNotificationOpen(navigationRef.current, remoteMessage);
+  }, []);
+
+  const handleNavigationReady = useCallback(async () => {
+    const pending = await consumePendingNotificationOpen();
+    if (pending) {
+      setTimeout(() => onNotificationOpen(pending), 600);
+    }
+  }, [onNotificationOpen]);
+
   useEffect(() => {
-    async function initFCM() {
+    let unsubForeground = () => {};
+    let unsubOpened = () => {};
+    let unsubNotifee = () => {};
+
+    (async () => {
       try {
-        const permissionGranted = await requestUserPermission();
-        if (!permissionGranted) return;
-        const token = await getDeviceToken();
-        if (token) {
-          console.log("FCM token initialized:", token);
+        await ensureNotificationChannel();
+        await configureIosForegroundPresentation();
+        const granted = await requestUserPermission();
+        if (!granted && __DEV__) {
+          console.warn("[FCM] notification permission denied");
         }
       } catch (err) {
-        console.warn("FCM init skipped:", err?.message || err);
+        console.warn("[FCM] init:", err?.message || err);
       }
-    }
 
-    const unsubscribeForeground = registerForegroundHandler((remoteMessage) => {
-      console.log("Foreground notification received:", remoteMessage);
-    });
+      unsubForeground = registerForegroundHandler((remoteMessage) => {
+        DeviceEventEmitter.emit(NOTIFICATIONS_REFRESH_EVENT);
+        if (__DEV__) {
+          console.log("[FCM] foreground:", remoteMessage?.notification?.title);
+        }
+      });
 
-    const unsubscribeOpened = registerNotificationOpenedApp((remoteMessage) => {
-      console.log("Notification opened:", remoteMessage);
-    });
+      unsubOpened = registerNotificationOpenedApp(onNotificationOpen);
 
-    handleInitialNotification((remoteMessage) => {
-      console.log("Opened from quit state:", remoteMessage);
-    });
+      unsubNotifee = registerNotifeeForegroundPress((detail) => {
+        onNotificationOpen({
+          data: detail?.data,
+          notification: {
+            title: detail?.notification?.title,
+            body: detail?.notification?.body,
+          },
+        });
+      });
 
-    initFCM();
+      const initial = await handleInitialNotification(onNotificationOpen);
+      if (initial) {
+        setTimeout(() => onNotificationOpen(initial), 800);
+      }
+    })();
 
     return () => {
-      unsubscribeForeground?.();
-      unsubscribeOpened?.();
+      unsubForeground?.();
+      unsubOpened?.();
+      unsubNotifee?.();
     };
-  }, []);
+  }, [onNotificationOpen]);
 
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
@@ -62,7 +94,10 @@ export default function App() {
           backgroundColor="#F8FAFC"
           barStyle="dark-content"
         />
-        <NavigationContainer ref={navigationRef}>
+        <NavigationContainer
+          ref={navigationRef}
+          onReady={handleNavigationReady}
+        >
           <AdsProvider>
             <AuthNavigator />
           </AdsProvider>

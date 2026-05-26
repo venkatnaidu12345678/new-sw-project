@@ -1,7 +1,18 @@
 const mongoose = require("mongoose");
 const Ride = require("../models/rideModel");
 const PassengerRide = require("../models/passengerRideModel");
+const UserRides = require("../models/userRides");
+const User = require("../models/userModel");
 const { parseAmount } = require("../schemas/commonSchemas");
+const { ensureParticipantBoardingOtp } = require("./rideVerificationService");
+const { notifyUser } = require("./notificationService");
+const { getRideDetails } = require("./rideService");
+const {
+  emitToUser,
+  emitRideParticipantsUpdated,
+  emitMyRequestsUpdated,
+  emitEnrouteRequestRemoved,
+} = require("../utils/socketEmit");
 
 const createPassengerRequest = async (user, { from, to, ride_need_date, seats_needed, date, luggage_included, amount_will }) => {
   if (!from || !to || !ride_need_date || !seats_needed) return { status: 400, body: { error: "All fields are required" } };
@@ -36,7 +47,15 @@ const getOpenRequests = async (user) => {
   const openRequests = await PassengerRide.find({
     status: "pending",
     creator: { $ne: user._id },
-    $or: dateQueries,
+    $and: [
+      {
+        $or: [
+          { assigned_to: { $exists: false } },
+          { "assigned_to.rideId": null },
+        ],
+      },
+      ...(dateQueries.length ? [{ $or: dateQueries }] : []),
+    ],
   }).populate("creator", "name mobile profile_img");
   return { status: 200, body: openRequests };
 };
@@ -52,19 +71,68 @@ const pickPassenger = async (user, { passenger_rideId, rideId }) => {
   const ride = await Ride.findById(rideId);
   if (!ride) return { status: 404, body: { message: "Ride not found" } };
   if (ride.creator.toString() !== user._id.toString()) return { status: 403, body: { message: "Unauthorized" } };
-  if (ride.availableSeats < passengerRide.seats_needed) return { status: 400, body: { message: "Not enough seats" } };
-  ride.passengers.push({
+  if (ride.availableSeats < passengerRide.seats_needed) return { status: 400, body: { success: false, message: "Not enough seats" } };
+
+  const passengerEntry = {
     userId: passengerRide.creator,
     requires_seats: passengerRide.seats_needed,
     ride_amount: passengerRide.amount_will || 0,
     status: "accepted",
-  });
+    joinedAt: new Date(),
+  };
+  await ensureParticipantBoardingOtp(passengerEntry, passengerRide.creator);
+  ride.passengers.push(passengerEntry);
   ride.availableSeats -= passengerRide.seats_needed;
   await ride.save();
+
   passengerRide.assigned_to = { userId: user._id, rideId: ride._id };
   passengerRide.status = "aisgned_passenger";
   await passengerRide.save();
-  return { status: 200, body: { message: "Passenger picked successfully", ride, passengerRide } };
+
+  await UserRides.findOneAndUpdate(
+    { creator: passengerRide.creator },
+    { $pull: { my_pending_ride_requests: { rideId: ride._id } } }
+  );
+
+  const driver = await User.findById(user._id);
+  await notifyUser(passengerRide.creator, {
+    title: "Ride request accepted",
+    body: `${driver?.name || "Driver"} picked you for their ride`,
+    type: "ride_accept",
+    data: { rideId: ride._id.toString() },
+  });
+
+  emitRideParticipantsUpdated(ride._id, {
+    action: "passenger_picked",
+    passengerRideId: passengerRide._id.toString(),
+    userId: passengerRide.creator.toString(),
+  });
+  emitToUser(user._id, "rideParticipantsUpdated", {
+    rideId: ride._id.toString(),
+    action: "passenger_picked",
+  });
+  emitMyRequestsUpdated(passengerRide.creator, {
+    action: "passenger_assigned",
+    passengerRideId: passengerRide._id.toString(),
+    rideId: ride._id.toString(),
+  });
+  emitEnrouteRequestRemoved(passengerRide.from, passengerRide.to, passengerRide.date, {
+    passengerRideId: passengerRide._id.toString(),
+    type: "passenger",
+  });
+
+  const detailsRes = await getRideDetails(rideId, user._id);
+
+  return {
+    status: 200,
+    body: {
+      success: true,
+      message: "Passenger picked successfully",
+      ride,
+      passengerRide,
+      details: detailsRes.body?.data || null,
+    },
+  };
 };
 
 module.exports = { createPassengerRequest, getOpenRequests, pickPassenger };

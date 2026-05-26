@@ -91,7 +91,7 @@ const SearchLocation = ({
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} collapsable={false}>
       <View style={styles.inputWrapper}>
         <TextInput
           placeholder="From — pickup city"
@@ -226,7 +226,8 @@ const styles = StyleSheet.create({
     borderColor: "#E5E7EB",
     maxHeight: 200,
     marginBottom: 8,
-    elevation: 6,
+    elevation: 8,
+    zIndex: 60,
     shadowColor: "#000",
     shadowOpacity: 0.1,
     shadowRadius: 8,

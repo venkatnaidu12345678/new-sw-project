@@ -15,6 +15,7 @@ const driverRidesRoutes = require("./routes/DriverRideRoutes");
 const supportRoutes = require("./routes/supportRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const adRoutes = require("./routes/adRoutes");
+const notificationRoutes = require("./routes/notificationRoutes");
 
 const app = express();
 
@@ -31,6 +32,7 @@ app.use("/driver-rides", driverRidesRoutes);
 app.use("/support", supportRoutes);
 app.use("/admin", adminRoutes);
 app.use("/ads", adRoutes);
+app.use("/notifications", notificationRoutes);
 
 connectDatabase();
 

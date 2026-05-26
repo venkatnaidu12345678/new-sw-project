@@ -6,6 +6,7 @@ import AuthButton from "../../Components/AuthButton";
 import AuthTextInput from "../../Components/AuthTextInput";
 import AuthScreenLayout from "../../Components/auth/AuthScreenLayout";
 import { signupApi } from "../../ApiService/AuthApiService";
+import { syncFcmTokenWithBackend } from "../../Notifications/registerToken";
 import {
   validateName,
   validatePhone,
@@ -110,6 +111,7 @@ const SignupPage = ({ navigation, triggerAuth }) => {
         if (response.user?.name) {
           await AsyncStorage.setItem("USER_NAME", response.user.name);
         }
+        await syncFcmTokenWithBackend();
         triggerAuth?.();
       } else {
         setErrors((prev) => ({

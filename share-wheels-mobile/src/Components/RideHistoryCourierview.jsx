@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Image,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
 
 /* ICONS */
@@ -13,23 +14,15 @@ import car from "../assets/car.png";
 import dateIcon from "../assets/dateIcon.png";
 import clock from "../assets/clock2.png";
 import UserAvatar from "./ui/UserAvatar";
+import VehicleInfoStrip from "./VehicleInfoStrip";
+import CourierParcelPreview from "./CourierParcelPreview";
 import madhapurIcon from "../assets/madhapuricon.png";
 import kondapurIcon from "../assets/kondapuricon.png";
 import starIcon from "../assets/staricon.png";
 import { getCourierFare } from "../Utils/fareUtils";
 
-const RideHistoryPassengerView = ({ ride }) => {
+const RideHistoryCourierview = ({ ride, loading }) => {
   if (!ride) return null;
-
-  /* FORMAT DATE */
-  const formattedDate = new Date(ride.date).toLocaleDateString();
-
-  /* FORMAT TIME */
-  const formattedTime = new Date(ride.startTime).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  console.log("Ride history:", ride)
 
   return (
     <View style={styles.container}>
@@ -38,6 +31,9 @@ const RideHistoryPassengerView = ({ ride }) => {
         <Text style={styles.headerTitle}>Ride Details</Text>
       </View>
 
+      {loading ? (
+        <ActivityIndicator style={{ marginTop: 24 }} color="#2563EB" />
+      ) : (
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 100 }}
@@ -68,25 +64,32 @@ const RideHistoryPassengerView = ({ ride }) => {
 
          
 
-        {/* DRIVER */}
-        <Text style={styles.sectionTitle}>Driver</Text>
+        {ride?.activeData || ride?.courierSnapshot ? (
+          <>
+            <Text style={styles.sectionTitle}>Your Parcel</Text>
+            <View style={styles.driverCard}>
+              <CourierParcelPreview
+                courier={ride.activeData || ride.courierSnapshot}
+              />
+            </View>
+          </>
+        ) : null}
+
+        <Text style={styles.sectionTitle}>Driver & Vehicle</Text>
 
         <View style={styles.driverCard}>
           <UserAvatar user={ride?.creator} size={52} />
 
           <View style={{ flex: 1, marginLeft: 12 }}>
-           <Text style={styles.driverName}>
-  {ride?.creator?.name?.trim() || "Driver"}
-</Text>
-
-
+            <Text style={styles.driverName}>
+              {ride?.creator?.name?.trim() || "Driver"}
+            </Text>
             <Text style={styles.driverRole}>
-              {ride?.creator?.gender || "N/A"}
+              {ride?.creator?.gender || "Driver"}
             </Text>
-
-            <Text style={styles.driverMeta}>
-              {ride?.creator?.mobile || ""}
-            </Text>
+            {ride?.creator?.mobile ? (
+              <Text style={styles.driverMeta}>{ride.creator.mobile}</Text>
+            ) : null}
           </View>
 
           <View style={styles.driverRating}>
@@ -94,7 +97,12 @@ const RideHistoryPassengerView = ({ ride }) => {
             <Image source={starIcon} style={styles.star} />
           </View>
         </View>
+
+        {ride?.vehicle ? (
+          <VehicleInfoStrip vehicle={ride.vehicle} />
+        ) : null}
       </ScrollView>
+      )}
 
       {/* TOTAL FARE */}
       <View style={styles.totalCard}>
@@ -120,7 +128,7 @@ const InfoCard = ({ icon, label, value, bg }) => (
   </View>
 );
 
-export default RideHistoryPassengerView;
+export default RideHistoryCourierview;
 
 /* STYLES */
 const styles = StyleSheet.create({

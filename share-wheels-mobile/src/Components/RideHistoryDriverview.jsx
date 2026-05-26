@@ -5,17 +5,17 @@ import {
   StyleSheet,
   Image,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
-
-/* ICONS */
 
 import UserAvatar from "./ui/UserAvatar";
 import madhapurIcon from "../assets/madhapuricon.png";
 import kondapurIcon from "../assets/kondapuricon.png";
+import { getPassengerFare, getDriverTotalEarnings } from "../Utils/fareUtils";
 
-
-const RideHistoryDriverview = ({ ride }) => {
+const RideHistoryDriverview = ({ ride, loading }) => {
   const passengers = ride?.passengers || [];
+  const totalEarnings = getDriverTotalEarnings(ride);
 
   return (
     <View style={styles.container}>
@@ -23,89 +23,73 @@ const RideHistoryDriverview = ({ ride }) => {
         <Text style={styles.headerTitle}>Ride Details</Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
-        {/* ROUTE */}
-        <View style={styles.routeCard}>
-          <View style={styles.routeItem}>
-            <Image source={madhapurIcon} style={styles.routeIcon} />
-            <View>
-              <Text style={styles.place}>{ride?.from}</Text>
-              <Text style={styles.address}>Pickup Location</Text>
-            </View>
-          </View>
-
-          <View style={styles.routeLine} />
-
-          <View style={styles.routeItem}>
-            <Image source={kondapurIcon} style={styles.routeIcon} />
-            <View>
-              <Text style={styles.place}>{ride?.to}</Text>
-              <Text style={styles.address}>Drop Location</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* PASSENGERS */}
-        <Text style={styles.sectionTitle}>
-          Passengers ({passengers.length})
-        </Text>
-
-        {passengers.length === 0 ? (
-          <Text style={{ textAlign: "center", marginTop: 20 }}>
-            No passengers found
-          </Text>
-        ) : (
-          passengers.map((p, index) => (
-            <View key={p?._id || index} style={styles.passengerRow}>
-              <UserAvatar user={p?.userId} size={44} />
-
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={styles.passengerName}>
-                  {p?.userId?.name || "No Name"}
-                </Text>
-
-                <Text style={styles.passengerMeta}>
- 
-  {p?.userId?.gender || "-"} •{" "}
-  {p?.seats || 1} seat{p?.seats > 1 ? "s" : ""}
-</Text>
+      {loading ? (
+        <ActivityIndicator style={{ marginTop: 24 }} color="#2563EB" />
+      ) : (
+        <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+          <View style={styles.routeCard}>
+            <View style={styles.routeItem}>
+              <Image source={madhapurIcon} style={styles.routeIcon} />
+              <View>
+                <Text style={styles.place}>{ride?.from}</Text>
+                <Text style={styles.address}>Pickup Location</Text>
               </View>
-
-              <Text style={styles.passengerPrice}>
-                ₹{ride?.price || 0}
-              </Text>
             </View>
-          ))
-        )}
-      </ScrollView>
 
-      {/* TOTAL */}
+            <View style={styles.routeLine} />
+
+            <View style={styles.routeItem}>
+              <Image source={kondapurIcon} style={styles.routeIcon} />
+              <View>
+                <Text style={styles.place}>{ride?.to}</Text>
+                <Text style={styles.address}>Drop Location</Text>
+              </View>
+            </View>
+          </View>
+
+          <Text style={styles.sectionTitle}>
+            Passengers ({passengers.length})
+          </Text>
+
+          {passengers.length === 0 ? (
+            <Text style={styles.empty}>No passengers on this ride</Text>
+          ) : (
+            passengers.map((p, index) => {
+              const fare = getPassengerFare(p);
+              const seats = p?.requires_seats || 1;
+              return (
+                <View key={p?._id || index} style={styles.passengerRow}>
+                  <UserAvatar user={p?.userId} size={44} />
+
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={styles.passengerName}>
+                      {p?.userId?.name || "Passenger"}
+                    </Text>
+                    <Text style={styles.passengerMeta}>
+                      {p?.userId?.gender || "—"} · {seats} seat
+                      {seats !== 1 ? "s" : ""}
+                    </Text>
+                  </View>
+
+                  <Text style={styles.passengerPrice}>₹{fare}</Text>
+                </View>
+              );
+            })
+          )}
+        </ScrollView>
+      )}
+
       <View style={styles.totalCard}>
         <View>
           <Text style={styles.totalLabel}>Total Earning</Text>
-          <Text style={styles.totalAmount}>₹{ride?.price || 0}</Text>
+          <Text style={styles.totalAmount}>₹{totalEarnings}</Text>
         </View>
       </View>
     </View>
   );
 };
 
-/* INFO CARD COMPONENT */
-const InfoCard = ({ icon, label, value, bg, full }) => (
-  <View style={[styles.infoCard, { backgroundColor: bg }, full && styles.full]}>
-    <View style={styles.infoRow}>
-      <Image source={icon} style={styles.infoIcon} />
-      <Text style={styles.infoLabel}>{label}</Text>
-    </View>
-
-    <Text style={styles.infoValue}>{value}</Text>
-  </View>
-);
-
 export default RideHistoryDriverview;
-
-
-/* STYLES */
 
 const styles = StyleSheet.create({
   container: {
@@ -116,20 +100,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 90,
   },
-
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 12,
   },
-
   headerTitle: {
     fontSize: 16,
     fontWeight: "700",
     color: "#111827",
   },
-
   routeCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 20,
@@ -137,18 +118,15 @@ const styles = StyleSheet.create({
     elevation: 2,
     marginBottom: 16,
   },
-
   routeItem: {
     flexDirection: "row",
     alignItems: "flex-start",
   },
-
   routeIcon: {
     width: 24,
     height: 24,
     marginRight: 12,
   },
-
   routeLine: {
     width: 2,
     height: 32,
@@ -156,68 +134,27 @@ const styles = StyleSheet.create({
     marginLeft: 11,
     marginVertical: 6,
   },
-
   place: {
     fontSize: 15,
     fontWeight: "700",
     color: "#111827",
   },
-
   address: {
     fontSize: 12,
     color: "#6B7280",
     marginTop: 2,
   },
-
-  infoGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    gap: 12,
-    marginBottom: 20,
-  },
-
-  infoCard: {
-    width: "48%",
-    padding: 14,
-    borderRadius: 16,
-  },
-
-  full: {
-    width: "100%",
-  },
-
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 6,
-  },
-
-  infoIcon: {
-    width: 16,
-    height: 16,
-    marginRight: 6,
-  },
-
-  infoLabel: {
-    fontSize: 12,
-    color: "#6B7280",
-    fontWeight: "600",
-  },
-
-  infoValue: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#111827",
-  },
-
   sectionTitle: {
     fontSize: 14,
     fontWeight: "700",
     marginBottom: 10,
     color: "#111827",
   },
-
+  empty: {
+    textAlign: "center",
+    marginTop: 20,
+    color: "#6B7280",
+  },
   passengerRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -225,31 +162,21 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
   },
-
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
-
   passengerName: {
     fontSize: 14,
     fontWeight: "600",
     color: "#111827",
   },
-
   passengerMeta: {
     fontSize: 12,
     color: "#6B7280",
     marginTop: 2,
   },
-
   passengerPrice: {
     fontSize: 14,
     fontWeight: "700",
     color: "#111827",
   },
-
   totalCard: {
     position: "absolute",
     bottom: 16,
@@ -262,41 +189,14 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-
   totalLabel: {
     fontSize: 12,
     color: "#DBEAFE",
   },
-
   totalAmount: {
     fontSize: 22,
     fontWeight: "700",
     color: "#FFFFFF",
     marginTop: 4,
-  },
-
-  ratingBox: {
-    backgroundColor: "rgba(255,255,255,0.18)",
-    borderRadius: 14,
-    padding: 10,
-    alignItems: "center",
-    minWidth: 70,
-  },
-
-  ratingValue: {
-    fontSize: 26,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-
-  star: {
-    width: 16,
-    height: 16,
-    marginVertical: 2,
-  },
-
-  ratingText: {
-    fontSize: 10,
-    color: "#E0E7FF",
   },
 });

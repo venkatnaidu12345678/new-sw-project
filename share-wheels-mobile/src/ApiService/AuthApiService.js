@@ -28,6 +28,18 @@ export const loginApi = async (data) => {
   }
 };
 
+export const registerFcmTokenApi = async (token, fcmToken) => {
+  const res = await fetch(baseUrl + "/auth/register-fcm-token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ fcmToken }),
+  });
+  return parseApiResponse(res);
+};
+
 export const verifyOtpApi = async (data) => {
   try {
     const res = await fetch(baseUrl + endPoints.verifyOtp, {

@@ -27,6 +27,7 @@ import {
   pickCourierApi,
   pickPassengerApi,
 } from "../ApiService/ridesApiServices";
+import { useEnrouteSocket } from "../hooks/useAppSocket";
 
 /* ================= CARD ================= */
 const PassengerCard = memo(({ item, onSendRequest, isSent }) => {
@@ -81,12 +82,38 @@ const PassengerCard = memo(({ item, onSendRequest, isSent }) => {
 });
 
 /* ================= MAIN ================= */
-const EnRoutePassengers = ({ from, to, date, rideId }) => {
+const isPickSuccess = (response) =>
+  response?.success === true || response?.status === true;
+
+const EnRoutePassengers = ({ from, to, date, rideId, onPickSuccess }) => {
   const [activeTab, setActiveTab] = useState("all");
   const [sentRequests, setSentRequests] = useState({});
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [reloadapi, setReloadApi] = useState(true);
+
+  const removePickedFromList = (payload) => {
+    if (!payload) return;
+    setData((prev) =>
+      prev.filter((row) => {
+        if (
+          payload.passengerRideId &&
+          row.passengerId?.toString() === payload.passengerRideId.toString()
+        ) {
+          return false;
+        }
+        if (
+          payload.courierId &&
+          row.courierId?.toString() === payload.courierId.toString()
+        ) {
+          return false;
+        }
+        return true;
+      })
+    );
+  };
+
+  useEnrouteSocket({ from, to, date, onRequestRemoved: removePickedFromList });
 
   /* ================= FETCH ================= */
   const fetchData = async () => {
@@ -173,13 +200,15 @@ const EnRoutePassengers = ({ from, to, date, rideId }) => {
         response = await pickPassengerApi(token, payload);
       }
 
-      if (response?.success) {
+      if (isPickSuccess(response)) {
         setSentRequests((prev) => ({
           ...prev,
           [item.id]: true,
         }));
 
-        setReloadApi((prev) => !prev);
+        setData((prev) => prev.filter((row) => row.id !== item.id));
+
+        onPickSuccess?.(item, response);
 
         Alert.alert(
           "Success",

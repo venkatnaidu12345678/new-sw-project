@@ -78,4 +78,6 @@ export const endPoints = {
   verificationParticipantsurl: "/driver-rides",
   verifyParticipanturl: "/driver-rides",
   activeAdsurl: "/ads/active",
+  notificationsurl: "/notifications",
+  registerFcmTokenurl: "/auth/register-fcm-token",
 };

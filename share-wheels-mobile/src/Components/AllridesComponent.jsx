@@ -10,6 +10,7 @@ import {
 
 import clock1 from "../assets/clock1.png";
 import UserAvatar from "./ui/UserAvatar";
+import { formatVehicleLabel } from "./VehicleInfoStrip";
 import { LAYOUT } from "../theme/layout";
 import person from "../assets/person.png";
 import location from "../assets/location.png";
@@ -56,9 +57,17 @@ const AllridesComponent = ({ rides = [], loading, navigation, currentUserId }) =
         <View style={styles.driverRow}>
           <View style={styles.driverInfo}>
             <UserAvatar user={item?.creator} size={LAYOUT.sizes.avatarSm + 4} />
-            <Text style={styles.driverName}>
-              {item?.creator?.name || "Driver"}
-            </Text>
+            <View style={styles.driverTextCol}>
+              <Text style={styles.driverName}>
+                {item?.creator?.name || "Driver"}
+              </Text>
+              {formatVehicleLabel(item?.vehicle) ? (
+                <Text style={styles.vehicleHint} numberOfLines={1}>
+                  {formatVehicleLabel(item?.vehicle)}
+                  {item?.vehicle?.car_no ? ` · ${item.vehicle.car_no}` : ""}
+                </Text>
+              ) : null}
+            </View>
           </View>
 
           <Text style={styles.price}>
@@ -186,6 +195,17 @@ const styles = StyleSheet.create({
   driverInfo: {
     flexDirection: "row",
     alignItems: "center",
+    flex: 1,
+    marginRight: 8,
+  },
+  driverTextCol: {
+    flex: 1,
+    marginLeft: 8,
+  },
+  vehicleHint: {
+    fontSize: 11,
+    color: "#64748B",
+    marginTop: 2,
   },
 
   avatar: {

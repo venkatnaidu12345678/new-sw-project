@@ -4,7 +4,12 @@ const Ride = require("../models/rideModel");
 const User = require("../models/userModel");
 const { parseAmount } = require("../schemas/commonSchemas");
 const { ensureParticipantBoardingOtp } = require("./rideVerificationService");
-const { sendPushNotification } = require("../utils/firebaseAdmin");
+const { notifyUser } = require("./notificationService");
+const {
+  emitRideParticipantsUpdated,
+  emitRideRequestUpdated,
+  emitMyRequestsUpdated,
+} = require("../utils/socketEmit");
 
 const createCourierRequest = async (user, body) => {
   const {
@@ -97,15 +102,12 @@ const requestCourier = async (user, body) => {
     await ensureParticipantBoardingOtp(courierData, user._id);
     ride.all_deliveries.push(courierData);
     await ride.save();
-    const driver = await User.findById(ride.creator);
-    if (driver?.fcmToken) {
-      await sendPushNotification(
-        driver.fcmToken,
-        "New courier (Quick Reserve)",
-        `${user.name || "A courier"} booked delivery on your ride`,
-        { rideId: ride._id.toString(), type: "courier_joined" }
-      );
-    }
+    await notifyUser(ride.creator, {
+      title: "New courier (Quick Reserve)",
+      body: `${user.name || "A courier"} booked delivery on your ride`,
+      type: "courier_joined",
+      data: { rideId: ride._id.toString() },
+    });
     return {
       status: 200,
       body: {
@@ -120,15 +122,12 @@ const requestCourier = async (user, body) => {
   ride.users_request_Couriers.push(courierData);
   await ride.save();
 
-  const driver = await User.findById(ride.creator);
-  if (driver?.fcmToken) {
-    await sendPushNotification(
-      driver.fcmToken,
-      "New courier request",
-      `${user.name || "Someone"} requested courier delivery`,
-      { rideId: ride._id.toString(), type: "courier_request" }
-    );
-  }
+  await notifyUser(ride.creator, {
+    title: "New courier request",
+    body: `${user.name || "Someone"} requested courier delivery`,
+    type: "courier_request",
+    data: { rideId: ride._id.toString() },
+  });
 
   return {
     status: 200,
@@ -162,6 +161,19 @@ const acceptCourier = async (user, { rideId, courierId }) => {
     }
   );
   if (updateResult.modifiedCount === 0) return { status: 400, body: { success: false, message: "Failed to move courier" } };
+  const courierUserId = courierData.userId?.toString?.() || courierData.userId;
+  emitRideParticipantsUpdated(rideId, {
+    action: "courier_accepted",
+    courierId: courierId.toString(),
+    userId: courierUserId,
+  });
+  emitRideRequestUpdated(rideId, { action: "courier_accepted" });
+  if (courierUserId) {
+    emitMyRequestsUpdated(courierUserId, {
+      action: "courier_accepted",
+      rideId: rideId.toString(),
+    });
+  }
   return { status: 200, body: { success: true, message: "Courier accepted successfully" } };
 };
 
@@ -175,6 +187,7 @@ const rejectCourier = async (user, { rideId, courierId }) => {
   const exists = ride.users_request_Couriers.some((c) => c._id.toString() === courierId);
   if (!exists) return { status: 404, body: { success: false, message: "Courier not found in requests" } };
   await Ride.updateOne({ _id: rideId }, { $pull: { users_request_Couriers: { _id: new mongoose.Types.ObjectId(courierId) } } });
+  emitRideRequestUpdated(rideId, { action: "courier_rejected", courierId: courierId.toString() });
   return { status: 200, body: { success: true, message: "Courier rejected and removed" } };
 };
 

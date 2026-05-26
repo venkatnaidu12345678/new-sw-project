@@ -4,7 +4,7 @@ const mongoose = require("mongoose");
 const User = require("../models/userModel");
 const generateOtpWithExpiry = require("../utils/otpHelper");
 // const sendOtp = require("../utils/sendOtp");
-const { sendPushNotification } = require("../utils/firebaseAdmin");
+const { notifyUser } = require("./notificationService");
 const { assignUserNoIfMissing } = require("../utils/userNoHelper");
 
 const toAuthUser = (user) => ({
@@ -156,18 +156,27 @@ const updateProfileImage = async (user, profile_img) => {
   };
 };
 
-const sendNotification = async ({ userId, title, body, data }) => {
+const sendNotification = async ({ userId, title, body, data, type }) => {
   if (!userId || !title || !body) {
     return { status: 400, body: { message: "userId, title, and body are required" } };
   }
   const targetUser = await User.findById(userId);
   if (!targetUser) return { status: 404, body: { message: "Target user not found" } };
-  if (!targetUser.fcmToken) {
-    return { status: 400, body: { message: "Target user does not have an FCM token registered" } };
-  }
-  const result = await sendPushNotification(targetUser.fcmToken, title, body, data);
-  if (!result) return { status: 500, body: { message: "Failed to send notification" } };
-  return { status: 200, body: { success: true, message: "Notification sent successfully", messageId: result } };
+  const result = await notifyUser(userId, {
+    title,
+    body,
+    type: type || data?.type || "general",
+    data: data || {},
+  });
+  return {
+    status: 200,
+    body: {
+      success: true,
+      message: "Notification sent successfully",
+      pushed: result.pushed,
+      saved: result.saved,
+    },
+  };
 };
 
 const { resolveImageUrl } = require("../config/cloudinary");
