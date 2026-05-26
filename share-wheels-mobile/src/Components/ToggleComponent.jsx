@@ -8,9 +8,10 @@ const ToggleComponent = ({
   iconBg,
   value,
   onChange,
+  compact = false,
 }) => {
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, compact && styles.cardCompact]}>
       <View style={styles.left}>
         <View style={[styles.iconBox, { backgroundColor: iconBg }]}>
           <Image source={icon} style={styles.icon} />
@@ -43,6 +44,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginBottom: 25,
     elevation: 3,
+  },
+  cardCompact: {
+    padding: 14,
+    marginBottom: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    elevation: 1,
   },
   left: {
     flexDirection: "row",

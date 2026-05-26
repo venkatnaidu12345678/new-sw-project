@@ -15,7 +15,19 @@ import { getPassengerFare, getDriverTotalEarnings } from "../Utils/fareUtils";
 
 const RideHistoryDriverview = ({ ride, loading }) => {
   const passengers = ride?.passengers || [];
+  const couriers = ride?.all_deliveries || [];
   const totalEarnings = getDriverTotalEarnings(ride);
+  const dateLabel =
+    ride?.formattedDate ||
+    (ride?.date ? new Date(ride.date).toLocaleDateString() : "—");
+  const timeLabel =
+    ride?.formattedTime ||
+    (ride?.startTime
+      ? new Date(ride.startTime).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "—");
 
   return (
     <View style={styles.container}>
@@ -47,6 +59,10 @@ const RideHistoryDriverview = ({ ride, loading }) => {
             </View>
           </View>
 
+          <Text style={styles.rideMeta}>
+            {dateLabel} • {timeLabel}
+          </Text>
+
           <Text style={styles.sectionTitle}>
             Passengers ({passengers.length})
           </Text>
@@ -75,6 +91,26 @@ const RideHistoryDriverview = ({ ride, loading }) => {
                 </View>
               );
             })
+          )}
+
+          <Text style={styles.sectionTitle}>Couriers ({couriers.length})</Text>
+          {couriers.length === 0 ? (
+            <Text style={styles.empty}>No couriers on this ride</Text>
+          ) : (
+            couriers.map((c, index) => (
+              <View key={c?._id || index} style={styles.passengerRow}>
+                <UserAvatar user={c?.userId} size={44} />
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.passengerName}>
+                    {c?.userId?.name || "Courier"}
+                  </Text>
+                  <Text style={styles.passengerMeta}>
+                    {c?.parcel || c?.what_to_deliver || "Parcel"}
+                  </Text>
+                </View>
+                <Text style={styles.passengerPrice}>₹{c?.amount_will || 0}</Text>
+              </View>
+            ))
           )}
         </ScrollView>
       )}
@@ -149,6 +185,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: 10,
     color: "#111827",
+  },
+  rideMeta: {
+    fontSize: 12,
+    color: "#64748B",
+    marginBottom: 12,
   },
   empty: {
     textAlign: "center",

@@ -78,13 +78,17 @@ export const deleteAd = (id) => api(`/admin/ads/${id}`, { method: "DELETE" });
 export const uploadAdMedia = async (file, mediaType = "image") => {
   const token = getToken();
   const formData = new FormData();
-  formData.append("file", file);
+  // mediaType must be sent before file so multer can read it in fileFilter
   formData.append("mediaType", mediaType);
-  const res = await fetch(`${API_BASE}/admin/ads/upload`, {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: formData,
-  });
+  formData.append("file", file);
+  const res = await fetch(
+    `${API_BASE}/admin/ads/upload?mediaType=${encodeURIComponent(mediaType)}`,
+    {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    }
+  );
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.message || "Upload failed");
   return data;

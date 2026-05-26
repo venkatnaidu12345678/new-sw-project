@@ -37,23 +37,24 @@ const ChatMessage = ({ item, index = 0 }) => {
     <Animated.View
       style={[
         styles.wrap,
-        isUser ? styles.userWrap : styles.botWrap,
         {
           opacity,
           transform: [{ translateY }, { scale }],
         },
       ]}
     >
-      <View
-        style={[
-          styles.bubble,
-          isUser ? styles.userBubble : styles.botBubble,
-          item.escalate && styles.escalateBubble,
-        ]}
-      >
-        <Text style={[styles.msgText, isUser && styles.userMsgText]}>
-          {item.text}
-        </Text>
+      <View style={[styles.inner, isUser ? styles.userInner : styles.botInner]}>
+        <View
+          style={[
+            styles.bubble,
+            isUser ? styles.userBubble : styles.botBubble,
+            item.escalate && styles.escalateBubble,
+          ]}
+        >
+          <Text style={[styles.msgText, isUser && styles.userMsgText]}>
+            {item.text}
+          </Text>
+        </View>
       </View>
     </Animated.View>
   );
@@ -63,11 +64,18 @@ export default ChatMessage;
 
 const styles = StyleSheet.create({
   wrap: {
+    width: "100%",
     marginVertical: 4,
+  },
+  inner: {
     maxWidth: "88%",
   },
-  userWrap: { alignSelf: "flex-end" },
-  botWrap: { alignSelf: "flex-start" },
+  userInner: {
+    alignSelf: "flex-end",
+  },
+  botInner: {
+    alignSelf: "flex-start",
+  },
   bubble: {
     paddingHorizontal: 14,
     paddingVertical: 11,

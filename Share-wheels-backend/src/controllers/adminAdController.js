@@ -14,10 +14,14 @@ module.exports = {
   createAd: async (req, res) => handle(res, () => adService.createAd(req.admin._id, req.body)),
   updateAd: async (req, res) => handle(res, () => adService.updateAd(req.params.id, req.body)),
   deleteAd: async (req, res) => handle(res, () => adService.deleteAd(req.params.id)),
-  uploadMedia: async (req, res) =>
-    handle(res, () =>
-      adService.uploadAdMedia(req.file, req.body?.mediaType || req.query?.mediaType)
-    ),
+  uploadMedia: async (req, res) => {
+    const mediaType =
+      req._adMediaType ||
+      req.body?.mediaType ||
+      req.query?.mediaType ||
+      (req.file?.mimetype?.startsWith("video/") ? "video" : "image");
+    return handle(res, () => adService.uploadAdMedia(req.file, mediaType));
+  },
   getMeta: async (_req, res) =>
     res.status(200).json({
       success: true,

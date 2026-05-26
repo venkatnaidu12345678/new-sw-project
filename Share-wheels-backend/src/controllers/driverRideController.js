@@ -19,4 +19,6 @@ module.exports = {
   pickCourier: async (req, res) => handle(res, () => driverRideService.pickCourier(req.user, req.body)),
   updateRideSeats: async (req, res) =>
     handle(res, () => driverRideService.updateRideSeats(req.user, req.body)),
+  updateRideOptions: async (req, res) =>
+    handle(res, () => driverRideService.updateRideOptions(req.user, req.body)),
 };

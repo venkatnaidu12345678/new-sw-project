@@ -25,16 +25,46 @@ export const base64ToImage = (base64String) => {
 
 /* ---------------- DATE & TIME ---------------- */
 
+const DATE_DISPLAY_OPTS = {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+};
+
+export const formatSingleDate = (value) => {
+  if (!value) return "N/A";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "N/A";
+  return date.toLocaleDateString("en-IN", DATE_DISPLAY_OPTS);
+};
+
+/** Handles ISO strings, Date values, and courier `{ startDate, endDate }` objects. */
+export const formatRequestDate = (value) => {
+  if (!value) return "N/A";
+
+  if (
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    !(value instanceof Date)
+  ) {
+    const start = value.startDate ?? value.start;
+    const end = value.endDate ?? value.end;
+    const startLabel = formatSingleDate(start);
+    if (end) {
+      const endLabel = formatSingleDate(end);
+      if (endLabel !== "N/A" && endLabel !== startLabel) {
+        return `${startLabel} – ${endLabel}`;
+      }
+    }
+    return startLabel;
+  }
+
+  return formatSingleDate(value);
+};
+
 export const convertDate = (isoString) => {
   if (!isoString) return "";
-
-  const date = new Date(isoString);
-
-  return date.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return formatSingleDate(isoString) === "N/A" ? "" : formatSingleDate(isoString);
 };
 
 export const convertTime = (isoString) => {

@@ -423,7 +423,7 @@ const getRideDetails = async (rideId, viewerId) => {
   if (!mongoose.Types.ObjectId.isValid(rideId)) return { status: 400, body: { success: false, message: "Invalid Ride ID" } };
   const ride = await Ride.findById(rideId)
     .select(
-      "passengers all_deliveries passenger_requested_ride users_request_Couriers status creator vehicle from to date startTime ride_amount availableSeats"
+      "passengers all_deliveries passenger_requested_ride users_request_Couriers status creator vehicle from to date startTime ride_amount availableSeats CanCarryCourier QuickReserve"
     )
     .populate("creator", USER_FIELDS)
     .populate("passengers.userId", USER_FIELDS)
@@ -482,6 +482,8 @@ const getRideDetails = async (rideId, viewerId) => {
         startTime: ride.startTime,
         ride_amount: ride.ride_amount,
         availableSeats: ride.availableSeats,
+        CanCarryCourier: !!ride.CanCarryCourier,
+        QuickReserve: !!ride.QuickReserve,
         passengers,
         all_deliveries,
         passenger_requested_ride: ride.passenger_requested_ride,

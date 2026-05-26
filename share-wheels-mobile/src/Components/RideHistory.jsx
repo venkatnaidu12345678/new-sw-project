@@ -41,6 +41,21 @@ const roleColors = {
   Courier: ["#EA580C", "#FDBA74"],
 };
 
+const toDateLabel = (value) => {
+  if (!value) return "—";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
+};
+
+const toTimeLabel = (value) => {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (!Number.isNaN(d.getTime())) {
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+  return typeof value === "string" ? value : "—";
+};
+
 const RideHistory = () => {
   const insets = useSafeAreaInsets();
   const { refreshAds } = useAds();
@@ -85,12 +100,10 @@ const RideHistory = () => {
               ? "Passenger"
               : "Courier",
 
-          formattedDate: new Date(ride.date).toLocaleDateString(),
-
-          formattedTime: new Date(ride.startTime).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
+          formattedDate: toDateLabel(ride.date),
+          formattedTime: toTimeLabel(ride.startTime || ride.date),
+          courierSnapshot:
+            ride.courierSnapshot || ride.activeData || ride.all_deliveries?.[0] || null,
         }));
 
         setRides(data);

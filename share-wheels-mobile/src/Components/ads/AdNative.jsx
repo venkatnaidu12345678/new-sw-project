@@ -10,7 +10,7 @@ import {
 import { LAYOUT, scale } from "../../theme/layout";
 import { recordAdClick, recordAdImpression } from "../../ApiService/adsApiService";
 
-const AdNative = ({ ad, style }) => {
+const AdNative = ({ ad, style, compact = false }) => {
   useEffect(() => {
     if (ad?._id) recordAdImpression(ad._id);
   }, [ad?._id]);
@@ -29,7 +29,11 @@ const AdNative = ({ ad, style }) => {
       onPress={open}
       style={[styles.card, style]}
     >
-      <Image source={{ uri: ad.mediaUrl }} style={styles.thumb} resizeMode="cover" />
+      <Image
+        source={{ uri: ad.mediaUrl }}
+        style={[styles.thumb, compact && styles.thumbCompact]}
+        resizeMode="cover"
+      />
       <View style={styles.body}>
         <View style={styles.row}>
           <Text style={styles.sponsored}>Sponsored</Text>
@@ -67,6 +71,10 @@ const styles = StyleSheet.create({
   thumb: {
     width: scale(100),
     minHeight: scale(100),
+  },
+  thumbCompact: {
+    width: scale(72),
+    minHeight: scale(72),
   },
   body: {
     flex: 1,

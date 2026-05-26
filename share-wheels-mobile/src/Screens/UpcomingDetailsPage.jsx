@@ -43,12 +43,18 @@ import UserAvatar from "../Components/ui/UserAvatar";
 import ScreenContainer from "../Components/ui/ScreenContainer";
 import ScreenHeader from "../Components/ui/ScreenHeader";
 import ParticipantCard from "../Components/ParticipantCard";
+import DriverParticipantPopover from "../Components/ui/DriverParticipantPopover";
+import {
+  buildDriverPassengerDetail,
+  buildDriverCourierDetail,
+} from "../Utils/driverParticipantDetails";
 import DriverContactCard from "../Components/DriverContactCard";
 import VehicleInfoStrip from "../Components/VehicleInfoStrip";
 import CourierParcelPreview, {
   formatCourierParcelLine,
 } from "../Components/CourierParcelPreview";
 import EditableRideSeats from "../Components/EditableRideSeats";
+import RideDriverSettings from "../Components/RideDriverSettings";
 import MessageIndicator from "../Components/ui/MessageIndicator";
 import { getRideChatMessages } from "../ApiService/chatApiServices";
 import { profileData } from "../Navigation/AuthNavigator";
@@ -98,10 +104,17 @@ const UpcomingDetailsPage = ({ route }) => {
   );
   const [passengers, setPassengers] = useState([]);
   const [selectedPassenger, setSelectedPassenger] = useState(null);
+  const [participantPopoverVisible, setParticipantPopoverVisible] = useState(false);
+  const [participantPopoverLoading, setParticipantPopoverLoading] = useState(false);
+  const [participantPopoverDetail, setParticipantPopoverDetail] = useState(null);
   const [couriers, setCouriers] = useState([]);
   const [localAvailableSeats, setLocalAvailableSeats] = useState(
     rideData?.availableSeats
   );
+  const [canCarryCourier, setCanCarryCourier] = useState(
+    !!rideData?.CanCarryCourier
+  );
+  const [quickReserve, setQuickReserve] = useState(!!rideData?.QuickReserve);
   const [courierRequests, setCourierRequests] = useState([]);
   const [passengerRequests, setPassengerRequests] = useState([]);
   const [rideStatus, setRideStatus] = useState(rideData?.status || "");
@@ -146,6 +159,12 @@ const UpcomingDetailsPage = ({ route }) => {
     }
     if (data.availableSeats != null) {
       setLocalAvailableSeats(data.availableSeats);
+    }
+    if (data.CanCarryCourier != null) {
+      setCanCarryCourier(!!data.CanCarryCourier);
+    }
+    if (data.QuickReserve != null) {
+      setQuickReserve(!!data.QuickReserve);
     }
   }, []);
 
@@ -221,6 +240,25 @@ const UpcomingDetailsPage = ({ route }) => {
 
   const handleCall = (phone, label = "contact") => {
     openPhoneCall(phone, label);
+  };
+
+  const openParticipantDetails = (item, roleType) => {
+    const detail =
+      roleType === "courier"
+        ? buildDriverCourierDetail(item, rideData?.from, rideData?.to)
+        : buildDriverPassengerDetail(item, rideData?.from, rideData?.to);
+    setParticipantPopoverDetail(detail);
+    setParticipantPopoverVisible(true);
+    setParticipantPopoverLoading(true);
+    requestAnimationFrame(() => {
+      setTimeout(() => setParticipantPopoverLoading(false), 180);
+    });
+  };
+
+  const closeParticipantPopover = () => {
+    setParticipantPopoverVisible(false);
+    setParticipantPopoverLoading(false);
+    setParticipantPopoverDetail(null);
   };
 
   const bookedSeats = (passengers || []).reduce(
@@ -601,14 +639,6 @@ const UpcomingDetailsPage = ({ route }) => {
     >
       <ScreenHeader title="Ride details" />
 
-      {rideData?.QuickReserve && isDriver && (
-        <View style={styles.quickReserveBanner}>
-          <Text style={styles.quickReserveBannerText}>
-            Quick Reserve is ON — passengers & couriers join without your approval
-          </Text>
-        </View>
-      )}
-
       <View style={styles.buttonContainer}>
         <TouchableOpacity
           style={[styles.roleButton, { backgroundColor: roleColor + "20" }]}
@@ -762,13 +792,35 @@ const UpcomingDetailsPage = ({ route }) => {
           )}
 
           {isDriver ? (
-            <EditableRideSeats
-              availableSeats={localAvailableSeats}
-              bookedSeats={bookedSeats}
-              canEdit={canEditSeats}
-              saving={seatsSaving}
-              onSave={handleSaveSeats}
-            />
+            <>
+              <EditableRideSeats
+                availableSeats={localAvailableSeats}
+                bookedSeats={bookedSeats}
+                canEdit={canEditSeats}
+                saving={seatsSaving}
+                onSave={handleSaveSeats}
+              />
+
+              {canEditSeats && (
+                <View style={[styles.card, styles.driverOptionsCard]}>
+                  <RideDriverSettings
+                    rideId={rideData?._id}
+                    token={driverToken}
+                    canCarryCourier={canCarryCourier}
+                    quickReserve={quickReserve}
+                    disabled={!driverToken}
+                    onUpdated={(opts) => {
+                      if (opts.CanCarryCourier != null) {
+                        setCanCarryCourier(!!opts.CanCarryCourier);
+                      }
+                      if (opts.QuickReserve != null) {
+                        setQuickReserve(!!opts.QuickReserve);
+                      }
+                    }}
+                  />
+                </View>
+              )}
+            </>
           ) : (
             <View style={[styles.card, { backgroundColor: "#FFF7ED" }]}>
               <Text style={styles.label}>
@@ -802,6 +854,14 @@ const UpcomingDetailsPage = ({ route }) => {
             <Text style={styles.value}>{convertTime(rideData?.startTime)}</Text>
           </View>
         </View>
+
+        {quickReserve && isDriver && canEditSeats ? (
+          <View style={styles.quickReserveBanner}>
+            <Text style={styles.quickReserveBannerText}>
+              Quick Reserve is ON — passengers & couriers join without your approval
+            </Text>
+          </View>
+        ) : null}
 
         {/* DRIVER VIEW */}
         {isDriver && (
@@ -855,6 +915,7 @@ const UpcomingDetailsPage = ({ route }) => {
                       setSelectedPassenger(item);
                       setActiveSlider("removePassenger");
                     }}
+                    onPress={() => openParticipantDetails(item, "passenger")}
                   />
                 ))}
               </ScrollView>
@@ -906,6 +967,7 @@ const UpcomingDetailsPage = ({ route }) => {
                       openDirectChat({ userId: item.userId, role: "courier" })
                     }
                     onRemove={() => handleRemoveCourier(item._id)}
+                    onPress={() => openParticipantDetails(item, "courier")}
                   />
                 ))}
               </ScrollView>
@@ -920,7 +982,7 @@ const UpcomingDetailsPage = ({ route }) => {
               </Text>
             </TouchableOpacity>
 
-            {!rideData?.QuickReserve && (
+            {!quickReserve && (
             <>
             <Text style={styles.section}>Passenger Requests</Text>
 
@@ -1178,6 +1240,13 @@ const UpcomingDetailsPage = ({ route }) => {
 
       </BottomSlider>
 
+      <DriverParticipantPopover
+        visible={participantPopoverVisible}
+        detail={participantPopoverDetail}
+        loading={participantPopoverLoading}
+        onClose={closeParticipantPopover}
+      />
+
 
       {isDriver && (
         <FixedButton
@@ -1325,6 +1394,23 @@ const styles = StyleSheet.create({
     fontSize: LAYOUT.font.small,
     color: DS.colors.text,
   },
+  participantDetailsWrap: {
+    paddingTop: 6,
+    paddingBottom: 14,
+  },
+  participantDetailsTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0F172A",
+    marginBottom: 10,
+  },
+  participantDetailsCard: {
+    backgroundColor: "#F8FAFC",
+    borderColor: "#E2E8F0",
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+  },
 
   otpButton: {
     borderWidth: 1,
@@ -1369,6 +1455,13 @@ const styles = StyleSheet.create({
   },
 
   card: { width: "48%", padding: 16, borderRadius: 16 },
+
+  driverOptionsCard: {
+    backgroundColor: "#EFF6FF",
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    justifyContent: "center",
+  },
 
   fullWidth: { width: "100%" },
 

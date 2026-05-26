@@ -21,6 +21,27 @@ import AdPlacement from "./ads/AdPlacement";
 const refId = (ref) =>
   ref?._id?.toString?.() || ref?.toString?.() || "";
 
+const formatDateLabel = (value) => {
+  if (!value) return "N/A";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "N/A" : d.toLocaleDateString();
+};
+
+const formatTimeLabel = (dateValue, timeValue) => {
+  if (timeValue) {
+    const parsed = new Date(timeValue);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+    if (typeof timeValue === "string") return timeValue;
+  }
+  if (!dateValue) return "N/A";
+  const d = new Date(dateValue);
+  return Number.isNaN(d.getTime())
+    ? "N/A"
+    : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
 const AllridesComponent = ({ rides = [], loading, navigation, currentUserId }) => {
   const visibleRides = (rides || []).filter((item) => {
     if (!currentUserId) return true;
@@ -70,23 +91,19 @@ const AllridesComponent = ({ rides = [], loading, navigation, currentUserId }) =
             </View>
           </View>
 
-          <Text style={styles.price}>
-            ₹{item?.ride_amount ?? 0}
-          </Text>
+          <Text style={styles.price}>₹{item?.ride_amount ?? 0}</Text>
         </View>
 
         {/* ⏱ FOOTER */}
         <View style={styles.footerRow}>
           <View style={styles.footerItem}>
             <Image source={clock1} style={styles.smallIcon} />
-            <Text style={styles.footerText}>
-              {item?.date
-                ? new Date(item.date).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                : "N/A"}
-            </Text>
+            <Text style={styles.footerText}>{formatTimeLabel(item?.date, item?.startTime)}</Text>
+          </View>
+
+          <View style={styles.footerItem}>
+            <Image source={clock1} style={styles.smallIcon} />
+            <Text style={styles.footerText}>{formatDateLabel(item?.date)}</Text>
           </View>
 
           <View style={styles.footerItem}>
@@ -147,6 +164,8 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     padding: 16,
     borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
 
     // iOS Shadow
     shadowColor: "#000",
@@ -160,9 +179,11 @@ const styles = StyleSheet.create({
 
   /* 🚩 ROUTE SECTION */
   routeContainer: {
-    backgroundColor: "#F9FAFB",
+    backgroundColor: "#F8FAFC",
     borderRadius: 10,
     padding: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
 
   routeRow: {

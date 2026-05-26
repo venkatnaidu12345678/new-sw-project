@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -18,13 +18,13 @@ import seatIcon from "../assets/person.png";
 import carIcon from "../assets/caricon1.png";
 import BackButton from "../Components/BackButton";
 /* COMPONENTS */
-import BottomSlider from "./BottomSlider";
-import RideHistoryPassengerview from "./RideHistoryPassengerview";
-import RideHistoryCourierview from "./RideHistoryCourierview";
+import RequestDetailPopover from "./ui/RequestDetailPopover";
+import { buildMyRequestDetail } from "../Utils/driverParticipantDetails";
 
 /* API */
 import { getMyRequests } from "../ApiService/ridesApiServices";
 import { getApiErrorMessage } from "../Utils/apiErrors";
+import { formatRequestDate } from "../Utils";
 import { RideListSkeleton } from "./ui/Skeleton";
 import AnimatedLoad from "./ui/AnimatedLoad";
 import AnimatedTabs from "./ui/AnimatedTabs";
@@ -35,6 +35,12 @@ import ScreenContainer from "./ui/ScreenContainer";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LAYOUT, getScrollBottomPadding } from "../theme/layout";
 
+const resolveRequestDate = (item) => {
+  const primary = formatRequestDate(item?.date);
+  if (primary !== "N/A") return primary;
+  return formatRequestDate(item?.requestedAt || item?.createdAt);
+};
+
 const MyRequest = () => {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState("Passenger");
@@ -43,7 +49,8 @@ const MyRequest = () => {
   const [fetchError, setFetchError] = useState("");
 
   const [selectedRide, setSelectedRide] = useState(null);
-  const [isSliderVisible, setSliderVisible] = useState(false);
+  const [popoverVisible, setPopoverVisible] = useState(false);
+  const [popoverLoading, setPopoverLoading] = useState(false);
 
   const tabs = ["Passenger", "Courier"];
   const activeIndex = tabs.indexOf(activeTab);
@@ -69,24 +76,17 @@ const MyRequest = () => {
             !item.assignedRide
         )
         .map((item) => ({
-        id: item.requestId,
-        role: "Passenger",
-        from: item.from,
-        to: item.to,
-
-        date: item.date
-          ? new Date(item.date).toLocaleDateString()
-          : "N/A",
-
-        time: item.startTime || "--",
-
-        car: item.driver?.name || "Driver", // driver name
-        seats: item.seats || "-", // seats
-
-        price: `₹${item.amount || 0}`,
-        status: "Pending",
-
-        raw: item,
+          id: item.requestId,
+          role: "Passenger",
+          from: item.from,
+          to: item.to,
+          date: resolveRequestDate(item),
+          time: item.startTime || "--",
+          car: item.driver?.name || "—",
+          seats: item.seats || "-",
+          price: `₹${item.amount || 0}`,
+          status: item.status || "pending",
+          raw: item,
       }));
 
       /* ✅ COURIER — hide once a driver has picked the parcel */
@@ -97,24 +97,17 @@ const MyRequest = () => {
             !item.assignedRide
         )
         .map((item) => ({
-        id: item.requestId,
-        role: "Courier",
-        from: item.from,
-        to: item.to,
-
-        date: item.date
-          ? new Date(item.date).toLocaleDateString()
-          : "N/A",
-
-        time: item.timeSlot || "--",
-
-        car: item.driver?.name || "N/A", // ✅ driver name here
-        seats: item.type || "Parcel", // ✅ type shown in seats place
-
-        price: `₹${item.amount || 0}`,
-        status: item.status || "Pending",
-
-        raw: item,
+          id: item.requestId,
+          role: "Courier",
+          from: item.from,
+          to: item.to,
+          date: resolveRequestDate(item),
+          time: item.timeSlot || "--",
+          car: item.courierNumber || item.receiver?.name || "Courier",
+          seats: item.parcel || item.what_to_deliver || "-",
+          price: `₹${item.amount || 0}`,
+          status: item.status || "pending",
+          raw: item,
       }));
 
       setRides([...passenger, ...courier]);
@@ -143,22 +136,22 @@ const MyRequest = () => {
   );
 
   const handleRidePress = (ride) => {
-    setSelectedRide(ride);
-    setSliderVisible(true);
+    setSelectedRide(buildMyRequestDetail(ride));
+    setPopoverVisible(true);
+    setPopoverLoading(true);
+    requestAnimationFrame(() => {
+      setTimeout(() => setPopoverLoading(false), 180);
+    });
   };
 
-  const renderSliderContent = () => {
-    if (!selectedRide) return null;
-
-    return selectedRide.role === "Passenger" ? (
-      <RideHistoryPassengerview ride={selectedRide} />
-    ) : (
-      <RideHistoryCourierview ride={selectedRide} />
-    );
+  const closePopover = () => {
+    setPopoverVisible(false);
+    setPopoverLoading(false);
+    setSelectedRide(null);
   };
 
   const renderRide = ({ item }) => (
-    <TouchableOpacity onPress={() => handleRidePress(item)}>
+    <TouchableOpacity activeOpacity={0.85} onPress={() => handleRidePress(item)}>
       <LinearGradient
         colors={["#F1F5F9", "#F8FAFC"]}
         style={[
@@ -191,14 +184,25 @@ const MyRequest = () => {
             <Text style={styles.metaText}>{item.date}</Text>
           </View>
 
+          {item.time && item.time !== "--" ? (
+            <View style={styles.metaItem}>
+              <Image source={clockIcon} style={styles.metaIcon} />
+              <Text style={styles.metaText}>{item.time}</Text>
+            </View>
+          ) : null}
+
           <View style={styles.metaItem}>
             <Image source={seatIcon} style={styles.metaIcon} />
-            <Text style={styles.metaText}>{item.seats}</Text>
+            <Text style={styles.metaText} numberOfLines={1}>
+              {item.seats}
+            </Text>
           </View>
 
           <View style={styles.metaItem}>
             <Image source={carIcon} style={styles.metaIcon} />
-            <Text style={styles.metaText}>{item.car}</Text>
+            <Text style={styles.metaText} numberOfLines={1}>
+              {item.car}
+            </Text>
           </View>
         </View>
 
@@ -251,10 +255,12 @@ const MyRequest = () => {
         />
       </FadePanel>
 
-      {/* Slider unchanged */}
-      {/* <BottomSlider visible={isSliderVisible} onClose={() => setSliderVisible(false)}>
-        {renderSliderContent()}
-      </BottomSlider> */}
+      <RequestDetailPopover
+        visible={popoverVisible}
+        request={selectedRide}
+        loading={popoverLoading}
+        onClose={closePopover}
+      />
       </AnimatedLoad>
     </ScreenContainer>
   );
@@ -284,38 +290,6 @@ headerTitle: {
   marginLeft: 10,
   color: "#111827",
 },
-
-  tabs: {
-    flexDirection: "row",
-    backgroundColor: "#E2E8F0",
-    borderRadius: 30,
-    overflow: "hidden",
-    marginBottom: 16,
-  },
-
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: "center",
-    zIndex: 2,
-  },
-
-  indicator: {
-    position: "absolute",
-    height: "100%",
-    backgroundColor: "#2653bb",
-    borderRadius: 30,
-  },
-
-  tabText: {
-    color: "#475569",
-    fontWeight: "500",
-  },
-
-  activeTabText: {
-    color: "#fff",
-    fontWeight: "700",
-  },
 
   emptyText: {
     textAlign: "center",
@@ -383,6 +357,7 @@ headerTitle: {
   routeText: {
     marginLeft: 6,
     fontWeight: "600",
+    flex: 1,
   },
 
   metaRow: {
@@ -395,6 +370,7 @@ headerTitle: {
   metaItem: {
     flexDirection: "row",
     alignItems: "center",
+    maxWidth: "48%",
   },
 
   metaIcon: {
@@ -405,6 +381,7 @@ headerTitle: {
 
   metaText: {
     fontSize: 12,
+    flexShrink: 1,
   },
 
   line: {

@@ -23,7 +23,7 @@ const roleIcon = (role) =>
       font-size:17px;border:2px solid #fff;
       box-shadow:0 2px 6px rgba(0,0,0,.35);
       background:${role === "driver" ? "#2563eb" : role === "courier" ? "#d97706" : "#16a34a"};
-    ">${role === "driver" ? "🚗" : role === "courier" ? "📦" : "👤"}</div>`,
+    ">${role === "driver" ? "??" : role === "courier" ? "??" : "??"}</div>`,
     iconSize: [34, 34],
     iconAnchor: [17, 17],
   });
@@ -97,6 +97,7 @@ export default function LiveTracking() {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -142,6 +143,15 @@ export default function LiveTracking() {
     [rides, selectedId]
   );
 
+  const filteredRides = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rides;
+    return rides.filter((r) => {
+      const hay = `${r.from || ""} ${r.to || ""} ${r.driver?.name || ""}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [rides, search]);
+
   const pathPositions = useMemo(() => {
     const path = detail?.liveTracking?.locationHistory || selectedRide?.path || [];
     return path
@@ -179,51 +189,73 @@ export default function LiveTracking() {
         Driver, passenger, and courier locations when a ride is started and GPS is shared.
       </p>
       <div style={styles.legend}>
-        <span>🚗 Driver</span>
-        <span>👤 Passenger</span>
-        <span>📦 Courier</span>
+        <span>?? Driver</span>
+        <span>?? Passenger</span>
+        <span>?? Courier</span>
       </div>
       {error && <p style={{ color: "#b91c1c", marginBottom: 12 }}>{error}</p>}
 
       <div style={styles.layout}>
         <div style={styles.sidebar}>
-          <h3 style={styles.sideTitle}>Active rides ({rides.length})</h3>
+          <h3 style={styles.sideTitle}>Active rides ({filteredRides.length})</h3>
+
+          <div className="toolbar" style={{ marginBottom: 12 }}>
+            <input
+              placeholder="Search route or driver�"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ maxWidth: 220 }}
+            />
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() =>
+                alert("Create is not available for live tracking yet.")
+              }
+            >
+              Create
+            </button>
+          </div>
+
           {loading && rides.length === 0 ? (
-            <p>Loading…</p>
-          ) : rides.length === 0 ? (
-            <p style={styles.muted}>No rides in progress yet.</p>
+            <p>Loading...</p>
+          ) : filteredRides.length === 0 ? (
+            <p style={styles.muted}>No active rides match your search.</p>
           ) : (
-            rides.map((r) => (
-              <button
-                key={r.rideId}
-                type="button"
-                style={{
-                  ...styles.rideCard,
-                  ...(rideKey(selectedId) === rideKey(r.rideId) ? styles.rideCardActive : {}),
-                }}
-                onClick={() => setSelectedId(r.rideId)}
-              >
-                <div style={styles.rideRoute}>
-                  {r.from} → {r.to}
-                </div>
-                <div style={styles.rideMeta}>
-                  Driver: {r.driver?.name || "—"} · {r.passengerCount} passenger(s)
-                </div>
-                {r.location ? (
-                  <div style={styles.gpsOk}>
-                    Driver GPS ({r.location.lat.toFixed(4)}, {r.location.lng.toFixed(4)})
-                  </div>
-                ) : (
-                  <div style={styles.gpsWait}>Waiting for driver GPS…</div>
-                )}
-                {(r.participants || []).filter((p) => p.role !== "driver").length > 0 && (
-                  <div style={styles.gpsOk}>
-                    +{(r.participants || []).filter((p) => p.role !== "driver").length} other
-                    participant(s) on map
-                  </div>
-                )}
-              </button>
-            ))
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Route</th>
+                    <th>Driver</th>
+                    <th>GPS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRides.map((r) => {
+                    const active = rideKey(selectedId) === rideKey(r.rideId);
+                    return (
+                      <tr
+                        key={r.rideId}
+                        style={{
+                          cursor: "pointer",
+                          background: active ? "#EFF6FF" : "transparent",
+                        }}
+                        onClick={() => setSelectedId(r.rideId)}
+                      >
+                        <td>{r.from} ? {r.to}</td>
+                        <td>{r.driver?.name || "�"}</td>
+                        <td style={{ fontWeight: 800, color: r.location ? "#16a34a" : "#d97706" }}>
+                          {r.location
+                            ? `(${r.location.lat.toFixed(2)}, ${r.location.lng.toFixed(2)})`
+                            : "Waiting"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 

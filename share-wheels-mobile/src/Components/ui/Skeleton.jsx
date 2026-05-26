@@ -278,6 +278,39 @@ export const SearchBarSkeleton = () => (
   </ShimmerProvider>
 );
 
+export const AdPlacementSkeleton = ({ variant = "banner" }) => (
+  <ShimmerProvider>
+    <GlassBone
+      height={variant === "video" ? 188 : 88}
+      borderRadius={14}
+      style={{ marginVertical: 8 }}
+    />
+  </ShimmerProvider>
+);
+
+/** Full dashboard loading state */
+export const DashboardSkeleton = () => (
+  <ShimmerProvider>
+    <View style={styles.dashboardWrap}>
+      <View style={styles.dashboardNav}>
+        <GlassBone width={44} height={44} borderRadius={22} />
+        <View style={{ flex: 1, marginLeft: 12 }}>
+          <GlassBone width="55%" height={14} borderRadius={6} style={styles.mb6} />
+          <GlassBone width="35%" height={12} borderRadius={4} />
+        </View>
+        <GlassBone width={40} height={40} borderRadius={12} />
+      </View>
+      <GlassBone width="75%" height={22} borderRadius={8} style={styles.mb10} />
+      <AdPlacementSkeleton variant="banner" />
+      <SearchBarSkeleton />
+      <AdPlacementSkeleton variant="video" />
+      <GlassBone width={120} height={18} borderRadius={6} style={{ marginVertical: 12 }} />
+      <AdPlacementSkeleton variant="banner" />
+      <RideListSkeleton count={2} variant="upcoming" />
+    </View>
+  </ShimmerProvider>
+);
+
 export { ChatListSkeleton };
 export default GlassBone;
 
@@ -466,6 +499,16 @@ const styles = StyleSheet.create({
   searchWrap: {
     marginVertical: 10,
     padding: 8,
+  },
+  dashboardWrap: {
+    flex: 1,
+    paddingTop: 4,
+  },
+  dashboardNav: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    paddingVertical: 8,
   },
 
   mb6: { marginBottom: 6 },

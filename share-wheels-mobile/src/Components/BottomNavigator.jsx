@@ -1,6 +1,7 @@
 import React from "react";
-import { View, StyleSheet, Image } from "react-native";
+import { View, StyleSheet, Image, Platform } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/Ionicons";
 
 import DashboardPage from "../Screens/DashboardPage";
@@ -14,12 +15,22 @@ import requestIcon from "../assets/requesticon.png";
 const Tab = createBottomTabNavigator();
 
 export default function BottomNavigator() {
+  const insets = useSafeAreaInsets();
+  const androidNavInset = Platform.OS === "android" ? Math.max(insets.bottom, 12) : insets.bottom;
+  const tabBottom = Platform.OS === "ios" ? Math.max(insets.bottom, 12) + 4 : androidNavInset + 6;
+  const tabHeight = LAYOUT.sizes.tabBarHeight + (Platform.OS === "android" ? 4 : 0);
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarShowLabel: false,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: {
+          ...styles.tabBar,
+          bottom: tabBottom,
+          height: tabHeight,
+          paddingBottom: Platform.OS === "android" ? 6 : 4,
+        },
         tabBarItemStyle: styles.tabItem,
         animation: "fade",
         sceneStyle: { backgroundColor: "#F8FAFC", flex: 1 },
@@ -70,11 +81,9 @@ export default function BottomNavigator() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    height: LAYOUT.sizes.tabBarHeight,
     position: "absolute",
     left: scale(16),
     right: scale(16),
-    bottom: LAYOUT.sizes.tabBarBottom,
     borderRadius: scale(18),
     backgroundColor: "#FFFFFF",
     borderTopWidth: 0,

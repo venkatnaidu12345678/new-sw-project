@@ -26,76 +26,44 @@ export default function Login() {
   };
 
   return (
-    <div style={styles.page}>
-      <form style={styles.card} onSubmit={handleSubmit}>
-        <h1 style={styles.title}>Share Wheels Admin</h1>
-        <p style={styles.sub}>Sign in to manage users, rides, and requests</p>
-        {error && <div style={styles.error}>{error}</div>}
-        <label style={styles.label}>
-          Email
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoComplete="email"
-          />
-        </label>
-        <label style={styles.label}>
-          Password
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoComplete="current-password"
-          />
-        </label>
-        <button type="submit" style={styles.btn} disabled={loading}>
-          {loading ? "Signing inâ€¦" : "Sign in"}
-        </button>
+    <div className="login-page">
+      <form className="login-card" onSubmit={handleSubmit}>
+        <div className="login-logo">SW</div>
+        <h1 className="login-title">Share Wheels Admin</h1>
+        <p className="login-sub">Sign in to manage users, rides, requests, and ads.</p>
+
+        {error ? <div className="alert alert-error">{error}</div> : null}
+
+        <div className="login-form">
+          <div className="form-field" style={{ marginBottom: 0 }}>
+            <label>Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+              placeholder="admin@example.com"
+            />
+          </div>
+
+          <div className="form-field" style={{ marginBottom: 0 }}>
+            <label>Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="current-password"
+              placeholder="••••••••"
+            />
+          </div>
+
+          <button type="submit" className="btn btn-primary" disabled={loading}>
+            {loading ? "Signing in…" : "Sign in"}
+          </button>
+        </div>
       </form>
     </div>
   );
 }
-
-const styles = {
-  page: {
-    minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%)",
-    padding: 24,
-  },
-  card: {
-    width: "100%",
-    maxWidth: 400,
-    background: "#fff",
-    borderRadius: 16,
-    padding: 32,
-    boxShadow: "0 20px 50px rgba(0,0,0,0.25)",
-    display: "flex",
-    flexDirection: "column",
-    gap: 16,
-  },
-  title: { fontSize: 24, fontWeight: 800 },
-  sub: { color: "#64748b", fontSize: 14, marginBottom: 8 },
-  label: { display: "flex", flexDirection: "column", gap: 6, fontSize: 14, fontWeight: 600 },
-  btn: {
-    marginTop: 8,
-    padding: 12,
-    borderRadius: 10,
-    border: "none",
-    background: "#2563eb",
-    color: "#fff",
-    fontWeight: 700,
-  },
-  error: {
-    background: "#fee2e2",
-    color: "#b91c1c",
-    padding: 10,
-    borderRadius: 8,
-    fontSize: 14,
-  },
-};

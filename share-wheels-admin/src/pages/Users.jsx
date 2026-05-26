@@ -1,14 +1,22 @@
 import { useEffect, useState } from "react";
 import { getUsers, updateUserVerification } from "../api/client";
+import PageHeader from "../components/ui/PageHeader";
+import Loading from "../components/ui/Loading";
 
 export default function Users() {
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState("");
+  const [verifiedFilter, setVerifiedFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const onCreate = () => {
+    alert("Create users is not available in this admin UI yet.");
+  };
+
   const load = () => {
     setLoading(true);
+    setError("");
     getUsers({ search, limit: 50 })
       .then((res) => setUsers(res.users || []))
       .catch((e) => setError(e.message))
@@ -28,75 +36,89 @@ export default function Users() {
     }
   };
 
+  const filteredUsers = users.filter((u) => {
+    if (verifiedFilter === "all") return true;
+    return verifiedFilter === "verified" ? !!u.isVerified : !u.isVerified;
+  });
+
   return (
     <div>
-      <h1 style={styles.heading}>Users</h1>
-      <div style={styles.toolbar}>
+      <PageHeader title="Users" subtitle="Review and verify user accounts." />
+
+      <div className="toolbar" style={{ marginBottom: 20 }}>
         <input
-          placeholder="Search name, email, mobile…"
+          placeholder="Search name, email, mobile?"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{ maxWidth: 320 }}
+          style={{ maxWidth: 360 }}
         />
-        <button type="button" style={styles.btn} onClick={load}>
+        <select
+          value={verifiedFilter}
+          onChange={(e) => setVerifiedFilter(e.target.value)}
+          style={{ maxWidth: 220 }}
+        >
+          <option value="all">All</option>
+          <option value="verified">Verified</option>
+          <option value="unverified">Unverified</option>
+        </select>
+        <button type="button" className="btn btn-secondary" onClick={onCreate}>
+          Create
+        </button>
+        <button type="button" className="btn btn-primary" onClick={load}>
           Search
         </button>
       </div>
-      {error && <p style={{ color: "#b91c1c" }}>{error}</p>}
+
+      {error ? <div className="alert alert-error">{error}</div> : null}
+
       {loading ? (
-        <p>Loading…</p>
+        <Loading message="Loading users?" />
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Mobile</th>
-              <th>Verified</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u._id}>
-                <td>{u.name}</td>
-                <td>{u.email}</td>
-                <td>{u.mobile}</td>
-                <td>{u.isVerified ? "Yes" : "No"}</td>
-                <td>
-                  <button
-                    type="button"
-                    style={styles.smallBtn}
-                    onClick={() => toggleVerify(u._id, u.isVerified)}
-                  >
-                    {u.isVerified ? "Unverify" : "Verify"}
-                  </button>
-                </td>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Mobile</th>
+                <th>Verified</th>
+                <th>Action</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filteredUsers.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="empty-state">
+                    No users found.
+                  </td>
+                </tr>
+              ) : (
+                filteredUsers.map((u) => (
+                  <tr key={u._id}>
+                    <td>{u.name || "?"}</td>
+                    <td>{u.email || "?"}</td>
+                    <td>{u.mobile || "?"}</td>
+                    <td>
+                      <span className={`badge ${u.isVerified ? "badge-active" : "badge-inactive"}`}>
+                        {u.isVerified ? "Verified" : "Unverified"}
+                      </span>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => toggleVerify(u._id, u.isVerified)}
+                      >
+                        {u.isVerified ? "Unverify" : "Verify"}
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
 }
-
-const styles = {
-  heading: { fontSize: 28, fontWeight: 800, marginBottom: 20 },
-  toolbar: { display: "flex", gap: 12, marginBottom: 20 },
-  btn: {
-    padding: "10px 18px",
-    borderRadius: 8,
-    border: "none",
-    background: "#2563eb",
-    color: "#fff",
-    fontWeight: 600,
-  },
-  smallBtn: {
-    padding: "6px 12px",
-    borderRadius: 6,
-    border: "1px solid #cbd5e1",
-    background: "#fff",
-    fontSize: 13,
-  },
-};

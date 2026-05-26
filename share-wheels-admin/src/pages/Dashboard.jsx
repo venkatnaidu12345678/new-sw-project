@@ -1,59 +1,59 @@
 import { useEffect, useState } from "react";
 import { getStats } from "../api/client";
+import PageHeader from "../components/ui/PageHeader";
+import Loading from "../components/ui/Loading";
 
-const StatCard = ({ label, value, color }) => (
-  <div style={{ ...styles.card, borderLeft: `4px solid ${color}` }}>
-    <div style={styles.cardLabel}>{label}</div>
-    <div style={styles.cardValue}>{value ?? "—"}</div>
-  </div>
-);
+const STAT_ITEMS = [
+  { key: "totalUsers", label: "Total Users", icon: "U", iconBg: "#DBEAFE", iconColor: "#1D4ED8" },
+  { key: "verifiedUsers", label: "Verified Users", icon: "V", iconBg: "#DCFCE7", iconColor: "#15803D" },
+  { key: "totalRides", label: "Total Rides", icon: "R", iconBg: "#EDE9FE", iconColor: "#6D28D9" },
+  { key: "activeRides", label: "Active Rides", icon: "A", iconBg: "#CFFAFE", iconColor: "#0E7490" },
+  { key: "completedRides", label: "Completed Rides", icon: "C", iconBg: "#DCFCE7", iconColor: "#15803D" },
+  { key: "openPassengerRequests", label: "Open Passenger Requests", icon: "P", iconBg: "#FFEDD5", iconColor: "#C2410C" },
+  { key: "openCouriers", label: "Open Couriers", icon: "Q", iconBg: "#FCE7F3", iconColor: "#BE185D" },
+];
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     getStats()
-      .then((res) => setStats(res.stats))
-      .catch((e) => setError(e.message));
+      .then((res) => setStats(res.stats || {}))
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
   }, []);
 
   return (
     <div>
-      <h1 style={styles.heading}>Dashboard</h1>
-      <p style={styles.sub}>Platform overview</p>
-      {error && <p style={{ color: "#b91c1c", marginBottom: 16 }}>{error}</p>}
-      <div style={styles.grid}>
-        <StatCard label="Total Users" value={stats?.totalUsers} color="#2563eb" />
-        <StatCard label="Verified Users" value={stats?.verifiedUsers} color="#16a34a" />
-        <StatCard label="Total Rides" value={stats?.totalRides} color="#7c3aed" />
-        <StatCard label="Active Rides" value={stats?.activeRides} color="#0891b2" />
-        <StatCard label="Completed Rides" value={stats?.completedRides} color="#15803d" />
-        <StatCard
-          label="Open Passenger Requests"
-          value={stats?.openPassengerRequests}
-          color="#ea580c"
-        />
-        <StatCard label="Open Couriers" value={stats?.openCouriers} color="#db2777" />
-      </div>
+      <PageHeader title="Dashboard" subtitle="Platform overview and live business health." />
+
+      {error ? <div className="alert alert-error">{error}</div> : null}
+
+      {loading ? (
+        <Loading message="Loading dashboard stats?" />
+      ) : (
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Metric</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {STAT_ITEMS.map((item) => (
+                <tr key={item.key}>
+                  <td>{item.label}</td>
+                  <td style={{ fontWeight: 800 }}>{stats?.[item.key] ?? "?"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
-
-const styles = {
-  heading: { fontSize: 28, fontWeight: 800, marginBottom: 4 },
-  sub: { color: "#64748b", marginBottom: 28 },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-    gap: 16,
-  },
-  card: {
-    background: "#fff",
-    borderRadius: 12,
-    padding: 20,
-    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-  },
-  cardLabel: { fontSize: 13, color: "#64748b", marginBottom: 8 },
-  cardValue: { fontSize: 28, fontWeight: 800 },
-};

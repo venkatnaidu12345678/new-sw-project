@@ -10,7 +10,7 @@ import {
 import { LAYOUT, scale } from "../../theme/layout";
 import { recordAdClick, recordAdImpression } from "../../ApiService/adsApiService";
 
-const AdBanner = ({ ad, style }) => {
+const AdBanner = ({ ad, style, compact = false }) => {
   const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
@@ -29,24 +29,28 @@ const AdBanner = ({ ad, style }) => {
     <TouchableOpacity
       activeOpacity={0.9}
       onPress={open}
-      style={[styles.wrap, style]}
+      style={[styles.wrap, compact && styles.wrapCompact, style]}
     >
       {!imgError ? (
         <Image
           source={{ uri: ad.mediaUrl }}
-          style={styles.image}
+          style={[styles.image, compact && styles.imageCompact]}
           resizeMode="cover"
           onError={() => setImgError(true)}
         />
       ) : (
-        <View style={[styles.image, styles.fallback]}>
+        <View style={[styles.image, compact && styles.imageCompact, styles.fallback]}>
           <Text style={styles.fallbackText}>{ad.title || "Sponsored"}</Text>
         </View>
       )}
       <View style={styles.badge}>
         <Text style={styles.badgeText}>Ad</Text>
       </View>
-      {ad.title ? <Text style={styles.title} numberOfLines={1}>{ad.title}</Text> : null}
+      {!compact && ad.title ? (
+        <Text style={styles.title} numberOfLines={1}>
+          {ad.title}
+        </Text>
+      ) : null}
     </TouchableOpacity>
   );
 };
@@ -60,9 +64,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#E2E8F0",
     marginVertical: LAYOUT.spacing.sm,
   },
+  wrapCompact: {
+    marginVertical: 4,
+    borderRadius: 10,
+  },
   image: {
     width: "100%",
     height: scale(100),
+  },
+  imageCompact: {
+    height: scale(72),
   },
   badge: {
     position: "absolute",

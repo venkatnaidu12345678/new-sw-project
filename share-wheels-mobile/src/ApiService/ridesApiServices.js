@@ -514,6 +514,26 @@ export const userProfile = async (token) => {
   }
 };
 
+export const updateRideOptions = async (token, { rideId, CanCarryCourier, QuickReserve }) => {
+  try {
+    const response = await fetch(`${baseUrl}${endPoints.updateRideOptionsurl}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ rideId, CanCarryCourier, QuickReserve }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || data.error || "Failed to update ride options");
+    }
+    return data;
+  } catch (error) {
+    throw new Error(error.message || "Failed to update ride options");
+  }
+};
+
 export const updateRideSeats = async (token, { rideId, totalSeats }) => {
   try {
     const response = await fetch(`${baseUrl}${endPoints.updateRideSeatsurl}`, {

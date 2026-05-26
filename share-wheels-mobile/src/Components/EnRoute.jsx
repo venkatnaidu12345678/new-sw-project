@@ -18,7 +18,9 @@ import {
 import carIcon from "../assets/caricon.png";
 import courierIcon from "../assets/courier.png";
 import UserAvatar from "./ui/UserAvatar";
+import DriverParticipantPopover from "./ui/DriverParticipantPopover";
 import { profileFromUrl } from "../Utils/profileImage";
+import { buildEnrouteDetail } from "../Utils/driverParticipantDetails";
 import { LAYOUT } from "../theme/layout";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -30,37 +32,41 @@ import {
 import { useEnrouteSocket } from "../hooks/useAppSocket";
 
 /* ================= CARD ================= */
-const PassengerCard = memo(({ item, onSendRequest, isSent }) => {
+const PassengerCard = memo(({ item, onSendRequest, onShowDetails, isSent }) => {
   const isCourier = item.type === "courier";
 
   return (
     <View style={styles.card}>
-      <View style={styles.row}>
-        
-        {/* LEFT: IMAGE + DETAILS */}
-        <View style={{ flexDirection: "row", flex: 1 }}>
-          <UserAvatar
-            user={profileFromUrl(item.profile)}
-            size={LAYOUT.sizes.avatarMd + 4}
-            style={styles.profileImage}
-          />
-          
-          <View style={{ marginLeft: 10, flex: 1 }}>
-            <Text style={styles.name}>{item.name}</Text>
-            <Text style={styles.details}>{item.details}</Text>
-            <Text style={styles.pickup}>{item.route}</Text>
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={() => onShowDetails(item)}
+        style={styles.cardBody}
+      >
+        <View style={styles.row}>
+          <View style={{ flexDirection: "row", flex: 1 }}>
+            <UserAvatar
+              user={profileFromUrl(item.profile)}
+              size={LAYOUT.sizes.avatarMd + 4}
+              style={styles.profileImage}
+            />
+
+            <View style={{ marginLeft: 10, flex: 1 }}>
+              <Text style={styles.name}>{item.name}</Text>
+              <Text style={styles.details}>{item.details}</Text>
+              <Text style={styles.pickup}>{item.route}</Text>
+              <Text style={styles.tapHint}>Tap for details</Text>
+            </View>
+          </View>
+
+          <View style={styles.priceContainer}>
+            <Image
+              source={isCourier ? courierIcon : carIcon}
+              style={styles.typeIcon}
+            />
+            <Text style={styles.price}>₹{item.price}</Text>
           </View>
         </View>
-
-        {/* RIGHT: PRICE */}
-        <View style={styles.priceContainer}>
-          <Image
-            source={isCourier ? courierIcon : carIcon}
-            style={styles.typeIcon}
-          />
-          <Text style={styles.price}>₹{item.price}</Text>
-        </View>
-      </View>
+      </TouchableOpacity>
 
       <TouchableOpacity
         style={[styles.button, isSent && styles.sentButton]}
@@ -91,6 +97,9 @@ const EnRoutePassengers = ({ from, to, date, rideId, onPickSuccess }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [reloadapi, setReloadApi] = useState(true);
+  const [popoverVisible, setPopoverVisible] = useState(false);
+  const [popoverLoading, setPopoverLoading] = useState(false);
+  const [popoverDetail, setPopoverDetail] = useState(null);
 
   const removePickedFromList = (payload) => {
     if (!payload) return;
@@ -115,7 +124,6 @@ const EnRoutePassengers = ({ from, to, date, rideId, onPickSuccess }) => {
 
   useEnrouteSocket({ from, to, date, onRequestRemoved: removePickedFromList });
 
-  /* ================= FETCH ================= */
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -138,13 +146,16 @@ const EnRoutePassengers = ({ from, to, date, rideId, onPickSuccess }) => {
             courierId: item.courierId || item.courier_id,
             passengerId: item.passengerId || item.passenger_id,
             name: item.name || "Unknown",
-            profile: item.profile || null, // ✅ PROFILE IMAGE
+            profile: item.profile || null,
+            gender: item.gender || "",
+            timeSlot: item.timeSlot || "",
             details: isCourier
               ? item.what_to_deliver || "Courier Item"
               : `Seats: ${item.seats_needed || 1}`,
             route: `${from} → ${to}`,
             price: item.amount ?? item.amount_will ?? 0,
             type: isCourier ? "courier" : "passenger",
+            raw: item,
           };
         });
 
@@ -166,13 +177,26 @@ const EnRoutePassengers = ({ from, to, date, rideId, onPickSuccess }) => {
     }
   }, [from, to, date, reloadapi]);
 
-  /* ================= FILTER ================= */
   const filteredData = useMemo(() => {
     if (activeTab === "all") return data;
     return data.filter((item) => item.type === activeTab);
   }, [activeTab, data]);
 
-  /* ================= SEND REQUEST ================= */
+  const openDetails = (item) => {
+    setPopoverDetail(buildEnrouteDetail(item, from, to, date));
+    setPopoverVisible(true);
+    setPopoverLoading(true);
+    requestAnimationFrame(() => {
+      setTimeout(() => setPopoverLoading(false), 180);
+    });
+  };
+
+  const closePopover = () => {
+    setPopoverVisible(false);
+    setPopoverLoading(false);
+    setPopoverDetail(null);
+  };
+
   const handleSendRequest = async (item) => {
     try {
       const token = await AsyncStorage.getItem("token");
@@ -225,11 +249,11 @@ const EnRoutePassengers = ({ from, to, date, rideId, onPickSuccess }) => {
     }
   };
 
-  /* ================= RENDER ================= */
   const renderItem = ({ item }) => (
     <PassengerCard
       item={item}
       onSendRequest={handleSendRequest}
+      onShowDetails={openDetails}
       isSent={sentRequests[item.id]}
     />
   );
@@ -274,6 +298,13 @@ const EnRoutePassengers = ({ from, to, date, rideId, onPickSuccess }) => {
           renderItem={renderItem}
         />
       )}
+
+      <DriverParticipantPopover
+        visible={popoverVisible}
+        detail={popoverDetail}
+        loading={popoverLoading}
+        onClose={closePopover}
+      />
     </View>
   );
 };
@@ -307,10 +338,13 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
 
+  cardBody: {
+    marginBottom: 12,
+  },
+
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 12,
   },
 
   profileImage: {
@@ -323,6 +357,7 @@ const styles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: "600" },
   details: { fontSize: 13, color: "#6B7280" },
   pickup: { fontSize: 13, color: "#6B7280" },
+  tapHint: { fontSize: 11, color: "#2563EB", marginTop: 4, fontWeight: "600" },
 
   priceContainer: { alignItems: "center" },
   typeIcon: { width: 20, height: 20, marginBottom: 4 },

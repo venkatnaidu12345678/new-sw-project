@@ -69,11 +69,16 @@ export const LAYOUT = {
 };
 
 /** Space needed above home-indicator + floating tab bar. */
-export const getTabBarInset = (bottomInset = 0) =>
-  LAYOUT.sizes.tabBarHeight +
-  LAYOUT.sizes.tabBarBottom +
-  bottomInset +
-  scale(12);
+export const getTabBarInset = (bottomInset = 0) => {
+  const navInset = Math.max(bottomInset, Platform.OS === "android" ? 12 : 0);
+  const floatOffset = Platform.OS === "ios" ? 4 : 6;
+  return (
+    LAYOUT.sizes.tabBarHeight +
+    navInset +
+    floatOffset +
+    scale(12)
+  );
+};
 
 export const getScrollBottomPadding = (bottomInset = 0, extra = 0) =>
   getTabBarInset(bottomInset) + extra;

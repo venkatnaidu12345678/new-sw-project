@@ -1,11 +1,12 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
   View,
   Text,
   StyleSheet,
   Animated,
-  TouchableOpacity,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -24,7 +25,7 @@ import { LAYOUT, getScrollBottomPadding } from "../theme/layout";
 import { profileData } from "../Navigation/AuthNavigator";
 import { getUpcomingRides, getAllRides } from "../ApiService/ridesApiServices";
 import { getApiErrorMessage } from "../Utils/apiErrors";
-import { RideListSkeleton } from "../Components/ui/Skeleton";
+import { DashboardSkeleton, RideListSkeleton } from "../Components/ui/Skeleton";
 import AnimatedLoad from "../Components/ui/AnimatedLoad";
 import AdPlacement from "../Components/ads/AdPlacement";
 import { useAds } from "../context/AdsContext";
@@ -65,6 +66,9 @@ const DashboardPage = () => {
   const [errorMsg, setErrorMsg] = useState("");
 
   const animation = useRef(new Animated.Value(1)).current;
+  const fabOpacity = useRef(new Animated.Value(1)).current;
+  const listRef = useRef(null);
+  const blurTimerRef = useRef(null);
 
   const user = ProfileDetails?.data?.personalInfo;
   const myUserId =
@@ -149,6 +153,21 @@ const DashboardPage = () => {
     setIsFocused(false);
     expandFilters();
   };
+
+  useEffect(() => {
+    Animated.timing(fabOpacity, {
+      toValue: isFocused ? 0 : 1,
+      duration: 220,
+      useNativeDriver: true,
+    }).start();
+  }, [isFocused, fabOpacity]);
+
+  useEffect(
+    () => () => {
+      if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
+    },
+    []
+  );
 
   const dismissSuggestions = () => {
     setSuggestions([]);
@@ -244,19 +263,32 @@ const DashboardPage = () => {
     selectLocation,
     handleSearch,
     onFocus: (field) => {
+      if (blurTimerRef.current) {
+        clearTimeout(blurTimerRef.current);
+        blurTimerRef.current = null;
+      }
       setIsFocused(true);
       setActiveField(field);
+      requestAnimationFrame(() => {
+        listRef.current?.scrollToOffset({ offset: 0, animated: true });
+      });
+    },
+    onBlur: () => {
+      blurTimerRef.current = setTimeout(() => {
+        setIsFocused(false);
+        blurTimerRef.current = null;
+      }, 120);
     },
     onDismissSuggestions: dismissSuggestions,
   };
 
   const scrollListHeader = (
     <>
-      {!isFocused && (
-        <Text style={styles.title}>Where do you plan to go today?</Text>
-      )}
+      <Text style={styles.title}>Where do you plan to go today?</Text>
 
-      {!isFocused && <AdPlacement placement="home_banner" />}
+      <View style={styles.bannerWrap}>
+        <AdPlacement placement="home_banner" />
+      </View>
 
       {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
 
@@ -288,13 +320,18 @@ const DashboardPage = () => {
               currentUserId={myUserId}
             />
           </View>
+        ) : loadingUpcoming ? (
+          <View style={styles.flex}>
+            <DashboardSkeleton />
+          </View>
         ) : (
-          <AnimatedLoad
-            loading={loadingUpcoming}
-            skeleton={<RideListSkeleton count={2} variant="upcoming" />}
+          <KeyboardAvoidingView
             style={styles.flex}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 4 : 0}
           >
             <FlatList
+              ref={listRef}
               data={rides}
               keyExtractor={(item, index) => `${item._id}-${index}`}
               renderItem={renderRide}
@@ -310,15 +347,29 @@ const DashboardPage = () => {
               keyboardDismissMode="on-drag"
               onScrollBeginDrag={dismissSuggestions}
             />
-          </AnimatedLoad>
+          </KeyboardAvoidingView>
         )}
       </View>
 
-      {!isFocused && (
-        <View style={styles.createButtonWrapper}>
-          <CreatePage />
-        </View>
-      )}
+      <Animated.View
+        style={[
+          styles.createButtonWrapper,
+          {
+            opacity: fabOpacity,
+            transform: [
+              {
+                translateY: fabOpacity.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+        pointerEvents={isFocused ? "none" : "auto"}
+      >
+        <CreatePage />
+      </Animated.View>
     </ScreenContainer>
   );
 };
@@ -340,6 +391,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: LAYOUT.spacing.md,
     color: LAYOUT.colors.text,
+  },
+  bannerWrap: {
+    marginBottom: LAYOUT.spacing.sm,
   },
   section: {
     fontSize: LAYOUT.font.section,

@@ -225,6 +225,9 @@ const enrouteRequests = async (user, { from, to, date }) => {
     luggage: p.luggage_included,
     amount: p.amount_will,
     date: p.date,
+    from: p.from,
+    to: p.to,
+    status: p.status,
   }));
   const couriers = await Courier.find({
     from: { $regex: `^${from}$`, $options: "i" },
@@ -235,7 +238,24 @@ const enrouteRequests = async (user, { from, to, date }) => {
     "date.startDate": { $lte: selectedDate },
     $or: [{ "date.endDate": { $gte: selectedDate } }, { "date.endDate": null }],
   }).populate("creator", "name gender profile_img");
-  const courierRequests = couriers.map((c) => ({ request_type: "courier", courierId: c._id, courierNumber: c.courierNumber, name: c.creator?.name || "", gender: c.creator?.gender || "", profile: c.creator?.profile_img || "", courier_type: c.courier_type, what_to_deliver: c.what_to_deliver, amount: c.amount_will, timeSlot: c.timeSlot }));
+  const courierRequests = couriers.map((c) => ({
+    request_type: "courier",
+    courierId: c._id,
+    courierNumber: c.courierNumber,
+    name: c.creator?.name || "",
+    gender: c.creator?.gender || "",
+    profile: c.creator?.profile_img || "",
+    courier_type: c.courier_type,
+    what_to_deliver: c.what_to_deliver,
+    courier_img: c.courier_img,
+    amount: c.amount_will,
+    timeSlot: c.timeSlot,
+    from: c.from,
+    to: c.to,
+    date: c.date,
+    courier_status: c.courier_status,
+    courier_receiver_details: c.courier_receiver_details,
+  }));
   const allRequests = [...passengerRequests, ...courierRequests];
   return { status: 200, body: { success: true, total: allRequests.length, passengers: passengerRequests.length, couriers: courierRequests.length, data: allRequests } };
 };
@@ -386,6 +406,64 @@ const updateRideSeats = async (user, { rideId, totalSeats }) => {
   };
 };
 
+/**
+ * Driver toggles courier / quick-reserve after ride creation.
+ */
+const updateRideOptions = async (user, { rideId, CanCarryCourier, QuickReserve }) => {
+  if (!rideId) {
+    return { status: 400, body: { success: false, message: "rideId is required" } };
+  }
+
+  const ride = await Ride.findById(rideId);
+  if (!ride) {
+    return { status: 404, body: { success: false, message: "Ride not found" } };
+  }
+  if (ride.creator.toString() !== user._id.toString()) {
+    return {
+      status: 403,
+      body: { success: false, message: "Only the driver can update ride options" },
+    };
+  }
+  if (!["pending", "started"].includes(ride.status)) {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message: "Options can only be changed while the ride is pending or in progress",
+      },
+    };
+  }
+
+  if (typeof CanCarryCourier === "boolean") {
+    ride.CanCarryCourier = CanCarryCourier;
+  }
+  if (typeof QuickReserve === "boolean") {
+    ride.QuickReserve = QuickReserve;
+  }
+
+  await ride.save();
+
+  emitRideRequestUpdated(ride._id, {
+    action: "ride_options_updated",
+    CanCarryCourier: ride.CanCarryCourier,
+    QuickReserve: ride.QuickReserve,
+  });
+  emitToUser(user._id, "rideParticipantsUpdated", {
+    rideId: ride._id.toString(),
+    action: "ride_options_updated",
+  });
+
+  return {
+    status: 200,
+    body: {
+      success: true,
+      message: "Ride options updated",
+      CanCarryCourier: ride.CanCarryCourier,
+      QuickReserve: ride.QuickReserve,
+    },
+  };
+};
+
 module.exports = {
   acceptPassengerRequest,
   rejectPassengerRequest,
@@ -395,4 +473,5 @@ module.exports = {
   enrouteRequests,
   pickCourier,
   updateRideSeats,
+  updateRideOptions,
 };

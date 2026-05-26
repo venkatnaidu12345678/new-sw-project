@@ -1,14 +1,22 @@
 const multer = require("multer");
 const { isConfigured } = require("../config/cloudinary");
 
-const MAX_IMAGE = 10 * 1024 * 1024;
 const MAX_VIDEO = 50 * 1024 * 1024;
+
+const resolveMediaType = (req, file) => {
+  const fromRequest = req.body?.mediaType || req.query?.mediaType;
+  if (fromRequest === "video" || fromRequest === "image") return fromRequest;
+  if (file?.mimetype?.startsWith("video/")) return "video";
+  if (file?.mimetype?.startsWith("image/")) return "image";
+  return "image";
+};
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_VIDEO },
   fileFilter: (req, file, cb) => {
-    const mediaType = req.body?.mediaType || req.query?.mediaType || "image";
+    const mediaType = resolveMediaType(req, file);
+
     if (mediaType === "video") {
       if (!file.mimetype?.startsWith("video/")) {
         return cb(new Error("Only video files are allowed"));
@@ -16,6 +24,8 @@ const upload = multer({
     } else if (!file.mimetype?.startsWith("image/")) {
       return cb(new Error("Only image files are allowed"));
     }
+
+    req._adMediaType = mediaType;
     cb(null, true);
   },
 });

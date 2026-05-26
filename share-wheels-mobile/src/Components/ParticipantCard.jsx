@@ -1,92 +1,69 @@
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+} from "react-native";
 import UserAvatar from "./ui/UserAvatar";
-import CourierParcelPreview from "./CourierParcelPreview";
 import { LAYOUT } from "../theme/layout";
 
-const ROLE_COLORS = {
-  passenger: { bg: "#EFF6FF", accent: "#2563EB", label: "Passenger" },
-  courier: { bg: "#FFF7ED", accent: "#EA580C", label: "Courier" },
-};
-
-/**
- * Driver view: confirmed passenger or courier on a ride.
- */
 const ParticipantCard = ({
   user,
   role = "passenger",
   subtitleLines = [],
-  courier,
   fare,
   fareLabel = "Fare",
-  verified,
-  showVerify,
+  verified = false,
+  showVerify = false,
   onVerify,
+  onCall,
   onMessage,
   onRemove,
-  onCall,
+  onPress,
 }) => {
-  const theme = ROLE_COLORS[role] || ROLE_COLORS.passenger;
-  const name = user?.name || (role === "courier" ? "Courier" : "Passenger");
-  const userNo = user?.userNo || "—";
+  const accent = role === "courier" ? "#F97316" : "#16A34A";
 
   return (
-    <View style={[styles.card, { borderLeftColor: theme.accent }]}>
+    <TouchableOpacity
+      activeOpacity={0.85}
+      onPress={onPress}
+      style={[styles.card, { borderLeftColor: accent }]}
+    >
       <View style={styles.topRow}>
-        <UserAvatar user={user} size={52} />
-        <View style={styles.main}>
-          <View style={styles.nameRow}>
-            <Text style={styles.name} numberOfLines={1}>
-              {name}
-            </Text>
-            <View style={[styles.roleBadge, { backgroundColor: theme.bg }]}>
-              <Text style={[styles.roleText, { color: theme.accent }]}>
-                {theme.label}
-              </Text>
-            </View>
-          </View>
-          <Text style={styles.meta}>
-            ID: {userNo}
-            {verified ? " • Verified ✓" : " • Pending verification"}
-          </Text>
-          {subtitleLines.filter(Boolean).map((line, i) => (
-            <Text key={i} style={styles.subline} numberOfLines={2}>
+        <UserAvatar user={user} size={LAYOUT.sizes.avatarMd} />
+        <View style={styles.infoCol}>
+          <Text style={styles.name}>{user?.name || (role === "courier" ? "Courier" : "Passenger")}</Text>
+          {subtitleLines.map((line, idx) => (
+            <Text key={`${line}-${idx}`} style={styles.subtitle} numberOfLines={1}>
               {line}
             </Text>
           ))}
-          {role === "courier" && courier ? (
-            <CourierParcelPreview courier={courier} compact />
-          ) : null}
         </View>
-        <View style={styles.fareBox}>
+        <View style={styles.fareCol}>
+          {verified ? <Text style={styles.verified}>✓ Verified</Text> : null}
           <Text style={styles.fareLabel}>{fareLabel}</Text>
           <Text style={styles.fare}>₹{fare ?? 0}</Text>
         </View>
       </View>
 
-      <View style={styles.actions}>
-        {showVerify && onVerify ? (
-          <TouchableOpacity style={[styles.chip, styles.chipPrimary]} onPress={onVerify}>
-            <Text style={styles.chipPrimaryText}>Verify</Text>
+      <View style={styles.actionsRow}>
+        {showVerify ? (
+          <TouchableOpacity style={[styles.actionBtn, styles.verifyBtn]} onPress={onVerify}>
+            <Text style={styles.verifyText}>Verify</Text>
           </TouchableOpacity>
         ) : null}
-        {onCall ? (
-          <TouchableOpacity style={styles.chip} onPress={onCall}>
-            <Text style={styles.chipText}>📞 Call</Text>
-          </TouchableOpacity>
-        ) : null}
-        {onMessage ? (
-          <TouchableOpacity style={[styles.chip, styles.chipOutline]} onPress={onMessage}>
-            <Text style={styles.chipOutlineText}>Message</Text>
-          </TouchableOpacity>
-        ) : null}
-        {onRemove ? (
-          <TouchableOpacity style={[styles.chip, styles.chipDanger]} onPress={onRemove}>
-            <Text style={styles.chipDangerText}>Remove</Text>
-          </TouchableOpacity>
-        ) : null}
+        <TouchableOpacity style={styles.actionBtn} onPress={onCall}>
+          <Text style={styles.actionText}>Call</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionBtn} onPress={onMessage}>
+          <Text style={styles.actionText}>Chat</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.actionBtn, styles.removeBtn]} onPress={onRemove}>
+          <Text style={styles.removeText}>Remove</Text>
+        </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 };
 
@@ -95,116 +72,86 @@ export default ParticipantCard;
 const styles = StyleSheet.create({
   card: {
     backgroundColor: "#FFFFFF",
-    borderRadius: LAYOUT.radius?.lg || 14,
-    padding: LAYOUT.spacing.md,
-    marginBottom: LAYOUT.spacing.md,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
     borderWidth: 1,
-    borderColor: LAYOUT.colors.border,
+    borderColor: "#E2E8F0",
     borderLeftWidth: 4,
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    elevation: 1,
   },
   topRow: {
     flexDirection: "row",
     alignItems: "flex-start",
   },
-  main: {
+  infoCol: {
     flex: 1,
-    marginHorizontal: LAYOUT.spacing.sm,
-  },
-  nameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 6,
+    marginLeft: 10,
+    marginRight: 8,
   },
   name: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
-    color: LAYOUT.colors.text,
-    flexShrink: 1,
+    color: "#0F172A",
   },
-  roleBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  roleText: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  meta: {
+  subtitle: {
     fontSize: 12,
-    color: LAYOUT.colors.textMuted,
-    marginTop: 4,
-  },
-  subline: {
-    fontSize: 13,
-    color: "#475569",
+    color: "#64748B",
     marginTop: 2,
   },
-  fareBox: {
+  fareCol: {
     alignItems: "flex-end",
-    minWidth: 56,
+  },
+  verified: {
+    fontSize: 11,
+    color: "#16A34A",
+    fontWeight: "700",
+    marginBottom: 4,
   },
   fareLabel: {
     fontSize: 11,
-    color: LAYOUT.colors.textMuted,
+    color: "#64748B",
   },
   fare: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: LAYOUT.colors.primary,
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#0F172A",
   },
-  actions: {
+  actionsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    marginTop: LAYOUT.spacing.md,
-    paddingTop: LAYOUT.spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: LAYOUT.colors.border,
+    marginTop: 12,
   },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+  actionBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 8,
-    backgroundColor: "#F1F5F9",
-  },
-  chipText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#334155",
-  },
-  chipPrimary: {
-    backgroundColor: "#2563EB",
-  },
-  chipPrimaryText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#fff",
-  },
-  chipOutline: {
-    backgroundColor: "#fff",
+    backgroundColor: "#EFF6FF",
     borderWidth: 1,
-    borderColor: LAYOUT.colors.primary,
+    borderColor: "#BFDBFE",
   },
-  chipOutlineText: {
-    fontSize: 13,
+  actionText: {
+    color: "#2563EB",
+    fontSize: 12,
     fontWeight: "600",
-    color: LAYOUT.colors.primary,
   },
-  chipDanger: {
+  verifyBtn: {
+    backgroundColor: "#DCFCE7",
+    borderColor: "#86EFAC",
+  },
+  verifyText: {
+    color: "#166534",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  removeBtn: {
     backgroundColor: "#FEF2F2",
-    borderWidth: 1,
     borderColor: "#FECACA",
   },
-  chipDangerText: {
-    fontSize: 13,
-    fontWeight: "600",
+  removeText: {
     color: "#DC2626",
+    fontSize: 12,
+    fontWeight: "600",
   },
 });

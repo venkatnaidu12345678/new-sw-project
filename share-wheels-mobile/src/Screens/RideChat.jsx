@@ -44,15 +44,27 @@ const RideChat = () => {
     peerProfileImg,
   } = route.params || {};
   const { ProfileDetails } = profileData();
-  const myId = ProfileDetails?._id || ProfileDetails?.id;
-  const myProfile = ProfileDetails?.data?.personalInfo;
+  const myId =
+    ProfileDetails?._id ||
+    ProfileDetails?.id ||
+    ProfileDetails?.data?.personalInfo?._id ||
+    ProfileDetails?.data?.personalInfo?.id;
+  const myProfile =
+    ProfileDetails?.data?.personalInfo || ProfileDetails?.data || ProfileDetails;
 
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [token, setToken] = useState(null);
+  const [storedUserId, setStoredUserId] = useState(null);
   const listRef = useRef(null);
+
+  const resolvedMyId =
+    myId ||
+    storedUserId ||
+    ProfileDetails?.data?.personalInfo?._id ||
+    ProfileDetails?.data?.personalInfo?.id;
 
   const isRideStarted =
     rideStatus === "started" || rideStatus === "Started";
@@ -104,6 +116,15 @@ const RideChat = () => {
 
   useEffect(() => {
     AsyncStorage.getItem("token").then(setToken);
+    AsyncStorage.getItem("user").then((raw) => {
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        setStoredUserId(parsed?._id || parsed?.id || null);
+      } catch {
+        /* ignore */
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -136,7 +157,7 @@ const RideChat = () => {
 
   const renderItem = ({ item }) => {
     const senderId = item.senderId?._id || item.senderId;
-    const isMine = senderId?.toString() === myId?.toString();
+    const isMine = senderId?.toString?.() === resolvedMyId?.toString?.();
     const roleColor = ROLE_COLORS[item.senderRole] || "#64748B";
     const timeStr = item.createdAt
       ? new Date(item.createdAt).toLocaleTimeString([], {
@@ -147,20 +168,23 @@ const RideChat = () => {
 
     if (isMine) {
       return (
-        <View style={styles.rowMine}>
-          <View style={styles.colMine}>
-            <View style={[styles.bubble, styles.bubbleMine]}>
-              <Text style={styles.msgTextMine}>{item.message}</Text>
+        <View style={styles.messageRow}>
+          <View style={styles.rowMine}>
+            <View style={styles.colMine}>
+              <View style={[styles.bubble, styles.bubbleMine]}>
+                <Text style={styles.msgTextMine}>{item.message}</Text>
+              </View>
+              <Text style={styles.timeMine}>{timeStr}</Text>
             </View>
-            <Text style={styles.timeMine}>{timeStr}</Text>
+            <UserAvatar user={avatarForMessage(item, true)} size={32} />
           </View>
-          <UserAvatar user={avatarForMessage(item, true)} size={32} />
         </View>
       );
     }
 
     return (
-      <View style={styles.rowOther}>
+      <View style={styles.messageRow}>
+        <View style={styles.rowOther}>
         <UserAvatar user={avatarForMessage(item, false)} size={32} />
         <View style={styles.colOther}>
           <Text style={styles.senderLabel}>
@@ -177,6 +201,7 @@ const RideChat = () => {
           </View>
           <Text style={styles.timeOther}>{timeStr}</Text>
         </View>
+      </View>
       </View>
     );
   };
@@ -336,11 +361,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
+  messageRow: {
+    width: "100%",
+    marginBottom: 14,
+  },
   rowMine: {
     flexDirection: "row",
     justifyContent: "flex-end",
     alignItems: "flex-end",
-    marginBottom: 14,
     gap: 8,
   },
   colMine: {
@@ -350,12 +378,10 @@ const styles = StyleSheet.create({
   rowOther: {
     flexDirection: "row",
     alignItems: "flex-end",
-    marginBottom: 14,
     gap: 8,
   },
   colOther: {
     maxWidth: "78%",
-    flex: 1,
   },
   senderLabel: {
     fontSize: 11,
