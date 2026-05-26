@@ -61,21 +61,22 @@ const ImagePicker = ({ onChange, type = "all" }) => {
   const handleResponse = (key) => (response) => {
     if (response.didCancel || response.errorCode) return;
 
-    const uri = response.assets?.[0]?.uri;
-    if (!uri) return;
+    const asset = response.assets?.[0];
+    if (!asset?.uri) return;
 
-    const updatedImages = {
-      ...images,
-      [key]: uri,
+    const file = {
+      uri: asset.uri,
+      type: asset.type || "image/jpeg",
+      name: asset.fileName || `${key}.jpg`,
     };
 
+    const updatedImages = { ...images, [key]: file };
     setImages(updatedImages);
 
-    // send data to parent
     if (type === "courier") {
-      onChange && onChange(uri);
+      onChange?.(file);
     } else {
-      onChange && onChange(updatedImages);
+      onChange?.(updatedImages);
     }
   };
 
@@ -88,7 +89,12 @@ const ImagePicker = ({ onChange, type = "all" }) => {
         onPress={() => openPickerOptions(keyName)}
       >
         {images[keyName] ? (
-          <Image source={{ uri: images[keyName] }} style={styles.image} />
+          <Image
+            source={{
+              uri: images[keyName].uri || images[keyName],
+            }}
+            style={styles.image}
+          />
         ) : (
           <Text style={styles.placeholder}>
             Tap to Upload (Camera / Gallery)

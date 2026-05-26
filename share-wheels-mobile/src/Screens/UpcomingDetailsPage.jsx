@@ -26,7 +26,9 @@ import {
   rideDetails,
   startride,
   endRide,
-  driverrejectpassengerrequest
+  driverrejectpassengerrequest,
+  listVerificationParticipants,
+  verifyBoardingParticipant,
 } from "../ApiService/ridesApiServices";
 import seat from "../assets/seatIcon.png";
 import car from "../assets/car.png";
@@ -36,7 +38,11 @@ import clock from "../assets/clock2.png";
 import madhapurIcon from "../assets/madhapuricon.png";
 import kondapurIcon from "../assets/kondapuricon.png";
 import lineIcon from "../assets/lineicon.png";
-import profileIcon from "../assets/profile.png";
+import UserAvatar from "../Components/ui/UserAvatar";
+import ScreenContainer from "../Components/ui/ScreenContainer";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LAYOUT, getScrollBottomPadding, scale } from "../theme/layout";
+import { DS } from "../theme/designSystem";
 import caricon from "../assets/caricon.png";
 import courier from "../assets/courier.png"
 import { useRoute, useNavigation } from "@react-navigation/native";
@@ -44,8 +50,19 @@ import { convertDate, convertTime } from '../Utils'
 import { getRideDisplayFare, getPassengerFare, getCourierFare } from '../Utils/fareUtils'
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator } from "react-native";
+import {
+  useParticipantLocation,
+  pushDriverLocationNow,
+  ensureLocationReadyForRide,
+} from "../hooks/useDriverLocation";
+import {
+  setActiveRideTracking,
+  clearActiveRideTracking,
+} from "../Utils/activeRideTracking";
+
 const UpcomingDetailsPage = ({ route }) => {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { rideData, refreshRides } = route.params;
 
 
@@ -63,19 +80,66 @@ const UpcomingDetailsPage = ({ route }) => {
   const [reloadapi, setReloadApi] = useState(true)
   const [courierRequests, setCourierRequests] = useState([]);
   const [passengerRequests, setPassengerRequests] = useState([]);
-  const [rideStatus, setRideStatus] = useState("");
+  const [rideStatus, setRideStatus] = useState(rideData?.status || "");
   const [detailsLoading, setDetailsLoading] = useState(true);
+  const [driverToken, setDriverToken] = useState(null);
+  const [verification, setVerification] = useState(null);
+  const [myBoarding, setMyBoarding] = useState(null);
+  const [verifyTarget, setVerifyTarget] = useState(null);
+  const [verifyLoading, setVerifyLoading] = useState(false);
 
+  useEffect(() => {
+    AsyncStorage.getItem("token").then(setDriverToken);
+  }, []);
+
+  const rideIdStr = rideData?._id?.toString?.() || rideData?._id;
+
+  const isRideStarted = rideStatus === "started";
+
+  useParticipantLocation({
+    enabled: isRideStarted && !!driverToken && !!rideIdStr,
+    rideId: rideIdStr,
+    token: driverToken,
+  });
+
+  // Resume GPS for rides already started (e.g. before this fix was deployed)
+  useEffect(() => {
+    if (isDriver && rideStatus === "started" && rideIdStr) {
+      setActiveRideTracking(rideIdStr);
+    }
+  }, [isDriver, rideStatus, rideIdStr]);
 
   const roleColor = isDriver ? "#007AFF" : isCourier ? "#F59E0B" : "#10B981";
 
-  const openRideChat = () => {
+  const rideNavParams = () => ({
+    rideId: rideData?._id,
+    rideTitle: `${rideData?.from} → ${rideData?.to}`,
+    myRole: isDriver ? "driver" : isCourier ? "courier" : "passenger",
+    rideStatus: rideStatus || rideData?.status,
+  });
+
+  const openGroupChat = () => {
+    navigation.navigate("RideChat", rideNavParams());
+  };
+
+  const openDirectChat = (peer) => {
+    const peerUser = peer?.userId || peer;
+    const peerId = peerUser?._id || peerUser?.id || peerUser;
+    if (!peerId) return;
     navigation.navigate("RideChat", {
-      rideId: rideData?._id,
-      rideTitle: `${rideData?.from} → ${rideData?.to}`,
-      myRole: isDriver ? "driver" : "passenger",
-      rideStatus: rideStatus || rideData?.status,
+      ...rideNavParams(),
+      peerId,
+      peerName: peerUser?.name || "User",
+      peerRole:
+        peer?.role ||
+        (peerId?.toString?.() === rideData?.creator?._id?.toString?.()
+          ? "driver"
+          : "passenger"),
     });
+  };
+
+  const openLiveMap = () => {
+    navigation.navigate("RideLiveMap", rideNavParams());
   };
 
   const handleAcceptPassenger = useCallback(async (passengerId) => {
@@ -116,8 +180,10 @@ const UpcomingDetailsPage = ({ route }) => {
         setPassengers(res?.data?.passengers || []);
         setCouriers(res?.data?.all_deliveries || []);
         setPassengerRequests(res?.data?.passenger_requested_ride);
-        setCourierRequests(res?.data?.users_request_Couriers)
-        setRideStatus(res?.data?.status)
+        setCourierRequests(res?.data?.users_request_Couriers);
+        setRideStatus(res?.data?.status);
+        setVerification(res?.data?.verification || null);
+        setMyBoarding(res?.data?.myBoarding || null);
       }
     } catch (err) {
       console.log("Error 👉", err.message);
@@ -179,11 +245,75 @@ const UpcomingDetailsPage = ({ route }) => {
   };
 
 
+  const refreshVerification = async () => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      const data = await listVerificationParticipants(token, rideData?._id);
+      if (data?.success) {
+        setVerification({
+          total: data.total,
+          pending: data.pending,
+          allVerified: data.allVerified,
+          participants: data.participants,
+        });
+      }
+    } catch (err) {
+      console.log("Verification refresh:", err.message);
+    }
+  };
+
+  const openOtpSlider = async () => {
+    setActiveSlider("otp");
+    setVerifyTarget(null);
+    await refreshVerification();
+  };
+
+  const handleVerifyBoarding = async ({ userNo, otp }) => {
+    try {
+      setVerifyLoading(true);
+      const token = await AsyncStorage.getItem("token");
+      const res = await verifyBoardingParticipant(token, rideData?._id, { userNo, otp });
+      Alert.alert("Verified", res?.message || "Participant verified");
+      if (res?.verification) {
+        setVerification({
+          total: res.verification.total,
+          pending: res.verification.pending,
+          allVerified: res.verification.allVerified,
+          participants: res.verification.participants,
+        });
+      }
+      setReloadApi(!reloadapi);
+      if (res?.verification?.allVerified) {
+        setActiveSlider(null);
+        setVerifyTarget(null);
+      }
+    } catch (err) {
+      Alert.alert("Verification failed", err.message);
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
   const handleStartRide = async () => {
     if (rideActionLoading || rideStatus === "started") return;
 
+    if (isDriver && verification && verification.pending > 0) {
+      Alert.alert(
+        "Verification required",
+        `Verify ${verification.pending} passenger(s)/courier(s) before starting the ride.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Enter OTP", onPress: openOtpSlider },
+        ]
+      );
+      return;
+    }
+
     try {
+      setRideActionLoading(true);
       setLoadingRide(true);
+
+      const coords = await ensureLocationReadyForRide();
 
       const token = await AsyncStorage.getItem("token");
 
@@ -192,13 +322,31 @@ const UpcomingDetailsPage = ({ route }) => {
       });
 
       if (response?.success) {
-        setRideStatus("started"); // ✅ update status
+        setRideStatus("started");
+        setDriverToken(token);
+        await setActiveRideTracking(rideIdStr);
+        try {
+          await pushDriverLocationNow(rideIdStr, token, coords);
+        } catch (gpsErr) {
+          Alert.alert(
+            "Location error",
+            `Ride could not share GPS with admin. ${gpsErr.message}`
+          );
+          return;
+        }
         Alert.alert("Success", response.message);
+      } else {
+        Alert.alert("Error", response?.message || "Could not start ride");
       }
     } catch (error) {
-      Alert.alert("Error", error.message);
+      Alert.alert(
+        "Location required",
+        error?.message ||
+          "Enable location permission and GPS before starting a ride."
+      );
     } finally {
       setLoadingRide(false);
+      setRideActionLoading(false);
     }
   };
 
@@ -215,6 +363,7 @@ const UpcomingDetailsPage = ({ route }) => {
       });
 
       if (response?.success) {
+        await clearActiveRideTracking();
         setRideStatus("completed"); // ✅ update status
         Alert.alert("Success", "Ride Completed Successfully");
       }
@@ -307,7 +456,10 @@ const UpcomingDetailsPage = ({ route }) => {
 
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#fff", padding: 20 }}>
+    <ScreenContainer
+      backgroundColor="#fff"
+      style={{ paddingHorizontal: LAYOUT.spacing.screen }}
+    >
       {/* 🔒 FIXED HEADER */}
       <View style={styles.buttonContainer}>
         <TouchableOpacity
@@ -321,20 +473,37 @@ const UpcomingDetailsPage = ({ route }) => {
         {isDriver && (
           <TouchableOpacity
             style={[styles.otpButton, { borderColor: roleColor }]}
-            onPress={() => setActiveSlider("otp")}
+            onPress={openOtpSlider}
           >
             <Text style={[styles.otpText, { color: roleColor }]}>
               Enter OTP
+              {verification?.pending > 0 ? ` (${verification.pending})` : ""}
             </Text>
           </TouchableOpacity>
         )}
 
-        {(isDriver || role === "passenger") && (
+        {isDriver ? (
           <TouchableOpacity
             style={[styles.otpButton, { borderColor: "#2563EB", marginLeft: 8 }]}
-            onPress={openRideChat}
+            onPress={openGroupChat}
           >
-            <Text style={[styles.otpText, { color: "#2563EB" }]}>Chat</Text>
+            <Text style={[styles.otpText, { color: "#2563EB" }]}>Group</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.otpButton, { borderColor: "#2563EB", marginLeft: 8 }]}
+            onPress={() => openDirectChat({ userId: rideData?.creator, role: "driver" })}
+            disabled={!rideData?.creator}
+          >
+            <Text style={[styles.otpText, { color: "#2563EB" }]}>Driver</Text>
+          </TouchableOpacity>
+        )}
+        {isRideStarted && (
+          <TouchableOpacity
+            style={[styles.otpButton, { borderColor: "#16A34A", marginLeft: 8 }]}
+            onPress={openLiveMap}
+          >
+            <Text style={[styles.otpText, { color: "#16A34A" }]}>Map</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -343,10 +512,49 @@ const UpcomingDetailsPage = ({ route }) => {
       <ScrollView
         contentContainerStyle={{
           padding: 2,
-          paddingBottom: 160,
+          paddingBottom: getScrollBottomPadding(insets.bottom, scale(72)),
         }}
         showsVerticalScrollIndicator={false}
       >
+
+        {isDriver && rideStatus === "pending" && verification?.total > 0 && (
+          <View
+            style={[
+              styles.verificationBanner,
+              {
+                backgroundColor: verification.allVerified
+                  ? DS.colors.successMuted
+                  : DS.colors.warningMuted,
+              },
+            ]}
+          >
+            <Text style={styles.verificationBannerText}>
+              {verification.allVerified
+                ? "All passengers and couriers verified. You can start the ride."
+                : `${verification.pending} of ${verification.total} still need OTP verification.`}
+            </Text>
+          </View>
+        )}
+
+        {!isDriver && myBoarding && rideStatus === "pending" && (
+          <View style={styles.boardingCard}>
+            <Text style={styles.boardingTitle}>Your boarding details</Text>
+            <Text style={styles.boardingLine}>
+              User ID: <Text style={styles.boardingHighlight}>{myBoarding.userNo || "—"}</Text>
+            </Text>
+            <Text style={styles.boardingLine}>
+              OTP:{" "}
+              <Text style={styles.boardingHighlight}>
+                {myBoarding.boardingOtp || "Ask driver after acceptance"}
+              </Text>
+            </Text>
+            <Text style={styles.boardingHint}>
+              {myBoarding.isBoardingVerified
+                ? "Verified by driver ✓"
+                : "Share your User ID and OTP with the driver before the ride starts."}
+            </Text>
+          </View>
+        )}
 
         {/* ROUTE */}
         <View style={styles.detailsCard}>
@@ -419,18 +627,15 @@ const UpcomingDetailsPage = ({ route }) => {
               passengers.map((item, index) => (
                 <View key={index} style={styles.myPassengerCard}>
                   <View style={styles.myRow}>
-                    <Image
-                      source={
-                        item?.userId?.profile_img
-                          ? { uri: item.userId.profile_img }
-                          : profileIcon
-                      }
-                      style={styles.avatarLg}
-                    />
+                      <UserAvatar user={item?.userId} size={50} />
 
                     <View style={{ flex: 1, marginHorizontal: 10 }}>
                       <Text style={styles.name}>
                         {item?.userId?.name || "Passenger"}
+                      </Text>
+                      <Text style={styles.userNoText}>
+                        ID: {item?.userId?.userNo || "—"}
+                        {item?.isBoardingVerified ? " • Verified ✓" : " • Pending"}
                       </Text>
 
                       <Text style={styles.pickup}>
@@ -441,8 +646,31 @@ const UpcomingDetailsPage = ({ route }) => {
                         Pickup: {rideData?.from}
                       </Text>
                       <View style={styles.buttonRow}>
+                        {!item?.isBoardingVerified && rideStatus === "pending" && (
+                          <TouchableOpacity
+                            style={styles.verifyChip}
+                            onPress={() => {
+                              setVerifyTarget({
+                                name: item?.userId?.name,
+                                userNo: item?.userId?.userNo,
+                                role: "passenger",
+                              });
+                              setActiveSlider("otp");
+                            }}
+                          >
+                            <Text style={styles.verifyChipText}>Verify</Text>
+                          </TouchableOpacity>
+                        )}
                         <TouchableOpacity style={styles.callButton}>
                           <Text style={styles.callText}>Call</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.chatChip}
+                          onPress={() =>
+                            openDirectChat({ userId: item.userId, role: "passenger" })
+                          }
+                        >
+                          <Text style={styles.chatChipText}>Message</Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity
@@ -479,18 +707,15 @@ const UpcomingDetailsPage = ({ route }) => {
               couriers.map((item, index) => (
                 <View key={index} style={styles.myPassengerCard}>
                   <View style={styles.myRow}>
-                    <Image
-                      source={
-                        item?.userId?.profile_img
-                          ? { uri: item.userId.profile_img }
-                          : profileIcon
-                      }
-                      style={styles.avatarLg}
-                    />
+                      <UserAvatar user={item?.userId} size={50} />
 
                     <View style={{ flex: 1, marginHorizontal: 10 }}>
                       <Text style={styles.name}>
                         {item?.userId?.name || "Courier"}
+                      </Text>
+                      <Text style={styles.userNoText}>
+                        ID: {item?.userId?.userNo || "—"}
+                        {item?.isBoardingVerified ? " • Verified ✓" : " • Pending"}
                       </Text>
 
                       <Text style={styles.pickup}>
@@ -501,10 +726,32 @@ const UpcomingDetailsPage = ({ route }) => {
                         Parcel: {item?.weight || "N/A"} kg
                       </Text>
 
-                      {/* ✅ SAME BUTTONS LIKE PASSENGER */}
                       <View style={styles.buttonRow}>
+                        {!item?.isBoardingVerified && rideStatus === "pending" && (
+                          <TouchableOpacity
+                            style={styles.verifyChip}
+                            onPress={() => {
+                              setVerifyTarget({
+                                name: item?.userId?.name,
+                                userNo: item?.userId?.userNo,
+                                role: "courier",
+                              });
+                              setActiveSlider("otp");
+                            }}
+                          >
+                            <Text style={styles.verifyChipText}>Verify</Text>
+                          </TouchableOpacity>
+                        )}
                         <TouchableOpacity style={styles.callButton}>
                           <Text style={styles.callText}>Call</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.chatChip}
+                          onPress={() =>
+                            openDirectChat({ userId: item.userId, role: "courier" })
+                          }
+                        >
+                          <Text style={styles.chatChipText}>Message</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.removeButton}
@@ -512,8 +759,6 @@ const UpcomingDetailsPage = ({ route }) => {
                         >
                           <Text style={styles.removeText}>Remove</Text>
                         </TouchableOpacity>
-
-                        {/* OPTIONAL REMOVE BUTTON */}
                       </View>
                     </View>
 
@@ -549,14 +794,7 @@ const UpcomingDetailsPage = ({ route }) => {
                 <View key={index} style={styles.requestCard}>
                   <View style={styles.requestTopRow}>
                     <View style={styles.requestLeft}>
-                      <Image
-                        source={
-                          item?.userId?.profile_img
-                            ? { uri: item.userId.profile_img }
-                            : profileIcon
-                        }
-                        style={styles.requestAvatar}
-                      />
+                      <UserAvatar user={item?.userId} size={44} />
 
                       <View>
                         <Text style={styles.requestName}>
@@ -627,14 +865,7 @@ const UpcomingDetailsPage = ({ route }) => {
             <View key={index} style={styles.requestCard}>
               <View style={styles.requestTopRow}>
                 <View style={styles.requestLeft}>
-                  <Image
-                    source={
-                      user?.profile_img
-                        ? { uri: user.profile_img }
-                        : profileIcon
-                    }
-                    style={styles.requestAvatar}
-                  />
+                  <UserAvatar user={user} size={44} />
 
                   <View>
                     <Text style={styles.requestName}>
@@ -684,14 +915,7 @@ const UpcomingDetailsPage = ({ route }) => {
 
             <View style={styles.driverCard}>
               <View style={styles.driverRow}>
-                <Image
-                  source={
-                    rideData?.creator?.profile_img
-                      ? { uri: rideData.creator.profile_img }
-                      : profileIcon
-                  }
-                  style={styles.avatarLg}
-                />
+                <UserAvatar user={rideData?.creator} size={50} />
 
                 <View style={{ flex: 1, marginLeft: 10 }}>
                   <Text style={styles.name}>
@@ -705,6 +929,14 @@ const UpcomingDetailsPage = ({ route }) => {
                   <Text style={styles.pickup}>
                     {rideData?.creator?.mobile || "No phone"}
                   </Text>
+                  <TouchableOpacity
+                    style={[styles.chatChip, { marginTop: 8, alignSelf: "flex-start" }]}
+                    onPress={() =>
+                      openDirectChat({ userId: rideData?.creator, role: "driver" })
+                    }
+                  >
+                    <Text style={styles.chatChipText}>Message driver</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
 
@@ -723,14 +955,7 @@ const UpcomingDetailsPage = ({ route }) => {
 
             <View style={styles.driverCard}>
               <View style={styles.driverRow}>
-                <Image
-                  source={
-                    rideData?.creator?.profile_img
-                      ? { uri: rideData.creator.profile_img }
-                      : profileIcon
-                  }
-                  style={styles.avatarLg}
-                />
+                <UserAvatar user={rideData?.creator} size={50} />
 
                 <View style={{ flex: 1, marginLeft: 10 }}>
                   <Text style={styles.name}>
@@ -748,6 +973,14 @@ const UpcomingDetailsPage = ({ route }) => {
                 >
                   <Text style={styles.callText}>Call</Text>
                 </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.chatChip}
+                  onPress={() =>
+                    openDirectChat({ userId: rideData?.creator, role: "driver" })
+                  }
+                >
+                  <Text style={styles.chatChipText}>Message</Text>
+                </TouchableOpacity>
               </View>
             </View>
 
@@ -757,7 +990,7 @@ const UpcomingDetailsPage = ({ route }) => {
             {couriers.map((item, index) => (
               <View key={index} style={styles.myPassengerCard}>
                 <View style={styles.myRow}>
-                  <Image source={profileIcon} style={styles.avatarLg} />
+                  <UserAvatar user={rideData?.creator} size={50} />
 
                   <View style={{ flex: 1, marginHorizontal: 10 }}>
                     <Text style={styles.name}>Parcel Details</Text>
@@ -780,14 +1013,7 @@ const UpcomingDetailsPage = ({ route }) => {
             {passengers.map((item, index) => (
               <View key={index} style={styles.myPassengerCard}>
                 <View style={styles.myRow}>
-                  <Image
-                    source={
-                      item?.userId?.profile_img
-                        ? { uri: item.userId.profile_img }
-                        : profileIcon
-                    }
-                    style={styles.avatarLg}
-                  />
+                      <UserAvatar user={item?.userId} size={50} />
 
                   <View style={{ flex: 1, marginHorizontal: 10 }}>
                     <Text style={styles.name}>
@@ -809,18 +1035,51 @@ const UpcomingDetailsPage = ({ route }) => {
       <BottomSlider
         visible={activeSlider !== null}
         onClose={() => setActiveSlider(null)}
-        height={activeSlider === "otp" ? 200 : 100}
+        height={activeSlider === "otp" ? 420 : 100}
       >
 
         {/* OTP */}
         {activeSlider === "otp" && (
-          <OtpModel  // ✅ use UI version (NOT modal)
-            passengerName="John Doe"
-            onVerify={(otp) => {
-              console.log("OTP:", otp);
-              setActiveSlider(null);
-            }}
-          />
+          <View>
+            {verification?.participants?.length > 0 && (
+              <View style={styles.participantPicker}>
+                <Text style={styles.participantPickerTitle}>Tap to verify</Text>
+                {verification.participants.map((p, idx) => (
+                  <TouchableOpacity
+                    key={`${p.userNo}-${idx}`}
+                    style={[
+                      styles.participantChip,
+                      p.isBoardingVerified && styles.participantChipDone,
+                      verifyTarget?.userNo === p.userNo && styles.participantChipActive,
+                    ]}
+                    onPress={() =>
+                      setVerifyTarget({
+                        name: p.name,
+                        userNo: p.userNo,
+                        role: p.role,
+                      })
+                    }
+                  >
+                    <Text style={styles.participantChipText}>
+                      {p.name} ({p.role}) — {p.userNo || "?"}{" "}
+                      {p.isBoardingVerified ? "✓" : "•"}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            <OtpModel
+              passengerName={
+                verifyTarget?.name ||
+                (verifyTarget?.role === "courier" ? "Courier" : "Passenger")
+              }
+              userNo={verifyTarget?.userNo || ""}
+              userNoEditable={!verifyTarget?.userNo}
+              verifying={verifyLoading}
+              subtitle="Ask for their 6-digit User ID and 4-digit boarding OTP"
+              onVerify={handleVerifyBoarding}
+            />
+          </View>
         )}
 
         {/* ENROUTE */}
@@ -862,9 +1121,19 @@ const UpcomingDetailsPage = ({ route }) => {
               ? handleEndRide
               : null
         }
-        disabled={!rideStatus || rideStatus === "completed" || loadingRide}
+        disabled={
+          !rideStatus ||
+          rideStatus === "completed" ||
+          loadingRide ||
+          (isDriver &&
+            rideStatus === "pending" &&
+            verification?.total > 0 &&
+            !verification?.allVerified)
+        }
+        loading={loadingRide}
+        bottomInset={insets.bottom + scale(8)}
       />
-    </View>
+    </ScreenContainer>
   );
 };
 
@@ -875,32 +1144,117 @@ const styles = StyleSheet.create({
   buttonContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 16,
-    marginTop: 20,
+    marginBottom: LAYOUT.spacing.md,
+    marginTop: LAYOUT.spacing.sm,
   },
 
   roleButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 22,
-    borderRadius: 22,
+    paddingVertical: LAYOUT.spacing.sm,
+    paddingHorizontal: LAYOUT.spacing.lg,
+    borderRadius: LAYOUT.radius.xl,
   },
 
   roleText: { fontWeight: "700" },
 
+  verificationBanner: {
+    padding: LAYOUT.spacing.md,
+    borderRadius: LAYOUT.radius.md,
+    marginBottom: LAYOUT.spacing.md,
+  },
+  verificationBannerText: {
+    fontSize: LAYOUT.font.label,
+    color: DS.colors.text,
+    lineHeight: scale(20),
+  },
+  boardingCard: {
+    backgroundColor: DS.colors.primaryMuted,
+    padding: LAYOUT.spacing.md,
+    borderRadius: LAYOUT.radius.md,
+    marginBottom: LAYOUT.spacing.md,
+  },
+  boardingTitle: {
+    fontWeight: "700",
+    fontSize: LAYOUT.font.section,
+    marginBottom: LAYOUT.spacing.sm,
+    color: DS.colors.text,
+  },
+  boardingLine: {
+    fontSize: LAYOUT.font.body,
+    color: DS.colors.textMuted,
+    marginBottom: LAYOUT.spacing.xs,
+  },
+  boardingHighlight: {
+    fontWeight: "700",
+    color: DS.colors.primary,
+    letterSpacing: 1,
+  },
+  boardingHint: {
+    marginTop: LAYOUT.spacing.sm,
+    fontSize: LAYOUT.font.small,
+    color: DS.colors.textMuted,
+  },
+  userNoText: {
+    fontSize: LAYOUT.font.small,
+    color: DS.colors.textMuted,
+    marginTop: 2,
+  },
+  verifyChip: {
+    backgroundColor: DS.colors.primary,
+    paddingHorizontal: LAYOUT.spacing.sm,
+    paddingVertical: 4,
+    borderRadius: LAYOUT.radius.sm,
+    marginRight: LAYOUT.spacing.sm,
+  },
+  verifyChipText: {
+    color: "#fff",
+    fontSize: LAYOUT.font.small,
+    fontWeight: "600",
+  },
+  participantPicker: {
+    paddingHorizontal: LAYOUT.spacing.md,
+    paddingTop: LAYOUT.spacing.sm,
+  },
+  participantPickerTitle: {
+    fontSize: LAYOUT.font.label,
+    fontWeight: "600",
+    marginBottom: LAYOUT.spacing.sm,
+    color: DS.colors.text,
+  },
+  participantChip: {
+    padding: LAYOUT.spacing.sm,
+    borderRadius: LAYOUT.radius.sm,
+    borderWidth: 1,
+    borderColor: DS.colors.border,
+    marginBottom: LAYOUT.spacing.xs,
+    backgroundColor: DS.colors.surface,
+  },
+  participantChipActive: {
+    borderColor: DS.colors.primary,
+    backgroundColor: DS.colors.primaryMuted,
+  },
+  participantChipDone: {
+    borderColor: DS.colors.success,
+    backgroundColor: DS.colors.successMuted,
+  },
+  participantChipText: {
+    fontSize: LAYOUT.font.small,
+    color: DS.colors.text,
+  },
+
   otpButton: {
     borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 22,
-    borderRadius: 22,
+    paddingVertical: LAYOUT.spacing.sm,
+    paddingHorizontal: LAYOUT.spacing.lg,
+    borderRadius: LAYOUT.radius.xl,
   },
 
   otpText: { fontWeight: "700" },
 
   detailsCard: {
     backgroundColor: "#fff",
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 16,
+    borderRadius: LAYOUT.radius.lg,
+    padding: LAYOUT.spacing.screen,
+    marginBottom: LAYOUT.spacing.md,
   },
 
   routeRow: { flexDirection: "row", alignItems: "center", marginVertical: 10 },
@@ -952,6 +1306,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#fff",
   },
+  chatChip: {
+    paddingHorizontal: 12,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2563EB",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#EFF6FF",
+  },
+  chatChipText: {
+    color: "#2563EB",
+    fontWeight: "600",
+    fontSize: 13,
+  },
 
   removeButton: {
     width: 100,
@@ -977,7 +1346,7 @@ const styles = StyleSheet.create({
   },
 
   section: {
-    fontSize: 18,
+    fontSize: LAYOUT.font.section,
     fontWeight: "700",
     marginBottom: 12,
     marginTop: 16,

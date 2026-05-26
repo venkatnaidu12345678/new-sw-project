@@ -1,12 +1,14 @@
 import React from "react";
-import { TouchableOpacity, View, Text, ActivityIndicator, StyleSheet } from "react-native";
+import { TouchableOpacity, Text, ActivityIndicator, StyleSheet } from "react-native";
+import { AUTH_COLORS } from "../theme/authTheme";
+import { LAYOUT } from "../theme/layout";
 
 const AuthButton = ({
-    type = "submit",        // signin | signup | sendCode | save | default
+    type = "submit",
     onPress,
     loading = false,
     disabled = false,
-    buttonColor = '#2F66F3', // default color
+    style,
 }) => {
 
     const getLabel = () => {
@@ -25,7 +27,8 @@ const AuthButton = ({
             activeOpacity={0.8}
             style={[
                 styles.button,
-                (disabled || loading) && styles.disabledButton
+                style,
+                (disabled || loading) && styles.disabledButton,
             ]}
         >
             {loading ? (
@@ -41,20 +44,20 @@ export default AuthButton;
 
 const styles = StyleSheet.create({
     button: {
-        backgroundColor: '#2F66F3',
-        height: 50,
-        borderRadius: 10,
-        alignItems: 'center',
-        justifyContent: 'center',
-        margin: 10,
+        backgroundColor: AUTH_COLORS.primary,
+        height: LAYOUT.sizes.buttonHeight,
+        borderRadius: LAYOUT.radius.md,
+        alignItems: "center",
+        justifyContent: "center",
+        marginTop: LAYOUT.spacing.sm,
+        marginBottom: LAYOUT.spacing.xs,
     },
-
     disabledButton: {
-        backgroundColor: '#8AA4F8',
+        backgroundColor: "#93C5FD",
     },
     buttonText: {
-        color: '#fff',
-        fontSize: 18,
-        fontWeight: 'bold',
+        color: AUTH_COLORS.white,
+        fontSize: LAYOUT.font.body,
+        fontWeight: "700",
     },
 });

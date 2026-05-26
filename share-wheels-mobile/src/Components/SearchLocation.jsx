@@ -12,6 +12,7 @@ import {
 import Icon from "react-native-vector-icons/Ionicons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { INPUT_COLORS } from "../theme/inputTheme";
+import { LAYOUT } from "../theme/layout";
 
 /* ✅ IMPORT FROM UTILS */
 import {
@@ -214,7 +215,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 12,
     marginBottom: 6,
-    height: 60,
+    height: LAYOUT.sizes.inputHeight + 4,
     backgroundColor: "#fff",
     zIndex: 1,
   },
@@ -233,15 +234,16 @@ const styles = StyleSheet.create({
 
   searchButton: {
     backgroundColor: "#2563EB",
-    padding: 16,
-    borderRadius: 12,
+    paddingVertical: LAYOUT.spacing.md,
+    paddingHorizontal: LAYOUT.spacing.lg,
+    borderRadius: LAYOUT.radius.md,
     alignItems: "center",
-    marginTop: 10,
+    marginTop: LAYOUT.spacing.sm,
   },
 
   searchText: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: LAYOUT.font.body,
     fontWeight: "600",
   },
 

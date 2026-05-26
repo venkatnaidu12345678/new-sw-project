@@ -64,6 +64,7 @@ const getRides = async (query) => {
     from: { $regex: from, $options: "i" },
     to: { $regex: to, $options: "i" },
     date: { $gte: startDate, $lte: endDate },
+    status: "pending",
   })
     .populate("creator", "name email mobile profile_img")
     .sort({ createdAt: -1 });
@@ -131,32 +132,49 @@ const sendPassengerRequest = async (user, { rideId, requires_seats }) => {
   };
 };
 
+const upcomingDateFilter = () => {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const currentTime = new Date().toTimeString().slice(0, 5);
+  return {
+    $or: [
+      { date: { $gt: todayStart } },
+      { date: todayStart, startTime: { $gte: currentTime } },
+    ],
+  };
+};
+
 const listRidesByPhase = async (user, completed) => {
   const userId = new mongoose.Types.ObjectId(user._id);
   const userIdStr = userId.toString();
+  const membership = {
+    $or: [
+      { creator: userId },
+      { "passengers.userId": userId },
+      { "all_deliveries.userId": userId },
+    ],
+  };
+
   const query = completed
-    ? { status: "completed", $or: [{ creator: userId }, { "passengers.userId": userId }, { "all_deliveries.userId": userId }] }
+    ? {
+        status: { $in: ["completed", "cancelled", "started"] },
+        ...membership,
+      }
     : {
-        status: { $in: ["pending", "started"] },
-        $and: [
-          (() => {
-            const todayStart = new Date();
-            todayStart.setHours(0, 0, 0, 0);
-            const currentTime = new Date().toTimeString().slice(0, 5);
-            return { $or: [{ date: { $gt: todayStart } }, { date: todayStart, startTime: { $gte: currentTime } }] };
-          })(),
-          { $or: [{ creator: userId }, { "passengers.userId": userId }, { "all_deliveries.userId": userId }] },
-        ],
+        status: "pending",
+        $and: [upcomingDateFilter(), membership],
       };
 
   const rides = await Ride.find(query)
     .populate("creator", "-password -otp -otpExpires -__v")
-    .populate("passengers.userId", "-password -otp -otpExpires -__v")
-    .populate("all_deliveries.userId", "-password -otp -otpExpires -__v")
+    .populate("passengers.userId", "-password -otp -otpExpires -__v userNo")
+    .populate("all_deliveries.userId", "-password -otp -otpExpires -__v userNo")
     .sort(completed ? { date: -1, startTime: -1 } : { date: 1, startTime: 1 })
     .lean();
 
-  const updatedRides = rides.flatMap((ride) => {
+  const updatedRides = rides
+    .filter((ride) => (completed ? ride.status !== "pending" : ride.status === "pending"))
+    .flatMap((ride) => {
     const results = [];
     const isDriver = ride.creator?._id.toString() === userIdStr;
     const passengerData = ride.passengers?.find((p) => p.userId?._id.toString() === userIdStr);
@@ -185,25 +203,82 @@ const listRidesByPhase = async (user, completed) => {
   return { status: 200, body: { success: true, count: updatedRides.length, rides: updatedRides } };
 };
 
-const getRideDetails = async (rideId) => {
+const USER_FIELDS = "name email mobile profile_img gender userNo";
+
+const sanitizeParticipant = (entry, viewerId) => {
+  const doc = entry.toObject ? entry.toObject() : { ...entry };
+  const uid = doc.userId?._id?.toString?.() || doc.userId?.toString?.();
+  const isSelf = viewerId && uid === viewerId.toString();
+  if (!isSelf) {
+    delete doc.boardingOtp;
+    delete doc.boardingOtpExpires;
+  }
+  return doc;
+};
+
+const getRideDetails = async (rideId, viewerId) => {
   if (!mongoose.Types.ObjectId.isValid(rideId)) return { status: 400, body: { success: false, message: "Invalid Ride ID" } };
   const ride = await Ride.findById(rideId)
-    .select("passengers all_deliveries passenger_requested_ride users_request_Couriers status")
-    .populate("passengers.userId", "name email mobile")
-    .populate("all_deliveries.userId", "name email mobile")
-    .populate("passenger_requested_ride.userId", "name email mobile")
-    .populate("users_request_Couriers.userId", "name email mobile");
+    .select("passengers all_deliveries passenger_requested_ride users_request_Couriers status creator")
+    .populate("passengers.userId", USER_FIELDS)
+    .populate("all_deliveries.userId", USER_FIELDS)
+    .populate("passenger_requested_ride.userId", USER_FIELDS)
+    .populate("users_request_Couriers.userId", USER_FIELDS);
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
+
+  const passengers = (ride.passengers || []).map((p) => sanitizeParticipant(p, viewerId));
+  const all_deliveries = (ride.all_deliveries || []).map((c) => sanitizeParticipant(c, viewerId));
+
+  const verificationParticipants = [
+    ...passengers.map((p) => ({
+      role: "passenger",
+      name: p.userId?.name,
+      userNo: p.userId?.userNo,
+      isBoardingVerified: !!p.isBoardingVerified,
+    })),
+    ...all_deliveries.map((c) => ({
+      role: "courier",
+      name: c.userId?.name,
+      userNo: c.userId?.userNo,
+      isBoardingVerified: !!c.isBoardingVerified,
+    })),
+  ];
+  const pendingVerification = verificationParticipants.filter((p) => !p.isBoardingVerified).length;
+
+  let myBoarding = null;
+  if (viewerId) {
+    const vid = viewerId.toString();
+    const asPassenger = passengers.find((p) => p.userId?._id?.toString() === vid);
+    const asCourier = all_deliveries.find((c) => c.userId?._id?.toString() === vid);
+    const self = asPassenger || asCourier;
+    if (self) {
+      myBoarding = {
+        role: asPassenger ? "passenger" : "courier",
+        userNo: self.userId?.userNo,
+        boardingOtp: self.boardingOtp,
+        boardingOtpExpires: self.boardingOtpExpires,
+        isBoardingVerified: !!self.isBoardingVerified,
+      };
+    }
+  }
+
   return {
     status: 200,
     body: {
       success: true,
       data: {
         status: ride.status,
-        passengers: ride.passengers,
-        all_deliveries: ride.all_deliveries,
+        passengers,
+        all_deliveries,
         passenger_requested_ride: ride.passenger_requested_ride,
         users_request_Couriers: ride.users_request_Couriers,
+        verification: {
+          total: verificationParticipants.length,
+          pending: pendingVerification,
+          allVerified: verificationParticipants.length === 0 || pendingVerification === 0,
+          participants: verificationParticipants,
+        },
+        myBoarding,
       },
     },
   };

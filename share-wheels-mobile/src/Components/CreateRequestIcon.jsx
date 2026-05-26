@@ -12,6 +12,7 @@ import { useNavigation } from "@react-navigation/native";
 import rideIcon from "../assets/ride.png";
 import passengerIcon from "../assets/passenger.png";
 import couriericon from "../assets/couriericon.png";
+import { LAYOUT, scale } from "../theme/layout";
 const CreateOptionsCard = () => {
   const [visible, setVisible] = useState(false);
   const navigation = useNavigation();
@@ -143,9 +144,9 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 80,
     right: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: LAYOUT.sizes.fabSize,
+    height: LAYOUT.sizes.fabSize,
+    borderRadius: LAYOUT.sizes.fabSize / 2,
     backgroundColor: "#3B82F6",
     justifyContent: "center",
     alignItems: "center",
@@ -153,8 +154,8 @@ const styles = StyleSheet.create({
   },
 
   plus: {
-    fontSize: 36,
+    fontSize: scale(28),
     color: "#fff",
-    lineHeight: 36,
+    lineHeight: scale(28),
   },
 });

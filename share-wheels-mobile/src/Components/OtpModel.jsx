@@ -5,11 +5,26 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
+  ActivityIndicator,
 } from "react-native";
+import KeyboardAwareScreen from "./ui/KeyboardAwareScreen";
+import { DS, scale } from "../theme/designSystem";
 
-const OtpUI = ({ passengerName, onVerify }) => {
+const OtpUI = ({
+  passengerName,
+  userNo = "",
+  userNoEditable = true,
+  onVerify,
+  verifying = false,
+  subtitle,
+}) => {
   const [otp, setOtp] = useState(["", "", "", ""]);
+  const [userNoValue, setUserNoValue] = useState(userNo || "");
   const inputs = useRef([]);
+
+  useEffect(() => {
+    setUserNoValue(userNo || "");
+  }, [userNo]);
 
   useEffect(() => {
     inputs.current[0]?.focus();
@@ -22,15 +37,13 @@ const OtpUI = ({ passengerName, onVerify }) => {
     newOtp[index] = value;
     setOtp(newOtp);
 
-    // move forward
     if (value && index < 3) {
       inputs.current[index + 1]?.focus();
     }
 
-    // auto submit
     if (index === 3 && value) {
       const finalOtp = [...newOtp].join("");
-      onVerify && onVerify(finalOtp);
+      onVerify && onVerify({ userNo: userNoValue.trim(), otp: finalOtp });
     }
   };
 
@@ -42,24 +55,39 @@ const OtpUI = ({ passengerName, onVerify }) => {
 
   const handleVerifyClick = () => {
     const finalOtp = otp.join("");
+    const normalizedUserNo = userNoValue.trim();
 
+    if (!/^\d{6}$/.test(normalizedUserNo)) {
+      alert("Enter a valid 6-digit user ID");
+      return;
+    }
     if (finalOtp.length < 4) {
-      alert("Enter complete OTP");
+      alert("Enter complete 4-digit OTP");
       return;
     }
 
-    onVerify && onVerify(finalOtp);
+    onVerify && onVerify({ userNo: normalizedUserNo, otp: finalOtp });
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Enter OTP</Text>
+    <KeyboardAwareScreen scrollable contentContainerStyle={styles.container}>
+      <Text style={styles.title}>Verify boarding</Text>
+      <Text style={styles.name}>{passengerName || "Participant"}</Text>
+      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
 
-      <Text style={styles.name}>
-        {passengerName || "Passenger"}
-      </Text>
+      <Text style={styles.label}>User ID (6 digits)</Text>
+      <TextInput
+        style={styles.userNoInput}
+        keyboardType="number-pad"
+        maxLength={6}
+        value={userNoValue}
+        editable={userNoEditable && !verifying}
+        onChangeText={(t) => setUserNoValue(t.replace(/\D/g, "").slice(0, 6))}
+        placeholder="000000"
+        placeholderTextColor={DS.colors.textMuted}
+      />
 
-      {/* OTP BOXES */}
+      <Text style={[styles.label, { marginTop: DS.spacing.md }]}>Boarding OTP</Text>
       <View style={styles.otpRow}>
         {otp.map((digit, index) => (
           <TextInput
@@ -69,6 +97,7 @@ const OtpUI = ({ passengerName, onVerify }) => {
             keyboardType="number-pad"
             maxLength={1}
             value={digit}
+            editable={!verifying}
             onChangeText={(val) => handleOtpChange(val, index)}
             onKeyPress={({ nativeEvent }) => {
               if (nativeEvent.key === "Backspace") {
@@ -79,54 +108,93 @@ const OtpUI = ({ passengerName, onVerify }) => {
         ))}
       </View>
 
-      {/* VERIFY BUTTON */}
-      <TouchableOpacity style={styles.verifyBtn} onPress={handleVerifyClick}>
-        <Text style={styles.verifyText}>Verify OTP</Text>
+      <TouchableOpacity
+        style={[styles.verifyBtn, verifying && styles.verifyBtnDisabled]}
+        onPress={handleVerifyClick}
+        disabled={verifying}
+      >
+        {verifying ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.verifyText}>Verify OTP</Text>
+        )}
       </TouchableOpacity>
-    </View>
+    </KeyboardAwareScreen>
   );
 };
 
 export default OtpUI;
 
-/* ------------------ Styles ------------------ */
-
 const styles = StyleSheet.create({
   container: {
-    padding: 20,
+    padding: DS.spacing.lg,
+    paddingBottom: DS.spacing.xl,
   },
   title: {
-    fontSize: 18,
-    fontWeight: "600",
+    fontSize: DS.font.section,
+    fontWeight: "700",
+    color: DS.colors.text,
   },
   name: {
-    marginTop: 10,
-    fontSize: 16,
-    color: "#555",
+    marginTop: DS.spacing.sm,
+    fontSize: DS.font.body,
+    color: DS.colors.textMuted,
+  },
+  subtitle: {
+    marginTop: DS.spacing.xs,
+    fontSize: DS.font.small,
+    color: DS.colors.textMuted,
+  },
+  label: {
+    marginTop: DS.spacing.md,
+    fontSize: DS.font.label,
+    fontWeight: "600",
+    color: DS.colors.text,
+  },
+  userNoInput: {
+    marginTop: DS.spacing.sm,
+    borderWidth: 1,
+    borderColor: DS.colors.border,
+    borderRadius: DS.radius.md,
+    paddingHorizontal: DS.spacing.md,
+    paddingVertical: DS.spacing.sm,
+    fontSize: DS.font.body,
+    letterSpacing: 2,
+    color: DS.colors.text,
+    backgroundColor: DS.colors.surface,
   },
   otpRow: {
     flexDirection: "row",
     justifyContent: "center",
-    marginTop: 25,
+    marginTop: DS.spacing.md,
+    gap: scale(8),
   },
   otpBox: {
-    width: 55,
-    height: 55,
+    width: DS.sizes.otpBox,
+    height: DS.sizes.otpBox,
     borderWidth: 1,
-    marginHorizontal: 5,
-    borderRadius: 8,
+    borderColor: DS.colors.border,
+    borderRadius: DS.radius.md,
     textAlign: "center",
-    fontSize: 20,
+    fontSize: DS.font.title,
+    color: DS.colors.text,
+    backgroundColor: DS.colors.surface,
   },
   verifyBtn: {
-    marginTop: 25,
-    backgroundColor: "#111",
-    padding: 14,
-    borderRadius: 10,
+    marginTop: DS.spacing.xl,
+    backgroundColor: DS.colors.primary,
+    paddingVertical: DS.spacing.md,
+    borderRadius: DS.radius.md,
+    minHeight: DS.sizes.buttonHeight,
+    justifyContent: "center",
+  },
+  verifyBtnDisabled: {
+    opacity: 0.7,
   },
   verifyText: {
     color: "#fff",
     textAlign: "center",
     fontWeight: "600",
+    fontSize: DS.font.button,
   },
 });

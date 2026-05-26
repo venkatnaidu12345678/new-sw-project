@@ -3,44 +3,83 @@ import {
   View,
   Text,
   Modal,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   Image,
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Pressable,
 } from "react-native";
-
-import { launchImageLibrary } from "react-native-image-picker";
+import { SafeAreaView } from "react-native-safe-area-context";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Icon from "react-native-vector-icons/Ionicons";
+
 import { AddVehicle } from "../ApiService/ridesApiServices";
 import AppTextInput from "./ui/AppTextInput";
+import { AUTH_COLORS } from "../theme/authTheme";
+import { INPUT_COLORS } from "../theme/inputTheme";
+import { isRemoteImageUrl, pickImageAsset } from "../Utils/imageUpload";
 
-/* ✅ Reusable Base64 converter */
-const convertImageToBase64 = async () => {
-  return new Promise((resolve, reject) => {
-    launchImageLibrary(
-      {
-        mediaType: "photo",
-        quality: 0.5, // ✅ optimized
-        includeBase64: true,
-      },
-      (response) => {
-        if (response.didCancel) return;
-        if (response.errorCode) return reject(response.errorMessage);
+const EMPTY_FORM = {
+  company: "",
+  model: "",
+  type: "",
+  license_number: "",
+  issue_date: "",
+  expiry_date: "",
+  car_no: "",
+};
 
-        const asset = response.assets?.[0];
+const mapProfileToForm = (info) => {
+  if (!info) return { ...EMPTY_FORM };
+  return {
+    company: info.vehicleCompany || "",
+    model: info.vehicleModel || "",
+    type: info.vehicleType || "",
+    license_number: info.licenseNumber || "",
+    car_no: info.carNo || "",
+    issue_date: info.issueDate ? String(info.issueDate).split("T")[0] : "",
+    expiry_date: info.expiryDate ? String(info.expiryDate).split("T")[0] : "",
+  };
+};
 
-        if (asset?.base64) {
-          resolve(asset.base64);
-        } else {
-          reject("Base64 not available");
-        }
-      }
-    );
-  });
+const mapProfileToImages = (info) => ({
+  car_image: info?.carImage || null,
+  license_image: info?.licenseImage || null,
+  rc_image: info?.rcImage || null,
+});
+
+const ImageUploadField = ({ label, required, image, onPick }) => {
+  const previewUri =
+    typeof image === "string"
+      ? image
+      : image?.uri;
+
+  return (
+    <View style={styles.imageField}>
+      <Text style={styles.label}>
+        {label}
+        {required ? " *" : ""}
+      </Text>
+      <TouchableOpacity style={styles.imagePicker} onPress={onPick}>
+        <Icon name="camera-outline" size={22} color={AUTH_COLORS.primary} />
+        <Text style={styles.imagePickerText}>
+          {previewUri ? "Change photo" : "Upload photo"}
+        </Text>
+      </TouchableOpacity>
+      {previewUri ? (
+        <Image
+          source={{ uri: previewUri }}
+          style={styles.previewImage}
+          resizeMode="cover"
+        />
+      ) : null}
+    </View>
+  );
 };
 
 const AddVehicleModal = ({
@@ -50,302 +89,345 @@ const AddVehicleModal = ({
   existingVehicle,
 }) => {
   const [loading, setLoading] = useState(false);
-
-  const [vehicleData, setVehicleData] = useState({
-    company: "",
-    model: "",
-    type: "",
-    license_number: "",
-    car_image: "",
-    issue_date: "",
-    expiry_date: "",
-    car_no: "",
+  const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [images, setImages] = useState({
+    car_image: null,
+    license_image: null,
+    rc_image: null,
   });
-
   const [showIssuePicker, setShowIssuePicker] = useState(false);
   const [showExpiryPicker, setShowExpiryPicker] = useState(false);
 
   useEffect(() => {
-    if (existingVehicle) {
-      setVehicleData(existingVehicle);
-    }
-  }, [existingVehicle]);
+    if (!visible) return;
+    setForm(mapProfileToForm(existingVehicle));
+    setImages(mapProfileToImages(existingVehicle));
+    setShowIssuePicker(false);
+    setShowExpiryPicker(false);
+  }, [visible, existingVehicle]);
 
-  const updateVehicle = (field, value) =>
-    setVehicleData((prev) => ({ ...prev, [field]: value }));
+  const updateForm = (field, value) =>
+    setForm((prev) => ({ ...prev, [field]: value }));
 
-  /* ✅ Image picker */
-  const pickImage = async () => {
+  const pickImage = async (field) => {
     try {
-      const base64 = await convertImageToBase64();
-      updateVehicle("car_image", base64);
+      const asset = await pickImageAsset();
+      if (asset) setImages((prev) => ({ ...prev, [field]: asset }));
     } catch (err) {
-      Alert.alert("Error", "Image selection failed");
+      Alert.alert("Error", err?.message || "Could not select image");
     }
+  };
+
+  const hasImage = (field) => {
+    const img = images[field];
+    if (!img) return false;
+    if (typeof img === "string") return isRemoteImageUrl(img) || img.length > 0;
+    return !!img.uri;
   };
 
   const onIssueDateChange = (_, selectedDate) => {
     setShowIssuePicker(false);
     if (selectedDate) {
-      updateVehicle(
-        "issue_date",
-        selectedDate.toISOString().split("T")[0]
-      );
+      updateForm("issue_date", selectedDate.toISOString().split("T")[0]);
     }
   };
 
   const onExpiryDateChange = (_, selectedDate) => {
     setShowExpiryPicker(false);
     if (selectedDate) {
-      updateVehicle(
-        "expiry_date",
-        selectedDate.toISOString().split("T")[0]
-      );
+      updateForm("expiry_date", selectedDate.toISOString().split("T")[0]);
     }
   };
 
-  /* ✅ MAIN FUNCTION (FIXED) */
   const handleAddVehicle = async () => {
     const token = await AsyncStorage.getItem("token");
-
     if (!token) {
       Alert.alert("Error", "User not authenticated");
       return;
     }
 
-    const { company, model, type, license_number } = vehicleData;
-
-    // ✅ Match backend validation
-    if (!company || !model || !type || !license_number) {
-      Alert.alert("Warning", "Please fill all required fields");
+    if (
+      !form.company?.trim() ||
+      !form.model?.trim() ||
+      !form.type?.trim() ||
+      !form.license_number?.trim()
+    ) {
+      Alert.alert(
+        "Required fields",
+        "Company, model, type, and license number are required."
+      );
+      return;
+    }
+    if (!form.car_no?.trim()) {
+      Alert.alert("Required field", "Vehicle registration number is required.");
+      return;
+    }
+    if (!hasImage("license_image")) {
+      Alert.alert("Required", "Please upload your driving license image.");
+      return;
+    }
+    if (!hasImage("rc_image")) {
+      Alert.alert("Required", "Please upload your RC (registration certificate) image.");
       return;
     }
 
     setLoading(true);
-
     try {
-      const payload = {
-        ...vehicleData,
-        car_image: vehicleData.car_image || "",
-      };
+      const res = await AddVehicle(token, form, images);
 
-      const res = await AddVehicle(token, payload);
-
-      console.log("🚗 API RESPONSE:", res);
-
-      if (res.success) {
-        Alert.alert("Success", res.message || "Vehicle saved 🚗");
-
-        // ✅ Correct response
+      if (res?.success) {
         onVehicleAdded?.(res.vehicle);
-
-        onClose();
+        onClose?.();
       } else {
-        Alert.alert("Error", res.message || "Something went wrong");
+        Alert.alert("Error", res?.message || "Something went wrong");
       }
     } catch (err) {
-      Alert.alert("Error", err.message || "Error adding vehicle");
+      Alert.alert("Error", err?.message || "Error adding vehicle");
     } finally {
       setLoading(false);
     }
   };
 
-  /* ✅ Disable logic FIXED */
   const isDisabled =
-    !vehicleData.company ||
-    !vehicleData.model ||
-    !vehicleData.type ||
-    !vehicleData.license_number;
+    !form.company?.trim() ||
+    !form.model?.trim() ||
+    !form.type?.trim() ||
+    !form.license_number?.trim() ||
+    !form.car_no?.trim() ||
+    !hasImage("license_image") ||
+    !hasImage("rc_image");
+
+  const isUpdate = !!existingVehicle?.vehicleCompany;
 
   return (
-    <Modal visible={visible} animationType="slide">
-      <ScrollView style={styles.container}>
-        <Text style={styles.title}>
-          {existingVehicle ? "Update Vehicle" : "Add Vehicle"}
-        </Text>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+        <View style={styles.header}>
+          <View style={styles.headerTextWrap}>
+            <Text style={styles.title}>
+              {isUpdate ? "Update vehicle" : "Add your vehicle"}
+            </Text>
+            <Text style={styles.subtitle}>
+              Photos are uploaded securely via Cloudinary
+            </Text>
+          </View>
+          <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={12}>
+            <Icon name="close" size={26} color={AUTH_COLORS.text} />
+          </TouchableOpacity>
+        </View>
 
-        <Text style={styles.label}>Company *</Text>
-        <AppTextInput
-          placeholder="e.g. Toyota, Hyundai"
-          value={vehicleData.company}
-          onChangeText={(t) => updateVehicle("company", t)}
-        />
-
-        <Text style={styles.label}>Model *</Text>
-        <AppTextInput
-          placeholder="e.g. Innova, Swift"
-          value={vehicleData.model}
-          onChangeText={(t) => updateVehicle("model", t)}
-        />
-
-        <Text style={styles.label}>Vehicle Type *</Text>
-        <AppTextInput
-          placeholder="e.g. car, suv"
-          value={vehicleData.type}
-          onChangeText={(t) => updateVehicle("type", t)}
-        />
-
-        <Text style={styles.label}>License Number *</Text>
-        <AppTextInput
-          placeholder="Driving license number"
-          value={vehicleData.license_number}
-          onChangeText={(t) => updateVehicle("license_number", t)}
-        />
-
-        <Text style={styles.label}>Car Number</Text>
-        <AppTextInput
-          placeholder="Vehicle registration number"
-          value={vehicleData.car_no}
-          onChangeText={(t) => updateVehicle("car_no", t)}
-        />
-
-        {/* IMAGE */}
-        <Text style={styles.label}>Car Image</Text>
-        <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
-          <Text>
-            {vehicleData.car_image
-              ? "Change Car Image"
-              : "Select Car Image"}
-          </Text>
-        </TouchableOpacity>
-
-        {vehicleData.car_image ? (
-          <Image
-            source={{
-              uri: `data:image/jpeg;base64,${vehicleData.car_image}`,
-            }}
-            style={styles.image}
-          />
-        ) : null}
-
-        {/* ISSUE DATE */}
-        <Text style={styles.label}>Issue Date</Text>
-        <TouchableOpacity
-          style={styles.dateButton}
-          onPress={() => setShowIssuePicker(true)}
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <Text>
-            {vehicleData.issue_date || "Select Issue Date"}
-          </Text>
-        </TouchableOpacity>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={styles.label}>Company *</Text>
+            <AppTextInput
+              placeholder="e.g. Toyota, Hyundai"
+              value={form.company}
+              onChangeText={(t) => updateForm("company", t)}
+            />
 
-        {showIssuePicker && (
-          <DateTimePicker
-            value={
-              vehicleData.issue_date
-                ? new Date(vehicleData.issue_date)
-                : new Date()
-            }
-            mode="date"
-            onChange={onIssueDateChange}
-          />
-        )}
+            <Text style={styles.label}>Model *</Text>
+            <AppTextInput
+              placeholder="e.g. Innova, Swift"
+              value={form.model}
+              onChangeText={(t) => updateForm("model", t)}
+            />
 
-        {/* EXPIRY DATE */}
-        <Text style={styles.label}>Expiry Date</Text>
-        <TouchableOpacity
-          style={styles.dateButton}
-          onPress={() => setShowExpiryPicker(true)}
-        >
-          <Text>
-            {vehicleData.expiry_date || "Select Expiry Date"}
-          </Text>
-        </TouchableOpacity>
+            <Text style={styles.label}>Vehicle type *</Text>
+            <AppTextInput
+              placeholder="e.g. car, suv"
+              value={form.type}
+              onChangeText={(t) => updateForm("type", t)}
+            />
 
-        {showExpiryPicker && (
-          <DateTimePicker
-            value={
-              vehicleData.expiry_date
-                ? new Date(vehicleData.expiry_date)
-                : new Date()
-            }
-            mode="date"
-            onChange={onExpiryDateChange}
-          />
-        )}
+            <Text style={styles.label}>License number *</Text>
+            <AppTextInput
+              placeholder="Driving license number"
+              value={form.license_number}
+              onChangeText={(t) => updateForm("license_number", t)}
+            />
 
-        {/* BUTTON */}
-        <TouchableOpacity
-          style={[
-            styles.button,
-            isDisabled || loading ? { backgroundColor: "#888" } : {},
-          ]}
-          onPress={handleAddVehicle}
-          disabled={loading || isDisabled}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Save Vehicle</Text>
-          )}
-        </TouchableOpacity>
+            <Text style={styles.label}>Registration number (RC) *</Text>
+            <AppTextInput
+              placeholder="Vehicle plate number"
+              value={form.car_no}
+              onChangeText={(t) => updateForm("car_no", t)}
+              autoCapitalize="characters"
+            />
 
-        <TouchableOpacity onPress={onClose}>
-          <Text style={styles.cancel}>Cancel</Text>
-        </TouchableOpacity>
-      </ScrollView>
+            <ImageUploadField
+              label="Driving license photo"
+              required
+              image={images.license_image}
+              onPick={() => pickImage("license_image")}
+            />
+
+            <ImageUploadField
+              label="RC (registration certificate)"
+              required
+              image={images.rc_image}
+              onPick={() => pickImage("rc_image")}
+            />
+
+            <ImageUploadField
+              label="Car photo"
+              required={false}
+              image={images.car_image}
+              onPick={() => pickImage("car_image")}
+            />
+
+            <Text style={styles.label}>License issue date</Text>
+            <Pressable
+              style={styles.dateButton}
+              onPress={() => setShowIssuePicker(true)}
+            >
+              <Text style={styles.dateButtonText}>
+                {form.issue_date || "Select issue date"}
+              </Text>
+            </Pressable>
+            {showIssuePicker && (
+              <DateTimePicker
+                value={form.issue_date ? new Date(form.issue_date) : new Date()}
+                mode="date"
+                onChange={onIssueDateChange}
+              />
+            )}
+
+            <Text style={styles.label}>License expiry date</Text>
+            <Pressable
+              style={styles.dateButton}
+              onPress={() => setShowExpiryPicker(true)}
+            >
+              <Text style={styles.dateButtonText}>
+                {form.expiry_date || "Select expiry date"}
+              </Text>
+            </Pressable>
+            {showExpiryPicker && (
+              <DateTimePicker
+                value={
+                  form.expiry_date ? new Date(form.expiry_date) : new Date()
+                }
+                mode="date"
+                onChange={onExpiryDateChange}
+              />
+            )}
+          </ScrollView>
+
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={[
+                styles.saveBtn,
+                (isDisabled || loading) && styles.saveBtnDisabled,
+              ]}
+              onPress={handleAddVehicle}
+              disabled={loading || isDisabled}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.saveBtnText}>Save vehicle</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={styles.cancelBtn}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </Modal>
   );
 };
 
 export default AddVehicleModal;
 
-/* ✅ STYLES */
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: "#fff" },
-  title: { fontSize: 22, fontWeight: "700", marginBottom: 20 },
-
+  safe: { flex: 1, backgroundColor: AUTH_COLORS.background },
+  flex: { flex: 1 },
+  header: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 16,
+    backgroundColor: AUTH_COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: AUTH_COLORS.border,
+  },
+  headerTextWrap: { flex: 1, paddingRight: 12 },
+  title: { fontSize: 22, fontWeight: "800", color: AUTH_COLORS.text },
+  subtitle: { fontSize: 14, color: AUTH_COLORS.textMuted, marginTop: 4 },
+  closeBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: AUTH_COLORS.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24 },
   label: {
     fontSize: 14,
     fontWeight: "600",
-    marginBottom: 5,
-    marginTop: 10,
-    color: "#333",
+    marginBottom: 6,
+    marginTop: 12,
+    color: AUTH_COLORS.text,
   },
-
-  input: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    padding: 12,
-    borderRadius: 10,
-  },
-
+  imageField: { marginTop: 4 },
   imagePicker: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    padding: 12,
-    borderRadius: 10,
+    flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: INPUT_COLORS.border,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: INPUT_COLORS.background,
   },
-
-  image: {
+  imagePickerText: { color: AUTH_COLORS.primary, fontWeight: "600" },
+  previewImage: {
     width: "100%",
-    height: 180,
-    borderRadius: 10,
-    marginBottom: 15,
+    height: 140,
+    borderRadius: 12,
+    marginTop: 8,
+    marginBottom: 4,
   },
-
   dateButton: {
     borderWidth: 1,
-    borderColor: "#ddd",
-    padding: 12,
-    borderRadius: 10,
-  },
-
-  button: {
-    backgroundColor: "#2653bb",
-    padding: 16,
+    borderColor: INPUT_COLORS.border,
+    padding: 14,
     borderRadius: 12,
+    backgroundColor: INPUT_COLORS.background,
+  },
+  dateButtonText: { color: INPUT_COLORS.text, fontSize: 15 },
+  footer: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 8,
+    backgroundColor: AUTH_COLORS.surface,
+    borderTopWidth: 1,
+    borderTopColor: AUTH_COLORS.border,
+  },
+  saveBtn: {
+    backgroundColor: AUTH_COLORS.primary,
+    paddingVertical: 16,
+    borderRadius: 14,
     alignItems: "center",
-    marginTop: 20,
   },
-
-  buttonText: { color: "#fff", fontWeight: "600" },
-
-  cancel: {
-    marginTop: 20,
-    textAlign: "center",
-    color: "#64748B",
-  },
+  saveBtnDisabled: { backgroundColor: "#94A3B8" },
+  saveBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  cancelBtn: { paddingVertical: 14, alignItems: "center" },
+  cancelText: { color: AUTH_COLORS.textMuted, fontWeight: "600", fontSize: 15 },
 });

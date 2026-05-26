@@ -16,8 +16,10 @@ const verifyToken = async (req, res) => handle(res, () => authService.verifyToke
 const registerFcmToken = async (req, res) => handle(res, () => authService.registerFcmToken(req.user, req.body.fcmToken));
 const updateProfileImage = async (req, res) => handle(res, () => authService.updateProfileImage(req.user, req.body.profile_img));
 const sendNotification = async (req, res) => handle(res, () => authService.sendNotification(req.body));
-const addVehicle = async (req, res) => handle(res, () => authService.addVehicle(req.user, req.body));
-const editVehicle = async (req, res) => handle(res, () => authService.editVehicle(req.user, req.body));
+const addVehicle = async (req, res) =>
+  handle(res, () => authService.addVehicle(req.user, req.body, req.files));
+const editVehicle = async (req, res) =>
+  handle(res, () => authService.editVehicle(req.user, req.body, req.files));
 const updateTerms = async (req, res) => handle(res, () => authService.updateTerms(req.user.id, req.body.isAccepted));
 const getUsersData = async (req, res) => handle(res, () => authService.getUsersData(req.body.userIds));
 const getUserProfile = async (req, res) => handle(res, () => authService.getUserProfile(req.user._id));

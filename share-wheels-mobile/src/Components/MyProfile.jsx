@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -28,16 +28,33 @@ import LegalIcon from "../assets/legal.png";
 import { useNavigation } from "@react-navigation/native";
 import profilepageicon from "../assets/profilepageicon.png";
 import { profileData } from "../Navigation/AuthNavigator";
+import KeyboardAwareScreen from "./ui/KeyboardAwareScreen";
+import ScreenContainer from "./ui/ScreenContainer";
+import AdPlacement from "./ads/AdPlacement";
+import { useAds } from "../context/AdsContext";
+import { useFocusEffect } from "@react-navigation/native";
+import { LAYOUT, scale } from "../theme/layout";
+import { uploadAndSetProfileImage } from "../ApiService/imageApiService";
+import { userProfile } from "../ApiService/ridesApiServices";
+import { isRemoteImageUrl } from "../Utils/imageUpload";
 
 const MyProfile = () => {
-  const { ProfileDetails } = profileData();
+  const { ProfileDetails, SetProfileDetails, logout } = profileData();
   const navigation = useNavigation();
+  const { refreshAds } = useAds();
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshAds();
+    }, [refreshAds])
+  );
 
   const personal = ProfileDetails?.data?.personalInfo;
   const vehicle = ProfileDetails?.data?.vehicleInfo;
 
   // 🔥 Image states
   const [profileImage, setProfileImage] = useState(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [visible, setVisible] = useState(false);
   const scaleAnim = useRef(new Animated.Value(0)).current;
 
@@ -47,16 +64,50 @@ const MyProfile = () => {
   }, []);
 
   const loadSavedImage = async () => {
+    if (personal?.userimg && isRemoteImageUrl(personal.userimg)) {
+      setProfileImage(personal.userimg);
+      return;
+    }
     const img = await AsyncStorage.getItem("PROFILE_IMAGE");
     if (img) setProfileImage(img);
   };
 
-  // ✅ Final image source
+  useEffect(() => {
+    if (personal?.userimg) loadSavedImage();
+  }, [personal?.userimg]);
+
   const imageSource = profileImage
     ? { uri: profileImage }
     : personal?.userimg
     ? { uri: personal.userimg }
     : profilepageicon;
+
+  const persistProfilePhoto = async (asset) => {
+    if (!asset?.uri) return;
+    setProfileImage(asset.uri);
+    setUploadingPhoto(true);
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) throw new Error("Not logged in");
+      const file = {
+        uri: asset.uri,
+        type: asset.type || "image/jpeg",
+        name: asset.fileName || "profile.jpg",
+      };
+      const result = await uploadAndSetProfileImage(token, file);
+      const url = result?.profile_img;
+      if (url) {
+        setProfileImage(url);
+        await AsyncStorage.setItem("PROFILE_IMAGE", url);
+      }
+      const profile = await userProfile(token);
+      if (profile?.data) SetProfileDetails(profile);
+    } catch (err) {
+      Alert.alert("Upload failed", err?.message || "Could not upload profile photo");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
 
   // 🔥 Preview animation
   const openImage = () => {
@@ -75,6 +126,23 @@ const MyProfile = () => {
     }).start(() => setVisible(false));
   };
 
+  const handleLogout = () => {
+    Alert.alert("Log out", "Are you sure you want to log out?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Log out",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            if (logout) await logout();
+          } catch (e) {
+            Alert.alert("Error", e?.message || "Could not log out");
+          }
+        },
+      },
+    ]);
+  };
+
   // 🔥 Image picker
   const pickImage = () => {
     Alert.alert("Upload Image", "Choose an option", [
@@ -91,9 +159,7 @@ const MyProfile = () => {
     });
 
     if (!result.didCancel && result.assets?.length > 0) {
-      const uri = result.assets[0].uri;
-      setProfileImage(uri);
-      await AsyncStorage.setItem("PROFILE_IMAGE", uri);
+      await persistProfilePhoto(result.assets[0]);
     }
   };
 
@@ -101,20 +167,21 @@ const MyProfile = () => {
     const result = await launchImageLibrary({
       mediaType: "photo",
       quality: 0.8,
+      includeBase64: false,
     });
 
     if (!result.didCancel && result.assets?.length > 0) {
-      const uri = result.assets[0].uri;
-      setProfileImage(uri);
-      await AsyncStorage.setItem("PROFILE_IMAGE", uri);
+      await persistProfilePhoto(result.assets[0]);
     }
   };
 
   return (
-    <View style={styles.container}>
+    <ScreenContainer backgroundColor="#F3F4F6" edges={["top"]}>
+    <KeyboardAwareScreen style={styles.container}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 30 }}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: LAYOUT.spacing.xl + 80 }}
       >
         {/* 🔷 PROFILE CARD */}
         <LinearGradient
@@ -129,8 +196,12 @@ const MyProfile = () => {
               </TouchableOpacity>
 
               {/* ✏️ EDIT BUTTON */}
-              <TouchableOpacity style={styles.editBtn} onPress={pickImage}>
-                <Text style={styles.editText}>✏️</Text>
+              <TouchableOpacity
+                style={styles.editBtn}
+                onPress={pickImage}
+                disabled={uploadingPhoto}
+              >
+                <Text style={styles.editText}>{uploadingPhoto ? "…" : "✏️"}</Text>
               </TouchableOpacity>
             </View>
 
@@ -164,9 +235,19 @@ const MyProfile = () => {
             <Text style={styles.arrow}>›</Text>
           </TouchableOpacity>
         </View>
+
+        <AdPlacement placement="profile" />
+
+        <TouchableOpacity
+          style={styles.logoutBtn}
+          onPress={handleLogout}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.logoutText}>Log out</Text>
+        </TouchableOpacity>
       </ScrollView>
 
-      {/* 🔥 IMAGE PREVIEW MODAL */}
+      {/* IMAGE PREVIEW MODAL */}
       <Modal visible={visible} transparent animationType="fade">
         <TouchableWithoutFeedback onPress={closeImage}>
           <View style={styles.modalContainer}>
@@ -181,7 +262,8 @@ const MyProfile = () => {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-    </View>
+    </KeyboardAwareScreen>
+    </ScreenContainer>
   );
 };
 
@@ -191,14 +273,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F3F4F6",
-    paddingTop: 40,
-    marginBottom:60,
   },
 
   profileCard: {
-    margin: 16,
-    borderRadius: 20,
-    padding: 20,
+    margin: LAYOUT.spacing.md,
+    borderRadius: LAYOUT.radius.lg,
+    padding: LAYOUT.spacing.screen,
   },
 
   topRow: {
@@ -207,15 +287,15 @@ const styles = StyleSheet.create({
   },
 
   avatarWrapper: {
-    width: 80,
-    height: 80,
-    marginRight: 14,
+    width: LAYOUT.sizes.avatarLg + 8,
+    height: LAYOUT.sizes.avatarLg + 8,
+    marginRight: LAYOUT.spacing.md,
   },
 
   avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 50,
+    width: LAYOUT.sizes.avatarLg + 8,
+    height: LAYOUT.sizes.avatarLg + 8,
+    borderRadius: (LAYOUT.sizes.avatarLg + 8) / 2,
     borderColor: "#fff",
     borderWidth: 2,
     elevation: 6,
@@ -299,5 +379,23 @@ const styles = StyleSheet.create({
   arrow: {
     fontSize: 20,
     color: "#9CA3AF",
+  },
+
+  logoutBtn: {
+    marginHorizontal: LAYOUT.spacing.md,
+    marginTop: LAYOUT.spacing.lg,
+    marginBottom: LAYOUT.spacing.xl,
+    backgroundColor: "#FEE2E2",
+    borderRadius: LAYOUT.radius.md,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    paddingVertical: LAYOUT.spacing.md,
+    alignItems: "center",
+  },
+
+  logoutText: {
+    color: "#DC2626",
+    fontSize: LAYOUT.font.body,
+    fontWeight: "700",
   },
 });

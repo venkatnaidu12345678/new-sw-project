@@ -17,11 +17,16 @@ import UpcomingRide from "../Components/UpcomingRide";
 import CreatePage from "../Components/CreateRequestIcon";
 import AllridesComponent from "../Components/AllridesComponent";
 import TermsPopup from "../Components/TermsPopup";
+import ScreenContainer from "../Components/ui/ScreenContainer";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LAYOUT, getScrollBottomPadding } from "../theme/layout";
 
 import { profileData } from "../Navigation/AuthNavigator";
 import { getUpcomingRides, getAllRides } from "../ApiService/ridesApiServices";
 import { RideListSkeleton } from "../Components/ui/Skeleton";
 import AnimatedLoad from "../Components/ui/AnimatedLoad";
+import AdPlacement from "../Components/ads/AdPlacement";
+import { useAds } from "../context/AdsContext";
 
 // Locations
 const locations = [
@@ -41,6 +46,7 @@ const locations = [
 
 const DashboardPage = () => {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { refreshUpcomingRides, ProfileDetails,setRefresh } = profileData();
 
   const [fromValue, setFromValue] = useState("");
@@ -63,7 +69,7 @@ const DashboardPage = () => {
   const animation = useRef(new Animated.Value(1)).current;
 
   const user = ProfileDetails?.data?.personalInfo;
-  console.log(ProfileDetails)
+  const { refreshAds } = useAds();
 
   // FETCH UPCOMING RIDES
   const fetchUpcomingRides = useCallback(async () => {
@@ -73,7 +79,10 @@ const DashboardPage = () => {
       if (!token) return;
 
       const resp = await getUpcomingRides(token);
-      setRides(resp?.rides || []);
+      const upcomingOnly = (resp?.rides || []).filter(
+        (ride) => ride?.status === "pending"
+      );
+      setRides(upcomingOnly);
     } catch (err) {
       console.log("Error fetching upcoming rides:", err.message);
       setErrorMsg("Failed to load upcoming rides.");
@@ -85,7 +94,8 @@ const DashboardPage = () => {
   useFocusEffect(
     useCallback(() => {
       fetchUpcomingRides();
-    }, [fetchUpcomingRides, refreshUpcomingRides])
+      refreshAds();
+    }, [fetchUpcomingRides, refreshUpcomingRides, refreshAds])
   );
 
   // HANDLE SEARCH
@@ -193,14 +203,11 @@ const DashboardPage = () => {
   const renderRide = ({ item }) => (
     <UpcomingRide data={item} onPress={() => handleRidePress(item)} />
   );
-  const terms = ProfileDetails?.data?.terms
-console.log('pro',terms)
-  return (
-    <View style={styles.container}>
-      {/* TERMS POPUP */}
-      {terms === false ? <TermsPopup setRefresh={setRefresh} />:null}
 
-      {/* HEADER */}
+  const terms = ProfileDetails?.data?.terms;
+
+  const listHeader = (
+    <>
       <View style={styles.header}>
         <ProfilePage user={user} />
         <NotificationIcon />
@@ -210,10 +217,10 @@ console.log('pro',terms)
         <Text style={styles.title}>Where do you plan to go today?</Text>
       )}
 
-      {/* ERROR MESSAGE */}
-      {errorMsg ? <Text style={{ color: "red" }}>{errorMsg}</Text> : null}
+      {!isFocused && <AdPlacement placement="home_banner" />}
 
-      {/* SEARCH */}
+      {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
+
       <SearchLocation
         fromValue={fromValue}
         toValue={toValue}
@@ -240,50 +247,88 @@ console.log('pro',terms)
         onBlur={() => setIsFocused(false)}
       />
 
-      {/* CLEAR BUTTON */}
-      {showAllRides && (
-        <View style={styles.clearRow}>
-          <TouchableOpacity onPress={handleClear}>
-            <Text style={styles.clearText}>Clear</Text>
-          </TouchableOpacity>
+      <AdPlacement placement="home_video" />
+
+      <Text style={styles.section}>Upcoming Rides</Text>
+      <AdPlacement placement="home_native" />
+    </>
+  );
+
+  return (
+    <ScreenContainer edges={["top"]} backgroundColor="#fff" style={styles.container}>
+      {terms === false ? <TermsPopup setRefresh={setRefresh} /> : null}
+
+      {showAllRides ? (
+        <View style={styles.flex}>
+          <View style={styles.header}>
+            <ProfilePage user={user} />
+            <NotificationIcon />
+          </View>
+          <SearchLocation
+            fromValue={fromValue}
+            toValue={toValue}
+            activeField={activeField}
+            suggestions={suggestions}
+            date={date}
+            showDate={showDate}
+            showFilters={showFilters}
+            dropdownTop={dropdownTop}
+            animatedHeight={animatedHeight}
+            animatedOpacity={animatedOpacity}
+            setFromValue={setFromValue}
+            setToValue={setToValue}
+            setActiveField={setActiveField}
+            setSuggestions={setSuggestions}
+            setDate={setDate}
+            setShowDate={setShowDate}
+            expandFilters={expandFilters}
+            collapseFilters={collapseFilters}
+            filterLocations={filterLocations}
+            selectLocation={selectLocation}
+            handleSearch={handleSearch}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+          />
+          <View style={styles.clearRow}>
+            <TouchableOpacity onPress={handleClear}>
+              <Text style={styles.clearText}>Clear</Text>
+            </TouchableOpacity>
+          </View>
+          <AllridesComponent
+            rides={allRides}
+            loading={loadingAllRides}
+            navigation={navigation}
+          />
         </View>
+      ) : (
+        <AnimatedLoad
+          loading={loadingUpcoming}
+          skeleton={<RideListSkeleton count={2} variant="upcoming" />}
+          style={styles.flex}
+        >
+          <FlatList
+            data={rides}
+            keyExtractor={(item, index) => `${item._id}-${index}`}
+            renderItem={renderRide}
+            ListHeaderComponent={listHeader}
+            ListEmptyComponent={
+              <Text style={styles.emptyRides}>No upcoming rides</Text>
+            }
+            contentContainerStyle={{
+              paddingBottom: getScrollBottomPadding(insets.bottom, 72),
+            }}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          />
+        </AnimatedLoad>
       )}
 
-      {/* UPCOMING RIDES */}
-      {!showAllRides && (
-        <>
-          <Text style={styles.section}>Upcoming Rides</Text>
-          <AnimatedLoad
-            loading={loadingUpcoming}
-            skeleton={<RideListSkeleton count={2} variant="upcoming" />}
-          >
-            <FlatList
-              data={rides}
-              keyExtractor={(item, index) => `${item._id}-${index}`}
-              renderItem={renderRide}
-              ListEmptyComponent={<Text>No upcoming rides</Text>}
-              contentContainerStyle={{ paddingBottom: 120 }}
-            />
-          </AnimatedLoad>
-        </>
-      )}
-
-      {/* ALL RIDES */}
-      {showAllRides && (
-        <AllridesComponent
-          rides={allRides}
-          loading={loadingAllRides}
-          navigation={navigation}
-        />
-      )}
-
-      {/* CREATE BUTTON */}
       {!isFocused && (
         <View style={styles.createButtonWrapper}>
           <CreatePage />
         </View>
       )}
-    </View>
+    </ScreenContainer>
   );
 };
 
@@ -293,28 +338,29 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
-    paddingHorizontal: 16,
+    paddingHorizontal: LAYOUT.spacing.screen,
   },
+  flex: { flex: 1 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 16,
-    marginBottom: 20,
+    marginTop: LAYOUT.spacing.sm,
+    marginBottom: LAYOUT.spacing.md,
   },
   title: {
-    fontSize: 22,
+    fontSize: LAYOUT.font.title,
     fontWeight: "700",
-    marginBottom: 12,
+    marginBottom: LAYOUT.spacing.md,
   },
   section: {
-    fontSize: 18,
+    fontSize: LAYOUT.font.section,
     fontWeight: "700",
-    marginVertical: 12,
+    marginVertical: LAYOUT.spacing.md,
   },
   createButtonWrapper: {
     position: "absolute",
-    bottom: 20,
-    right: 20,
+    bottom: LAYOUT.spacing.lg,
+    right: LAYOUT.spacing.lg,
   },
   clearRow: {
     alignItems: "flex-end",
@@ -325,5 +371,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     textDecorationLine: "underline",
+  },
+  errorText: {
+    color: "#B91C1C",
+    marginBottom: LAYOUT.spacing.sm,
+  },
+  emptyRides: {
+    textAlign: "center",
+    color: "#64748B",
+    marginTop: LAYOUT.spacing.md,
   },
 });

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -14,29 +14,81 @@ L.Icon.Default.mergeOptions({
   shadowUrl: markerShadow,
 });
 
-const driverIcon = new L.Icon({
-  iconUrl: markerIcon,
-  iconRetinaUrl: markerIcon2x,
-  shadowUrl: markerShadow,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-});
+const roleIcon = (role) =>
+  L.divIcon({
+    className: "",
+    html: `<div style="
+      width:34px;height:34px;border-radius:50%;
+      display:flex;align-items:center;justify-content:center;
+      font-size:17px;border:2px solid #fff;
+      box-shadow:0 2px 6px rgba(0,0,0,.35);
+      background:${role === "driver" ? "#2563eb" : role === "courier" ? "#d97706" : "#16a34a"};
+    ">${role === "driver" ? "🚗" : role === "courier" ? "📦" : "👤"}</div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+  });
 
 const DEFAULT_CENTER = [17.385, 78.4867];
 
-const FitBounds = ({ rides }) => {
+const normalizeLocation = (loc) => {
+  if (!loc) return null;
+  const lat = Number(loc.lat ?? loc.latitude);
+  const lng = Number(loc.lng ?? loc.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng, updatedAt: loc.updatedAt };
+};
+
+const rideKey = (id) => (id == null ? "" : String(id));
+
+const FitBounds = ({ points }) => {
   const map = useMap();
   useEffect(() => {
-    const points = rides
-      .filter((r) => r.location?.lat != null)
-      .map((r) => [r.location.lat, r.location.lng]);
+    if (!points?.length) return;
     if (points.length === 1) {
       map.setView(points[0], 14);
-    } else if (points.length > 1) {
+    } else {
       map.fitBounds(points, { padding: [40, 40] });
     }
-  }, [rides, map]);
+  }, [points, map]);
   return null;
+};
+
+const collectMarkers = (ride, detail) => {
+  const markers = [];
+  const lt = detail?.liveTracking || ride?.liveTracking;
+  const driverLoc =
+    normalizeLocation(detail?.location) ||
+    normalizeLocation(lt?.driverLocation) ||
+    normalizeLocation(ride?.location);
+
+  if (driverLoc) {
+    markers.push({
+      key: `${ride.rideId}-driver`,
+      ...driverLoc,
+      role: "driver",
+      label: ride.driver?.name || "Driver",
+    });
+  }
+
+  const participants =
+    detail?.participants ||
+    detail?.liveTracking?.participantLocations ||
+    ride?.participants ||
+    [];
+
+  participants.forEach((p, i) => {
+    const loc = normalizeLocation(p.location || p);
+    if (!loc) return;
+    if (p.role === "driver" && driverLoc) return;
+    markers.push({
+      key: `${ride.rideId}-${p.userId || i}-${p.role}`,
+      ...loc,
+      role: p.role || "passenger",
+      label: p.name || p.role,
+    });
+  });
+
+  return markers;
 };
 
 export default function LiveTracking() {
@@ -46,23 +98,28 @@ export default function LiveTracking() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const res = await getActiveTracking();
-      setRides(res.rides || []);
+      const list = (res.rides || []).map((r) => ({
+        ...r,
+        rideId: rideKey(r.rideId),
+        location: normalizeLocation(r.location),
+      }));
+      setRides(list);
       setError("");
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 8000);
+    const interval = setInterval(load, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -70,33 +127,62 @@ export default function LiveTracking() {
       return;
     }
     getTrackingDetail(selectedId)
-      .then((res) => setDetail(res.ride))
+      .then((res) => {
+        const ride = res.ride || {};
+        setDetail({
+          ...ride,
+          location: normalizeLocation(ride.location || ride.liveTracking?.driverLocation),
+        });
+      })
       .catch(() => setDetail(null));
   }, [selectedId]);
 
   const selectedRide = useMemo(
-    () => rides.find((r) => r.rideId === selectedId),
+    () => rides.find((r) => rideKey(r.rideId) === rideKey(selectedId)),
     [rides, selectedId]
   );
 
   const pathPositions = useMemo(() => {
     const path = detail?.liveTracking?.locationHistory || selectedRide?.path || [];
-    return path.map((p) => [p.lat, p.lng]).filter((p) => p[0] && p[1]);
+    return path
+      .map((p) => {
+        const lat = Number(p.lat);
+        const lng = Number(p.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        return [lat, lng];
+      })
+      .filter(Boolean);
   }, [detail, selectedRide]);
 
+  const allMarkers = useMemo(() => {
+    if (selectedRide) {
+      return collectMarkers(selectedRide, detail);
+    }
+    return rides.flatMap((r) => collectMarkers(r, null));
+  }, [rides, selectedRide, detail]);
+
   const mapCenter = useMemo(() => {
-    const loc = detail?.liveTracking?.driverLocation || selectedRide?.location;
-    if (loc?.lat) return [loc.lat, loc.lng];
+    if (allMarkers.length) return [allMarkers[0].lat, allMarkers[0].lng];
     if (pathPositions.length) return pathPositions[pathPositions.length - 1];
     return DEFAULT_CENTER;
-  }, [detail, selectedRide, pathPositions]);
+  }, [allMarkers, pathPositions]);
+
+  const fitPoints = useMemo(
+    () => allMarkers.map((m) => [m.lat, m.lng]),
+    [allMarkers]
+  );
 
   return (
     <div>
       <h1 style={styles.heading}>Live Ride Tracking</h1>
       <p style={styles.sub}>
-        Active rides appear when a driver starts a ride and shares GPS location.
+        Driver, passenger, and courier locations when a ride is started and GPS is shared.
       </p>
+      <div style={styles.legend}>
+        <span>🚗 Driver</span>
+        <span>👤 Passenger</span>
+        <span>📦 Courier</span>
+      </div>
       {error && <p style={{ color: "#b91c1c", marginBottom: 12 }}>{error}</p>}
 
       <div style={styles.layout}>
@@ -105,7 +191,7 @@ export default function LiveTracking() {
           {loading && rides.length === 0 ? (
             <p>Loading…</p>
           ) : rides.length === 0 ? (
-            <p style={styles.muted}>No rides in progress with location yet.</p>
+            <p style={styles.muted}>No rides in progress yet.</p>
           ) : (
             rides.map((r) => (
               <button
@@ -113,7 +199,7 @@ export default function LiveTracking() {
                 type="button"
                 style={{
                   ...styles.rideCard,
-                  ...(selectedId === r.rideId ? styles.rideCardActive : {}),
+                  ...(rideKey(selectedId) === rideKey(r.rideId) ? styles.rideCardActive : {}),
                 }}
                 onClick={() => setSelectedId(r.rideId)}
               >
@@ -123,10 +209,18 @@ export default function LiveTracking() {
                 <div style={styles.rideMeta}>
                   Driver: {r.driver?.name || "—"} · {r.passengerCount} passenger(s)
                 </div>
-                {r.location?.lat ? (
-                  <div style={styles.gpsOk}>GPS live</div>
+                {r.location ? (
+                  <div style={styles.gpsOk}>
+                    Driver GPS ({r.location.lat.toFixed(4)}, {r.location.lng.toFixed(4)})
+                  </div>
                 ) : (
-                  <div style={styles.gpsWait}>Waiting for GPS…</div>
+                  <div style={styles.gpsWait}>Waiting for driver GPS…</div>
+                )}
+                {(r.participants || []).filter((p) => p.role !== "driver").length > 0 && (
+                  <div style={styles.gpsOk}>
+                    +{(r.participants || []).filter((p) => p.role !== "driver").length} other
+                    participant(s) on map
+                  </div>
                 )}
               </button>
             ))
@@ -143,26 +237,21 @@ export default function LiveTracking() {
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
-            <FitBounds rides={rides} />
+            <FitBounds points={fitPoints} />
 
-            {rides.map((r) =>
-              r.location?.lat ? (
-                <Marker
-                  key={r.rideId}
-                  position={[r.location.lat, r.location.lng]}
-                  icon={driverIcon}
-                  eventHandlers={{
-                    click: () => setSelectedId(r.rideId),
-                  }}
-                >
-                  <Popup>
-                    <strong>{r.from} → {r.to}</strong>
-                    <br />
-                    Driver: {r.driver?.name}
-                  </Popup>
-                </Marker>
-              ) : null
-            )}
+            {allMarkers.map((m) => (
+              <Marker
+                key={m.key}
+                position={[m.lat, m.lng]}
+                icon={roleIcon(m.role)}
+              >
+                <Popup>
+                  <strong>{m.label}</strong>
+                  <br />
+                  {m.role}
+                </Popup>
+              </Marker>
+            ))}
 
             {pathPositions.length > 1 && (
               <Polyline positions={pathPositions} color="#2563eb" weight={4} />
@@ -176,7 +265,15 @@ export default function LiveTracking() {
 
 const styles = {
   heading: { fontSize: 28, fontWeight: 800, marginBottom: 4 },
-  sub: { color: "#64748b", marginBottom: 20 },
+  sub: { color: "#64748b", marginBottom: 12 },
+  legend: {
+    display: "flex",
+    gap: 20,
+    marginBottom: 16,
+    fontSize: 14,
+    fontWeight: 600,
+    color: "#334155",
+  },
   layout: {
     display: "grid",
     gridTemplateColumns: "320px 1fr",

@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, Image, Platform } from "react-native";
+import { View, StyleSheet, Image } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import Icon from "react-native-vector-icons/Ionicons";
 
@@ -8,9 +8,9 @@ import RideHistory from "../Components/RideHistory";
 import MyRequest from "../Components/MyRequest";
 import MyProfile from "../Components/MyProfile";
 import AnimatedTabIcon from "./ui/AnimatedTabIcon";
+import { LAYOUT, scale } from "../theme/layout";
 
 import requestIcon from "../assets/requesticon.png";
-
 const Tab = createBottomTabNavigator();
 
 export default function BottomNavigator() {
@@ -22,7 +22,7 @@ export default function BottomNavigator() {
         tabBarStyle: styles.tabBar,
         tabBarItemStyle: styles.tabItem,
         animation: "fade",
-        sceneStyle: { backgroundColor: "#F8FAFC" },
+        sceneStyle: { backgroundColor: "#F8FAFC", flex: 1 },
 
         tabBarIcon: ({ focused }) => {
           if (route.name === "Request") {
@@ -52,7 +52,7 @@ export default function BottomNavigator() {
             <AnimatedTabIcon focused={focused}>
               <Icon
                 name={iconName}
-                size={23}
+                size={scale(20)}
                 color={focused ? "#2563EB" : "#94A3B8"}
               />
             </AnimatedTabIcon>
@@ -70,12 +70,12 @@ export default function BottomNavigator() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    height: Platform.OS === "ios" ? 64 : 60,
+    height: LAYOUT.sizes.tabBarHeight,
     position: "absolute",
-    left: 20,
-    right: 20,
-    bottom: Platform.OS === "ios" ? 20 : 12,
-    borderRadius: 22,
+    left: scale(16),
+    right: scale(16),
+    bottom: LAYOUT.sizes.tabBarBottom,
+    borderRadius: scale(18),
     backgroundColor: "#FFFFFF",
     borderTopWidth: 0,
     paddingTop: 6,
@@ -89,8 +89,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   requestIcon: {
-    width: 22,
-    height: 22,
+    width: scale(20),
+    height: scale(20),
     resizeMode: "contain",
   },
 });

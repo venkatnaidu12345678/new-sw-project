@@ -5,6 +5,7 @@ const User = require("../models/userModel");
 const generateOtpWithExpiry = require("../utils/otpHelper");
 // const sendOtp = require("../utils/sendOtp");
 const { sendPushNotification } = require("../utils/firebaseAdmin");
+const { assignUserNoIfMissing } = require("../utils/userNoHelper");
 
 const toAuthUser = (user) => ({
   id: user._id,
@@ -13,6 +14,7 @@ const toAuthUser = (user) => ({
   mobile: user.mobile,
   gender: user.gender,
   profile_img: user.profile_img,
+  userNo: user.userNo,
 });
 
 const issueToken = (user) =>
@@ -129,9 +131,21 @@ const registerFcmToken = async (user, fcmToken) => {
 };
 
 const updateProfileImage = async (user, profile_img) => {
-  if (!profile_img) return { status: 400, body: { error: "Profile image is required" } };
+  if (!profile_img) {
+    return { status: 400, body: { success: false, message: "Profile image URL is required" } };
+  }
+  const url = String(profile_img).trim();
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message: "Upload image via /auth/upload-image first, then send the returned URL",
+      },
+    };
+  }
   const isUpdate = !!user.profile_img;
-  user.profile_img = profile_img;
+  user.profile_img = url;
   await user.save();
   return {
     status: 200,
@@ -156,32 +170,136 @@ const sendNotification = async ({ userId, title, body, data }) => {
   return { status: 200, body: { success: true, message: "Notification sent successfully", messageId: result } };
 };
 
-const addVehicle = async (user, payload) => {
-  const { company, model, type, license_number, car_image, issue_date, expiry_date, car_no } = payload;
-  if (!company || !model || !type || !license_number) {
-    return { status: 400, body: { error: "Company, model, vehicle type and license number are required" } };
-  }
-  user.vehicle = { company, model, type, license_number, car_image: car_image || "", issue_date, expiry_date, car_no };
-  await user.save();
-  return { status: 200, body: { success: true, message: "Vehicle added/updated successfully", vehicle: user.vehicle } };
+const { resolveImageUrl } = require("../config/cloudinary");
+
+const buildVehicleImages = async (body, files = {}) => {
+  const uploadOne = (file, existing, subfolder) =>
+    resolveImageUrl(file, existing, subfolder);
+  const car_image = await uploadOne(
+    files.car_image?.[0],
+    body.car_image,
+    "vehicles"
+  );
+  const license_image = await uploadOne(
+    files.license_image?.[0],
+    body.license_image,
+    "vehicles"
+  );
+  const rc_image = await uploadOne(files.rc_image?.[0], body.rc_image, "vehicles");
+  return { car_image, license_image, rc_image };
 };
 
-const editVehicle = async (user, payload) => {
-  if (!user.vehicle) return { status: 404, body: { success: false, message: "No vehicle found to update" } };
-  const { company, model, type, license_number, car_image, issue_date, expiry_date, car_no } = payload;
+const addVehicle = async (user, body, files = {}) => {
+  const { company, model, type, license_number, issue_date, expiry_date, car_no } =
+    body || {};
+
+  if (!company?.trim() || !model?.trim() || !type?.trim() || !license_number?.trim()) {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message: "Company, model, vehicle type and license number are required",
+      },
+    };
+  }
+  if (!car_no?.trim()) {
+    return {
+      status: 400,
+      body: { success: false, message: "Vehicle registration number (RC) is required" },
+    };
+  }
+
+  let images;
+  try {
+    images = await buildVehicleImages(body, files);
+  } catch (err) {
+    return {
+      status: 500,
+      body: { success: false, message: err.message || "Image upload failed" },
+    };
+  }
+
+  if (!images.license_image) {
+    return {
+      status: 400,
+      body: { success: false, message: "Driving license image is required" },
+    };
+  }
+  if (!images.rc_image) {
+    return {
+      status: 400,
+      body: { success: false, message: "RC (registration certificate) image is required" },
+    };
+  }
+
+  if (issue_date && expiry_date && new Date(issue_date) > new Date(expiry_date)) {
+    return {
+      status: 400,
+      body: { success: false, message: "Issue date cannot be after expiry date" },
+    };
+  }
+
+  user.vehicle = {
+    company: company.trim(),
+    model: model.trim(),
+    type: type.trim(),
+    license_number: license_number.trim(),
+    car_no: car_no.trim(),
+    car_image: images.car_image || "",
+    license_image: images.license_image,
+    rc_image: images.rc_image,
+    issue_date: issue_date || undefined,
+    expiry_date: expiry_date || undefined,
+  };
+  await user.save();
+  return {
+    status: 200,
+    body: {
+      success: true,
+      message: "Vehicle added/updated successfully",
+      vehicle: user.vehicle,
+    },
+  };
+};
+
+const editVehicle = async (user, body, files = {}) => {
+  if (!user.vehicle) {
+    return { status: 404, body: { success: false, message: "No vehicle found to update" } };
+  }
+
+  const { company, model, type, license_number, issue_date, expiry_date, car_no } =
+    body || {};
+
+  let images;
+  try {
+    images = await buildVehicleImages(body, files);
+  } catch (err) {
+    return {
+      status: 500,
+      body: { success: false, message: err.message || "Image upload failed" },
+    };
+  }
+
   if (company !== undefined) user.vehicle.company = company;
   if (model !== undefined) user.vehicle.model = model;
   if (type !== undefined) user.vehicle.type = type;
   if (license_number !== undefined) user.vehicle.license_number = license_number;
-  if (car_image !== undefined) user.vehicle.car_image = car_image;
   if (car_no !== undefined) user.vehicle.car_no = car_no;
   if (issue_date !== undefined) user.vehicle.issue_date = issue_date;
   if (expiry_date !== undefined) user.vehicle.expiry_date = expiry_date;
+  if (images.car_image) user.vehicle.car_image = images.car_image;
+  if (images.license_image) user.vehicle.license_image = images.license_image;
+  if (images.rc_image) user.vehicle.rc_image = images.rc_image;
+
   if (user.vehicle.issue_date && user.vehicle.expiry_date && new Date(user.vehicle.issue_date) > new Date(user.vehicle.expiry_date)) {
     return { status: 400, body: { success: false, message: "Issue date cannot be after expiry date" } };
   }
+
   await user.save();
-  return { status: 200, body: { success: true, message: "Vehicle updated successfully", vehicle: user.vehicle } };
+  return {
+    status: 200,
+    body: { success: true, message: "Vehicle updated successfully", vehicle: user.vehicle },
+  };
 };
 
 const updateTerms = async (userId, isAccepted) => {
@@ -215,8 +333,11 @@ const getUsersData = async (userIds) => {
 };
 
 const getUserProfile = async (userId) => {
-  const user = await User.findById(userId).select("name gender mobile email vehicle profile_img isTermsAndServicesAccepted");
+  const user = await User.findById(userId).select(
+    "name gender mobile email vehicle profile_img isTermsAndServicesAccepted userNo"
+  );
   if (!user) return { status: 404, body: { success: false, message: "User not found" } };
+  await assignUserNoIfMissing(user);
   return {
     status: 200,
     body: {
@@ -228,16 +349,20 @@ const getUserProfile = async (userId) => {
           gender: user.gender,
           phoneNumber: user.mobile,
           email: user.email,
+          userNo: user.userNo,
         },
         vehicleInfo: {
           vehicleCompany: user.vehicle?.company,
           vehicleModel: user.vehicle?.model,
           vehicleType: user.vehicle?.type,
           licenseNumber: user.vehicle?.license_number,
+          carNo: user.vehicle?.car_no,
           licensePlateHolder: user.name,
           issueDate: user.vehicle?.issue_date,
           expiryDate: user.vehicle?.expiry_date,
           carImage: user.vehicle?.car_image,
+          licenseImage: user.vehicle?.license_image,
+          rcImage: user.vehicle?.rc_image,
         },
         terms: user.isTermsAndServicesAccepted,
       },

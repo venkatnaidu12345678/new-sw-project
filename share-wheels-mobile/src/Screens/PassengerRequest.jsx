@@ -20,6 +20,7 @@ import ToggleComponent from "../Components/ToggleComponent";
 import DateAndSeats from "../Components/DateAndSeats";
 import FixedButton from "../Components/FixedButton";
 import FromToInput from "../Components/FromToInput";
+import KeyboardAwareScreen from "../Components/ui/KeyboardAwareScreen";
 
 /* API */
 import { createpassengerrequest } from "../ApiService/ridesApiServices";
@@ -121,8 +122,11 @@ const PassengerRequest = () => {
   };
 
   return (
-    <View style={styles.safe}>
-      <View style={styles.container}>
+    <KeyboardAwareScreen
+      style={styles.safe}
+      scrollable
+      contentContainerStyle={styles.container}
+    >
 
         {/* 🔙 BACK + TITLE */}
         <View style={styles.headerRow}>
@@ -180,12 +184,8 @@ const PassengerRequest = () => {
         </View>
 
         {/* BUTTON */}
-        <FixedButton
-          title="Create"
-          onPress={handleCreateRequest}
-        />
-      </View>
-    </View>
+      <FixedButton title="Create" onPress={handleCreateRequest} />
+    </KeyboardAwareScreen>
   );
 };
 
@@ -200,9 +200,10 @@ const styles = StyleSheet.create({
   },
 
   container: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: 20,
     paddingTop: 60,
+    paddingBottom: 40,
   },
 
   headerRow: {

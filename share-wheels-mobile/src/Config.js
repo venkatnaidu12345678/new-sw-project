@@ -10,7 +10,7 @@ import { Platform } from "react-native";
 export const LAN_HOST = "192.168.0.116";
 const API_PORT = 3001;
 
-/** true = emulator hits host machine at 10.0.2.2 | false = physical device uses LAN_HOST */
+/** true = emulator (10.0.2.2) | false = physical phone on same Wi‑Fi (LAN_HOST) */
 export const USE_ANDROID_EMULATOR = false;
 
 /** true = http://YOUR_PC:3001 | false = production Render URL */
@@ -64,6 +64,7 @@ export const endPoints = {
   userTermsurl: "/auth/user/terms",
   pickPassengerCourierurl: "/courier/driver/pick-courier-passenger",
   getMyRequestsurl: "/rides/my-requests",
+  uploadImageurl: "/auth/upload-image",
   AddVechileurl: "/auth/add-vehicle",
   editVechileurl: "/auth/edit-vehicle",
   pickupCourierurl: "/driver-rides/driver/pick-courier",
@@ -73,4 +74,7 @@ export const endPoints = {
   supportContexturl: "/support/context",
   supportChaturl: "/support/chat",
   supportSnapshoturl: "/support/snapshot",
+  verificationParticipantsurl: "/driver-rides",
+  verifyParticipanturl: "/driver-rides",
+  activeAdsurl: "/ads/active",
 };

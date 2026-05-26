@@ -63,3 +63,29 @@ export const updateUserVerification = (id, isVerified) =>
 
 export const getActiveTracking = () => api("/admin/tracking/active");
 export const getTrackingDetail = (id) => api(`/admin/tracking/${id}`);
+
+export const getAdsMeta = () => api("/admin/ads/meta");
+export const getAds = (params = {}) => {
+  const q = new URLSearchParams(params).toString();
+  return api(`/admin/ads?${q}`);
+};
+export const createAd = (body) =>
+  api("/admin/ads", { method: "POST", body: JSON.stringify(body) });
+export const updateAd = (id, body) =>
+  api(`/admin/ads/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+export const deleteAd = (id) => api(`/admin/ads/${id}`, { method: "DELETE" });
+
+export const uploadAdMedia = async (file, mediaType = "image") => {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("mediaType", mediaType);
+  const res = await fetch(`${API_BASE}/admin/ads/upload`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || "Upload failed");
+  return data;
+};

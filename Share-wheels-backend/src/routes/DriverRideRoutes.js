@@ -1,6 +1,7 @@
 const express = require("express");
 const authMiddleware = require("../middlewares/authMiddleware");
 const driverRideController = require("../controllers/driverRideController");
+const rideVerificationController = require("../controllers/rideVerificationController");
 
 const router = express.Router();
 
@@ -11,5 +12,15 @@ router.patch("/start-ride", authMiddleware, driverRideController.startRide);
 router.patch("/end-ride", authMiddleware, driverRideController.endRide);
 router.post("/enroute-requests", authMiddleware, driverRideController.enrouteRequests);
 router.post("/driver/pick-courier", authMiddleware, driverRideController.pickCourier);
+router.get(
+  "/:rideId/verification/participants",
+  authMiddleware,
+  rideVerificationController.listParticipants
+);
+router.post(
+  "/:rideId/verification/verify",
+  authMiddleware,
+  rideVerificationController.verifyParticipant
+);
 
 module.exports = router;

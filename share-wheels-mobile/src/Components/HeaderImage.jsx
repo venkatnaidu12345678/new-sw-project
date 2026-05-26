@@ -12,7 +12,10 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import ProfileImage from "../assets/Profiledashboard.png";
+import UserAvatar from "./ui/UserAvatar";
+import { getProfileImageUri } from "../Utils/profileImage";
+import defaultAvatar from "../assets/profile.png";
+import { LAYOUT } from "../theme/layout";
 
 const HeaderImage = (props) => {
   const user = props.user;
@@ -53,9 +56,8 @@ const HeaderImage = (props) => {
     }).start(() => setVisible(false));
   };
 
-  const imageSource = user?.userimg
-    ? { uri: user.userimg }
-    : ProfileImage;
+  const profileUser = user;
+  const profileUri = getProfileImageUri(profileUser);
 
   return (
     <View style={styles.wrapper}>
@@ -67,7 +69,11 @@ const HeaderImage = (props) => {
         
         {/* 👇 IMAGE CLICK */}
         <TouchableOpacity onPress={openImage}>
-          <Image source={imageSource} style={styles.avatar} />
+          <UserAvatar
+            user={profileUser}
+            size={LAYOUT.sizes.headerAvatar}
+            borderColor="#80b1e9"
+          />
         </TouchableOpacity>
 
         <Text style={styles.text} numberOfLines={1}>
@@ -81,7 +87,7 @@ const HeaderImage = (props) => {
         <TouchableWithoutFeedback onPress={closeImage}>
           <View style={styles.modalContainer}>
             <Animated.Image
-              source={imageSource}
+              source={profileUri ? { uri: profileUri } : defaultAvatar}
               style={[
                 styles.fullImage,
                 {
@@ -101,7 +107,6 @@ export default HeaderImage;
 
 const styles = StyleSheet.create({
   wrapper: {
-    paddingTop: 20,
     backgroundColor: "#fff",
   },
   container: {
@@ -117,7 +122,7 @@ const styles = StyleSheet.create({
     borderWidth: 3,
   },
   text: {
-    fontSize: 16,
+    fontSize: LAYOUT.font.body,
     fontWeight: "600",
     color: "#222",
     maxWidth: 220,

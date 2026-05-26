@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { View, TouchableOpacity, StyleSheet } from "react-native";
 import Icon from "react-native-vector-icons/FontAwesome";
 import AppTextInput from "./ui/AppTextInput";
+import { LAYOUT } from "../theme/layout";
 
 const AuthTextInput = ({
   value,
@@ -10,6 +11,7 @@ const AuthTextInput = ({
   keyboardType = "default",
   secureTextEntry = false,
   maxLength,
+  autoCapitalize,
 }) => {
   const [showPassword, setShowPassword] = useState(false);
   const isPassword = secureTextEntry === true;
@@ -24,6 +26,7 @@ const AuthTextInput = ({
         keyboardType={keyboardType}
         secureTextEntry={isPassword && !showPassword}
         maxLength={maxLength}
+        autoCapitalize={autoCapitalize}
       />
       {isPassword && (
         <TouchableOpacity
@@ -49,8 +52,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   input: {
-    height: 50,
-    paddingRight: 45,
+    height: LAYOUT.sizes.inputHeight,
+    paddingRight: 40,
   },
   eyeButton: {
     position: "absolute",

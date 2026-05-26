@@ -25,6 +25,12 @@ import AnimatedTabs from "./ui/AnimatedTabs";
 import FadePanel from "./ui/FadePanel";
 import { useFocusEffect } from "@react-navigation/native";
 import { getRideDisplayFare } from "../Utils/fareUtils";
+import UserAvatar from "./ui/UserAvatar";
+import ScreenContainer from "./ui/ScreenContainer";
+import AdPlacement from "./ads/AdPlacement";
+import { useAds } from "../context/AdsContext";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LAYOUT, getScrollBottomPadding } from "../theme/layout";
 
 const FILTER_TABS = ["All", "Driver", "Passenger", "Courier"];
 
@@ -35,6 +41,8 @@ const roleColors = {
 };
 
 const RideHistory = () => {
+  const insets = useSafeAreaInsets();
+  const { refreshAds } = useAds();
   const [rides, setRides] = useState([]);
   const [filteredRides, setFilteredRides] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -47,7 +55,8 @@ const RideHistory = () => {
   useFocusEffect(
     useCallback(() => {
       fetchRides();
-    }, [])
+      refreshAds();
+    }, [refreshAds])
   );
 
   const fetchRides = async () => {
@@ -136,11 +145,16 @@ const RideHistory = () => {
 
           <View style={styles.card}>
             <LinearGradient colors={["#fff", "#f9fafb"]} style={styles.cardInner}>
+              <View style={styles.cardHeaderRow}>
+                <UserAvatar user={item?.creator} size={LAYOUT.sizes.avatarSm} />
+                <View style={styles.cardHeaderText}>
               <View style={styles.topRow}>
                 <Text style={[styles.role, { backgroundColor: colors[0] }]}>
                   {item.role}
                 </Text>
                 <Text style={styles.price}>₹{getRideDisplayFare(item)}</Text>
+              </View>
+                </View>
               </View>
 
               <Text style={styles.route}>
@@ -163,7 +177,7 @@ const RideHistory = () => {
   };
 
   return (
-    <View style={styles.container}>
+    <ScreenContainer style={styles.container}>
       <View style={styles.header}>
         <BackButton />
         <Text style={styles.headerTitle}>Ride History</Text>
@@ -194,11 +208,15 @@ const RideHistory = () => {
           <FlatList
             data={filteredRides}
             keyExtractor={(item, index) => `${item.id}-${index}`}
+            ListHeaderComponent={<AdPlacement placement="ride_history" />}
             renderItem={renderItem}
             showsVerticalScrollIndicator={false}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
             }
+            contentContainerStyle={{
+              paddingBottom: getScrollBottomPadding(insets.bottom),
+            }}
           />
         )}
       </FadePanel>
@@ -211,7 +229,7 @@ const RideHistory = () => {
       >
         {renderSliderContent()}
       </BottomSlider>
-    </View>
+    </ScreenContainer>
   );
 };
 
@@ -219,7 +237,12 @@ export default RideHistory;
 
 /* STYLES */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8FAFC", padding: 16 },
+  container: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
+    paddingHorizontal: LAYOUT.spacing.screen,
+    paddingBottom: LAYOUT.spacing.sm,
+  },
 
   header: {
     flexDirection: "row",
@@ -228,7 +251,7 @@ const styles = StyleSheet.create({
   },
 
   headerTitle: {
-    fontSize: 22,
+    fontSize: LAYOUT.font.title,
     fontWeight: "800",
     marginLeft: 10,
     color: "#111827",
@@ -280,6 +303,17 @@ const styles = StyleSheet.create({
     padding: 14,
     backgroundColor: "#fff",
     elevation: 3,
+  },
+
+  cardHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 8,
+  },
+
+  cardHeaderText: {
+    flex: 1,
   },
 
   topRow: {

@@ -6,11 +6,11 @@ import {
   FlatList,
   TextInput,
   TouchableOpacity,
-  KeyboardAvoidingView,
   Platform,
   Animated,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import KeyboardAwareScreen from "../Components/ui/KeyboardAwareScreen";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import BackButton from "../Components/BackButton";
 import {
@@ -203,10 +203,9 @@ const ChartBoat = () => {
   );
 
   return (
-    <KeyboardAvoidingView
+    <KeyboardAwareScreen
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={insets.top}
+      keyboardVerticalOffset={insets.top + 56}
     >
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <BackButton />
@@ -285,7 +284,7 @@ const ChartBoat = () => {
           </Animated.View>
         </View>
       </AnimatedLoad>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScreen>
   );
 };
 

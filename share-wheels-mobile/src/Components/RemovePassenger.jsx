@@ -8,7 +8,7 @@ import {
   Alert
 } from "react-native";
 
-import profileIcon from "../assets/profile.png";
+import UserAvatar from "./ui/UserAvatar";
 
 const RemovePassengerModal = ({ passenger, onRemove }) => {
 
@@ -33,14 +33,7 @@ const RemovePassengerModal = ({ passenger, onRemove }) => {
 
       {/* PASSENGER CARD */}
       <View style={styles.card}>
-        <Image
-          source={
-            passenger?.userId?.profile_img
-              ? { uri: passenger.userId.profile_img }
-              : profileIcon
-          }
-          style={styles.avatar}
-        />
+        <UserAvatar user={passenger?.userId} size={48} />
 
         <View style={{ marginLeft: 12 }}>
           <Text style={styles.name}>

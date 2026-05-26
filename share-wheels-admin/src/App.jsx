@@ -7,6 +7,7 @@ import Rides from "./pages/Rides";
 import PassengerRides from "./pages/PassengerRides";
 import Couriers from "./pages/Couriers";
 import LiveTracking from "./pages/LiveTracking";
+import Ads from "./pages/Ads";
 
 const isAuthed = () => !!localStorage.getItem("adminToken");
 
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="passenger-rides" element={<PassengerRides />} />
         <Route path="couriers" element={<Couriers />} />
         <Route path="live-tracking" element={<LiveTracking />} />
+        <Route path="ads" element={<Ads />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

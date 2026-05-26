@@ -9,6 +9,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import AuthButton from "../../Components/AuthButton";
+import KeyboardAwareScreen from "../../Components/ui/KeyboardAwareScreen";
 import { INPUT_COLORS } from "../../theme/inputTheme";
 import { verifyOtpApi } from "../../ApiService/AuthApiService";
 
@@ -106,7 +107,7 @@ useEffect(() => {
 }, [route]);
 
   return (
-    <View style={styles.container}>
+    <KeyboardAwareScreen scrollable contentContainerStyle={styles.container}>
       <Text style={styles.title}>We just sent an SMS</Text>
       <Text style={styles.subtitle}>Enter the security code we sent to</Text>
 
@@ -150,7 +151,7 @@ useEffect(() => {
           </TouchableOpacity>
         )}
       </View>
-    </View>
+    </KeyboardAwareScreen>
   );
 };
 
@@ -158,10 +159,11 @@ export default OtpVerificationPage;
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor: "#FFF",
     padding: 24,
     justifyContent: "center",
+    paddingBottom: 48,
   },
   title: { fontSize: 26, fontWeight: "700", marginBottom: 10 },
   subtitle: { fontSize: 16, marginBottom: 6 },

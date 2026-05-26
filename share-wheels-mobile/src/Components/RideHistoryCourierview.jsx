@@ -12,7 +12,7 @@ import seat from "../assets/seatIcon.png";
 import car from "../assets/car.png";
 import dateIcon from "../assets/dateIcon.png";
 import clock from "../assets/clock2.png";
-import driverImg from "../assets/passenger1.png";
+import UserAvatar from "./ui/UserAvatar";
 import madhapurIcon from "../assets/madhapuricon.png";
 import kondapurIcon from "../assets/kondapuricon.png";
 import starIcon from "../assets/staricon.png";
@@ -40,7 +40,7 @@ const RideHistoryPassengerView = ({ ride }) => {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 160 }}
+        contentContainerStyle={{ paddingBottom: 100 }}
       >
         {/* ROUTE */}
         <View style={styles.routeCard}>
@@ -72,7 +72,7 @@ const RideHistoryPassengerView = ({ ride }) => {
         <Text style={styles.sectionTitle}>Driver</Text>
 
         <View style={styles.driverCard}>
-          <Image source={driverImg} style={styles.driverAvatar} />
+          <UserAvatar user={ride?.creator} size={52} />
 
           <View style={{ flex: 1, marginLeft: 12 }}>
            <Text style={styles.driverName}>

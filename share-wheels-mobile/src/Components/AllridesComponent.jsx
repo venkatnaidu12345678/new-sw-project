@@ -5,16 +5,17 @@ import {
   FlatList,
   TouchableOpacity,
   Image,
-  SafeAreaView,
   Text,
 } from "react-native";
 
 import clock1 from "../assets/clock1.png";
-import profile from "../assets/profile.png";
+import UserAvatar from "./ui/UserAvatar";
+import { LAYOUT } from "../theme/layout";
 import person from "../assets/person.png";
 import location from "../assets/location.png";
 import { RideListSkeleton } from "./ui/Skeleton";
 import AnimatedLoad from "./ui/AnimatedLoad";
+import AdPlacement from "./ads/AdPlacement";
 
 const AllridesComponent = ({ rides = [], loading, navigation }) => {
   if (!loading && (!rides || rides.length === 0)) {
@@ -46,7 +47,7 @@ const AllridesComponent = ({ rides = [], loading, navigation }) => {
         {/* 👤 DRIVER + PRICE */}
         <View style={styles.driverRow}>
           <View style={styles.driverInfo}>
-            <Image source={profile} style={styles.avatar} />
+            <UserAvatar user={item?.creator} size={LAYOUT.sizes.avatarSm + 4} />
             <Text style={styles.driverName}>
               {item?.creator?.name || "Driver"}
             </Text>
@@ -84,7 +85,7 @@ const AllridesComponent = ({ rides = [], loading, navigation }) => {
   );
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
+    <View style={{ flex: 1 }}>
       <AnimatedLoad
         loading={loading}
         skeleton={
@@ -96,6 +97,7 @@ const AllridesComponent = ({ rides = [], loading, navigation }) => {
       >
         <FlatList
           data={rides}
+          ListHeaderComponent={<AdPlacement placement="search_results" />}
           keyExtractor={(item, index) =>
             item?._id ? item._id.toString() : index.toString()
           }
@@ -109,7 +111,7 @@ const AllridesComponent = ({ rides = [], loading, navigation }) => {
           keyboardShouldPersistTaps="handled"
         />
       </AnimatedLoad>
-    </SafeAreaView>
+    </View>
   );
 };
 

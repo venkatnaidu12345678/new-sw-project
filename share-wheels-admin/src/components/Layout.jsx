@@ -7,6 +7,7 @@ const nav = [
   { to: "/passenger-rides", label: "Passenger Requests" },
   { to: "/couriers", label: "Couriers" },
   { to: "/live-tracking", label: "Live Tracking" },
+  { to: "/ads", label: "Ads" },
 ];
 
 export default function Layout() {

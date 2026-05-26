@@ -6,21 +6,31 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import KeyboardAwareScreen from "../Components/ui/KeyboardAwareScreen";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRoute } from "@react-navigation/native";
 import BackButton from "../Components/BackButton";
 import { getRideChatMessages, sendRideChatMessage } from "../ApiService/chatApiServices";
 import { profileData } from "../Navigation/AuthNavigator";
-import { useDriverLocation } from "../hooks/useDriverLocation";
+import { useParticipantLocation } from "../hooks/useDriverLocation";
 import { INPUT_COLORS } from "../theme/inputTheme";
 
 const RideChat = () => {
+  const insets = useSafeAreaInsets();
   const route = useRoute();
-  const { rideId, rideTitle, myRole, rideStatus } = route.params || {};
+  const {
+    rideId,
+    rideTitle,
+    myRole,
+    rideStatus,
+    peerId,
+    peerName,
+    peerRole,
+  } = route.params || {};
   const { ProfileDetails } = profileData();
   const myId = ProfileDetails?._id || ProfileDetails?.id;
 
@@ -31,11 +41,12 @@ const RideChat = () => {
   const [token, setToken] = useState(null);
   const listRef = useRef(null);
 
-  const isDriver = myRole === "driver";
-  const isRideStarted = rideStatus === "started";
+  const isDirect = !!peerId;
+  const isRideStarted =
+    rideStatus === "started" || rideStatus === "Started";
 
-  useDriverLocation({
-    enabled: isDriver && isRideStarted,
+  useParticipantLocation({
+    enabled: isRideStarted && !!token && !!rideId,
     rideId,
     token,
   });
@@ -43,14 +54,14 @@ const RideChat = () => {
   const loadMessages = useCallback(async () => {
     if (!token || !rideId) return;
     try {
-      const res = await getRideChatMessages(token, rideId);
+      const res = await getRideChatMessages(token, rideId, peerId || undefined);
       setMessages(res.messages || []);
     } catch (e) {
       console.log("Chat load error:", e.message);
     } finally {
       setLoading(false);
     }
-  }, [token, rideId]);
+  }, [token, rideId, peerId]);
 
   useEffect(() => {
     AsyncStorage.getItem("token").then(setToken);
@@ -71,7 +82,12 @@ const RideChat = () => {
     if (!msg || sending) return;
     setSending(true);
     try {
-      const res = await sendRideChatMessage(token, rideId, msg);
+      const res = await sendRideChatMessage(
+        token,
+        rideId,
+        msg,
+        peerId || undefined
+      );
       if (res.message) {
         setMessages((prev) => [...prev, res.message]);
         setText("");
@@ -108,26 +124,30 @@ const RideChat = () => {
     );
   };
 
+  const chatTitle = isDirect
+    ? `Chat · ${peerName || "User"}`
+    : "Group chat";
+
   return (
-    <KeyboardAvoidingView
+    <KeyboardAwareScreen
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      keyboardVerticalOffset={insets.top + (Platform.OS === "ios" ? 56 : 24)}
     >
       <View style={styles.header}>
         <BackButton />
         <View style={styles.headerText}>
-          <Text style={styles.title}>Ride Chat</Text>
+          <Text style={styles.title}>{chatTitle}</Text>
           <Text style={styles.subtitle} numberOfLines={1}>
-            {rideTitle || "Driver & passengers"}
+            {rideTitle || "Ride conversation"}
+            {peerRole ? ` · ${peerRole}` : ""}
           </Text>
         </View>
       </View>
 
-      {isDriver && isRideStarted && (
+      {isRideStarted && (
         <View style={styles.trackingBanner}>
           <Text style={styles.trackingText}>
-            Location sharing active — admin can track this ride
+            Location sharing active — open Live map from ride details
           </Text>
         </View>
       )}
@@ -143,7 +163,11 @@ const RideChat = () => {
           contentContainerStyle={styles.list}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
           ListEmptyComponent={
-            <Text style={styles.empty}>No messages yet. Say hello!</Text>
+            <Text style={styles.empty}>
+              {isDirect
+                ? "No messages yet. Start a private conversation."
+                : "No messages yet. Say hello to everyone on the ride!"}
+            </Text>
           }
         />
       )}
@@ -151,7 +175,7 @@ const RideChat = () => {
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
-          placeholder="Type a message…"
+          placeholder={isDirect ? "Private message…" : "Message the group…"}
           placeholderTextColor={INPUT_COLORS.placeholder}
           value={text}
           onChangeText={setText}
@@ -166,7 +190,7 @@ const RideChat = () => {
           <Text style={styles.sendText}>{sending ? "…" : "Send"}</Text>
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScreen>
   );
 };
 

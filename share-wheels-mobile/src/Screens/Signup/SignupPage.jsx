@@ -1,15 +1,11 @@
 import React, { useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-} from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import { Picker } from "@react-native-picker/picker";
-
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import AuthButton from "../../Components/AuthButton";
 import AuthTextInput from "../../Components/AuthTextInput";
-import { signupApi } from '../../ApiService/AuthApiService';
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import AuthScreenLayout from "../../Components/auth/AuthScreenLayout";
+import { signupApi } from "../../ApiService/AuthApiService";
 import {
   validateName,
   validatePhone,
@@ -18,8 +14,10 @@ import {
   validatePassword,
   validateConfirmPassword,
 } from "../../Utils";
+import { AUTH_COLORS } from "../../theme/authTheme";
+import { INPUT_COLORS } from "../../theme/inputTheme";
 
-const SignUpScreen = ({ navigation, triggerAuth }) => {
+const SignupPage = ({ navigation, triggerAuth }) => {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -35,49 +33,39 @@ const SignUpScreen = ({ navigation, triggerAuth }) => {
     password: "",
     confirmPassword: "",
   });
+
   const handleChange = (field, value) => {
     let error = "";
-
     switch (field) {
       case "name":
         setName(value);
         error = validateName(value);
         break;
-
       case "phone":
-        // ✅ Allow only digits + max 10
-        const cleaned = value.replace(/[^0-9]/g, "").slice(0, 10);
-        setPhone(cleaned);
-        error = validatePhone(cleaned);
+        setPhone(value.replace(/[^0-9]/g, "").slice(0, 10));
+        error = validatePhone(value.replace(/[^0-9]/g, "").slice(0, 10));
         break;
-
       case "email":
         setEmail(value);
         error = validateEmail(value);
         break;
-
       case "gender":
         setGender(value);
         error = validateGender(value);
         break;
-
       case "password":
         setPassword(value);
         error = validatePassword(value);
         break;
-
       case "confirmPassword":
         setConfirmPassword(value);
         error = validateConfirmPassword(password, value);
         break;
+      default:
+        break;
     }
-
-    setErrors((prev) => ({
-      ...prev,
-      [field]: error,
-    }));
+    setErrors((prev) => ({ ...prev, [field]: error }));
   };
-
 
   const handleSignup = async () => {
     const nameError = validateName(name);
@@ -87,7 +75,14 @@ const SignUpScreen = ({ navigation, triggerAuth }) => {
     const passwordError = validatePassword(password);
     const confirmError = validateConfirmPassword(password, confirmPassword);
 
-    if (nameError || phoneError || emailError || genderError || passwordError || confirmError) {
+    if (
+      nameError ||
+      phoneError ||
+      emailError ||
+      genderError ||
+      passwordError ||
+      confirmError
+    ) {
       setErrors({
         name: nameError,
         phone: phoneError,
@@ -99,17 +94,15 @@ const SignUpScreen = ({ navigation, triggerAuth }) => {
       return;
     }
 
-    const payload = {
-      name,
-      email: email.trim().toLowerCase(),
-      mobile: phone,
-      gender,
-      password,
-    };
-
     setLoading(true);
     try {
-      const response = await signupApi(payload);
+      const response = await signupApi({
+        name,
+        email: email.trim().toLowerCase(),
+        mobile: phone,
+        gender,
+        password,
+      });
 
       if (response?.token) {
         await AsyncStorage.setItem("token", response.token);
@@ -124,182 +117,137 @@ const SignUpScreen = ({ navigation, triggerAuth }) => {
           email: response?.message || "Registration failed",
         }));
       }
-    } catch (error) {
-      console.log("Signup Network Error", error);
+    } catch {
+      setErrors((prev) => ({
+        ...prev,
+        email: "Network error. Please try again.",
+      }));
     } finally {
       setLoading(false);
     }
   };
 
-
   return (
-   <View style={styles.container}>
-      <View style={styles.form}>
-        <Text style={styles.heading}>Sign Up</Text>
-
-        {/* Name */}
-        <Text style={styles.label}>
-          Name <Text style={styles.star}>*</Text>
+    <AuthScreenLayout
+      title="Create account"
+      subtitle="Join Share Wheels to find rides or offer seats on your route."
+      showBack
+      onBack={() => navigation.goBack()}
+      footer={
+        <Text style={styles.footer}>
+          Already have an account?{" "}
+          <Text style={styles.link} onPress={() => navigation.navigate("Signin")}>
+            Sign in
+          </Text>
         </Text>
-        <AuthTextInput
-          placeholder="Enter your name"
-          value={name}
-          onChangeText={(text) => handleChange("name", text)}
-        />
-        {!!errors.name && <Text style={styles.error}>{errors.name}</Text>}
-
-        {/* Phone + Gender */}
-        <View style={styles.row}>
-          <View style={styles.col}>
-            <Text style={styles.label}>
-              Phone <Text style={styles.star}>*</Text>
-            </Text>
-            <AuthTextInput
-              placeholder="Phone number"
-              keyboardType="numeric"
-              value={phone}
-              maxLength={10}
-              onChangeText={(text) => handleChange("phone", text)}
-            />
-            {!!errors.phone && <Text style={styles.error}>{errors.phone}</Text>}
-          </View>
-
-          <View style={styles.col}>
-            <Text style={styles.label}>
-              Gender <Text style={styles.star}>*</Text>
-            </Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={gender}
-                onValueChange={(value) => handleChange("gender", value)}
-              >
-                <Picker.Item label="Select" value="" />
-                <Picker.Item label="Male" value="male" />
-                <Picker.Item label="Female" value="female" />
-                <Picker.Item label="Other" value="other" />
-              </Picker>
-            </View>
-            {!!errors.gender && <Text style={styles.error}>{errors.gender}</Text>}
-          </View>
-        </View>
-
-        {/* Email */}
-        <Text style={styles.label}>
-          Email <Text style={styles.star}>*</Text>
-        </Text>
-        <AuthTextInput
-          placeholder="Email address"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={(text) => handleChange("email", text)}
-        />
-        {!!errors.email && <Text style={styles.error}>{errors.email}</Text>}
-
-        <Text style={styles.label}>
-          Password <Text style={styles.star}>*</Text>
-        </Text>
-        <AuthTextInput
-          placeholder="At least 6 characters"
-          secureTextEntry
-          value={password}
-          onChangeText={(text) => handleChange("password", text)}
-        />
-        {!!errors.password && <Text style={styles.error}>{errors.password}</Text>}
-
-        <Text style={styles.label}>
-          Confirm password <Text style={styles.star}>*</Text>
-        </Text>
-        <AuthTextInput
-          placeholder="Re-enter password"
-          secureTextEntry
-          value={confirmPassword}
-          onChangeText={(text) => handleChange("confirmPassword", text)}
-        />
-        {!!errors.confirmPassword && (
-          <Text style={styles.error}>{errors.confirmPassword}</Text>
-        )}
-      </View>
-      <AuthButton
-        type="signup"
-        onPress={handleSignup}
-        loading={loading}
-        style={{ marginTop: 0 }}
+      }
+    >
+      <Text style={styles.label}>Full name *</Text>
+      <AuthTextInput
+        placeholder="Your name"
+        value={name}
+        onChangeText={(t) => handleChange("name", t)}
       />
+      {!!errors.name && <Text style={styles.error}>{errors.name}</Text>}
 
-      <Text style={styles.footerText}>
-        Already have an account?{" "}
-        <Text
-          style={styles.signIn}
-          onPress={() => navigation.navigate("Signin")}
-        >
-          Sign In
-        </Text>
-      </Text>
-    </View>
+      <View style={styles.row}>
+        <View style={styles.col}>
+          <Text style={styles.label}>Phone *</Text>
+          <AuthTextInput
+            placeholder="10-digit mobile"
+            keyboardType="phone-pad"
+            value={phone}
+            maxLength={10}
+            onChangeText={(t) => handleChange("phone", t)}
+          />
+          {!!errors.phone && <Text style={styles.error}>{errors.phone}</Text>}
+        </View>
+        <View style={styles.col}>
+          <Text style={styles.label}>Gender *</Text>
+          <View style={styles.pickerBox}>
+            <Picker
+              selectedValue={gender}
+              onValueChange={(v) => handleChange("gender", v)}
+              style={styles.picker}
+            >
+              <Picker.Item label="Select" value="" color={INPUT_COLORS.placeholder} />
+              <Picker.Item label="Male" value="male" />
+              <Picker.Item label="Female" value="female" />
+              <Picker.Item label="Other" value="other" />
+            </Picker>
+          </View>
+          {!!errors.gender && <Text style={styles.error}>{errors.gender}</Text>}
+        </View>
+      </View>
+
+      <Text style={styles.label}>Email *</Text>
+      <AuthTextInput
+        placeholder="you@example.com"
+        keyboardType="email-address"
+        autoCapitalize="none"
+        value={email}
+        onChangeText={(t) => handleChange("email", t)}
+      />
+      {!!errors.email && <Text style={styles.error}>{errors.email}</Text>}
+
+      <Text style={styles.label}>Password *</Text>
+      <AuthTextInput
+        placeholder="At least 6 characters"
+        secureTextEntry
+        value={password}
+        onChangeText={(t) => handleChange("password", t)}
+      />
+      {!!errors.password && <Text style={styles.error}>{errors.password}</Text>}
+
+      <Text style={styles.label}>Confirm password *</Text>
+      <AuthTextInput
+        placeholder="Re-enter password"
+        secureTextEntry
+        value={confirmPassword}
+        onChangeText={(t) => handleChange("confirmPassword", t)}
+      />
+      {!!errors.confirmPassword && (
+        <Text style={styles.error}>{errors.confirmPassword}</Text>
+      )}
+
+      <AuthButton type="signup" onPress={handleSignup} loading={loading} />
+    </AuthScreenLayout>
   );
 };
 
-export default SignUpScreen;
+export default SignupPage;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: "flex-end",
-    padding: 16,
-    backgroundColor: "#fff",
-  },
-
-  form: {
-    marginBottom: 10,
-  },
-
-  heading: {
-    fontSize: 26,
-    fontWeight: "700",
-    marginBottom: 10,
-  },
-
   label: {
     fontSize: 14,
     fontWeight: "600",
-    marginBottom: 4,
+    color: "#334155",
+    marginBottom: 6,
   },
-   star: {
-    color: "red",
-  },
-   error: {
-    color: "red",
+  error: {
+    color: AUTH_COLORS.error,
     fontSize: 12,
-    marginBottom: 5,
+    marginBottom: 8,
+    marginTop: -4,
   },
-
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 0,
-  },
-
-  col: {
-    flex: 1,
-    marginHorizontal: 4,
-  },
-
-  pickerContainer: {
-    height: 48,
+  row: { flexDirection: "row", gap: 12 },
+  col: { flex: 1 },
+  pickerBox: {
+    height: 50,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 8,
+    borderColor: AUTH_COLORS.border,
+    borderRadius: 12,
     justifyContent: "center",
+    backgroundColor: AUTH_COLORS.surface,
+    marginBottom: 12,
+    overflow: "hidden",
   },
-
-  footerText: {
+  picker: { height: 50, color: INPUT_COLORS.text },
+  footer: {
+    fontSize: 15,
+    color: AUTH_COLORS.textMuted,
+    marginTop: 8,
     textAlign: "center",
-    fontSize: 16,
-    color: "#555",
   },
-
-  signIn: {
-    color: "#2563EB",
-    fontWeight: "600",
-  },
+  link: { color: AUTH_COLORS.primary, fontWeight: "700" },
 });

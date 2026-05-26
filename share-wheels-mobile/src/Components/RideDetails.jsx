@@ -33,7 +33,10 @@ import noPetsIcon from "../assets/nowithpets.png";
 import bookingInfoIcon from "../assets/yourbookingicon.png";
 import verifiedProfileIcon from "../assets/verifiedprofile.png";
 import neverCancelIcon from "../assets/nevercancelrideicon.png";
-import avatar from "../assets/profile.png";
+import UserAvatar from "./ui/UserAvatar";
+import KeyboardAwareScreen from "./ui/KeyboardAwareScreen";
+import ScreenContainer from "./ui/ScreenContainer";
+import { LAYOUT } from "../theme/layout";
 
 if (Platform.OS === "android") {
   UIManager.setLayoutAnimationEnabledExperimental &&
@@ -129,16 +132,22 @@ const RideDetails = ({ navigation, route }) => {
 
   /* 🔹 CAMERA */
   const openCamera = () => {
-    launchCamera({ mediaType: "photo", quality: 0.7 }, (res) => {
-      if (res.didCancel || res.errorCode) return;
-
-      const uri = res.assets[0].uri;
-
-      setCourierData((prev) => ({
-        ...prev,
-        courier_img: uri,
-      }));
-    });
+    launchCamera(
+      { mediaType: "photo", quality: 0.8, includeBase64: false },
+      (res) => {
+        if (res.didCancel || res.errorCode) return;
+        const asset = res.assets?.[0];
+        if (!asset?.uri) return;
+        setCourierData((prev) => ({
+          ...prev,
+          courier_img: {
+            uri: asset.uri,
+            type: asset.type || "image/jpeg",
+            name: asset.fileName || "courier.jpg",
+          },
+        }));
+      }
+    );
   };
   const handleBookPassenger = async () => {
     try {
@@ -265,8 +274,13 @@ const RideDetails = ({ navigation, route }) => {
   };
 
   return (
-    <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+    <ScreenContainer backgroundColor="#fff" edges={["top", "bottom"]}>
+    <KeyboardAwareScreen style={styles.container}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.scrollContent}
+      >
 
         {/* HEADER */}
         <View style={styles.header}>
@@ -312,7 +326,7 @@ const RideDetails = ({ navigation, route }) => {
         {/* DRIVER */}
         <View style={styles.card}>
           <View style={styles.driverRow}>
-            <Image source={avatar} style={styles.avatar} />
+            <UserAvatar user={ride?.creator} size={48} style={styles.avatar} />
             <View style={{ flex: 1 }}>
               <Text style={styles.driverName}>
                 {ride?.creator?.name || "Driver"}
@@ -424,7 +438,14 @@ const RideDetails = ({ navigation, route }) => {
             </TouchableOpacity>
 
             {courierData.courier_img && (
-              <Image source={{ uri: courierData.courier_img }} style={styles.previewImage} />
+              <Image
+                source={{
+                  uri:
+                    courierData.courier_img?.uri ||
+                    courierData.courier_img,
+                }}
+                style={styles.previewImage}
+              />
             )}
 
             <TextInput
@@ -467,7 +488,8 @@ const RideDetails = ({ navigation, route }) => {
         )}
 
       </ScrollView>
-    </View>
+    </KeyboardAwareScreen>
+    </ScreenContainer>
   );
 };
 
@@ -476,8 +498,9 @@ export default RideDetails;
 /* 🔹 STYLES */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F7FB" },
+  scrollContent: { paddingBottom: 32 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: { flexDirection: "row", alignItems: "center", padding: 16, paddingTop: 40 },
+  header: { flexDirection: "row", alignItems: "center", padding: 14, paddingTop: 8 },
   backIcon: { width: 24, height: 24 },
   headerTitle: { flex: 1, fontSize: 20, fontWeight: "600", marginLeft: 10 },
   dateRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16 },
@@ -493,7 +516,7 @@ const styles = StyleSheet.create({
   passengerRow: { flexDirection: "row", alignItems: "center" },
   passengerIcon: { width: 20, height: 20, marginRight: 8 },
   passengerText: { fontWeight: "600" },
-  price: { fontSize: 22, fontWeight: "700", color: "#2563EB" },
+  price: { fontSize: LAYOUT.font.title, fontWeight: "700", color: "#2563EB" },
   driverRow: { flexDirection: "row", alignItems: "center" },
   avatar: { width: 48, height: 48, borderRadius: 24, marginRight: 10 },
   driverName: { fontWeight: "600" },

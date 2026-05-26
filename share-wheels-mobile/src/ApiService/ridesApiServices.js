@@ -1,4 +1,6 @@
 import { baseUrl, endPoints } from '../Config';
+import { parseApiResponse } from '../Utils/parseApiResponse';
+import { appendImageFile, ensureCloudinaryUrl } from '../Utils/imageUpload';
 
 export const getUpcomingRides = async (token) => {
   try {
@@ -238,6 +240,43 @@ export const removeCourier = async (token, rideData) => {
 };
 
 
+export const listVerificationParticipants = async (token, rideId) => {
+  const response = await fetch(
+    `${baseUrl}${endPoints.verificationParticipantsurl}/${rideId}/verification/participants`,
+    {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.message || "Failed to load verification list");
+  }
+  return data;
+};
+
+export const verifyBoardingParticipant = async (token, rideId, payload) => {
+  const response = await fetch(
+    `${baseUrl}${endPoints.verifyParticipanturl}/${rideId}/verification/verify`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    }
+  );
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.message || "Verification failed");
+  }
+  return data;
+};
+
 export const startride = async (token, rideData) => {
   try {
     const response = await fetch(`${baseUrl}${endPoints.startrideurl}`, {
@@ -265,6 +304,11 @@ export const startride = async (token, rideData) => {
 };
 export const courierRequest = async (token, rideData) => {
   try {
+    let courier_img = rideData.courier_img;
+    if (courier_img) {
+      courier_img = await ensureCloudinaryUrl(token, courier_img, "couriers");
+    }
+
     const response = await fetch(
       `${baseUrl}${endPoints.courierRequesturl}`,
       {
@@ -273,11 +317,11 @@ export const courierRequest = async (token, rideData) => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(rideData),
+        body: JSON.stringify({ ...rideData, courier_img }),
       }
     );
 
-    const data = await response.json();
+    const data = await parseApiResponse(response);
 
     console.log("Create Courier Request Status:", response.status);
     console.log("Create Courier Request Response:", data);
@@ -601,26 +645,53 @@ export const getMyRequests = async (token) => {
   }
 };
 
-export const AddVehicle = async (token, vehicleData) => {
+export const AddVehicle = async (token, vehicleData, imageFiles = {}) => {
   try {
+    const formData = new FormData();
+    const fields = [
+      "company",
+      "model",
+      "type",
+      "license_number",
+      "car_no",
+      "issue_date",
+      "expiry_date",
+    ];
+
+    fields.forEach((key) => {
+      const val = vehicleData[key];
+      if (val != null && String(val).trim() !== "") {
+        formData.append(key, String(val).trim());
+      }
+    });
+
+    appendImageFile(formData, "car_image", imageFiles.car_image);
+    appendImageFile(formData, "license_image", imageFiles.license_image);
+    appendImageFile(formData, "rc_image", imageFiles.rc_image);
+
     const response = await fetch(`${baseUrl}${endPoints.AddVechileurl}`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(vehicleData),
+      body: formData,
     });
 
-    const data = await response.json();
+    const data = await parseApiResponse(response);
 
     if (!response.ok) {
-      return { success: false, message: data?.message || "Failed to add vehicle" };
+      return {
+        success: false,
+        message: data?.message || data?.error || "Failed to add vehicle",
+      };
     }
 
-    return { success: true, data };
+    return {
+      success: true,
+      message: data?.message,
+      vehicle: data?.vehicle,
+    };
   } catch (err) {
-    
     return { success: false, message: err.message || "Network error" };
   }
 };
@@ -735,6 +806,11 @@ export const passengerSendRequestApi = async (token, payload) => {
 };
 export const courierSendRequestApi = async (token, payload) => {
   try {
+    let courier_img = payload.courier_img;
+    if (courier_img) {
+      courier_img = await ensureCloudinaryUrl(token, courier_img, "couriers");
+    }
+
     const res = await fetch(
       `${baseUrl}${endPoints.courierSendRequesturl}`,
       {
@@ -743,17 +819,11 @@ export const courierSendRequestApi = async (token, payload) => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, courier_img }),
       }
     );
 
-    let data = {};
-
-    try {
-      data = await res.json(); // ✅ safe parse
-    } catch (e) {
-      console.log("⚠️ JSON parse error");
-    }
+    const data = await parseApiResponse(res);
 
     console.log("📦 Courier API Response:", data);
 

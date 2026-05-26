@@ -149,6 +149,13 @@ const PersonalInformationCard = ({ personal, vehicle }) => {
         </View>
 
         <View style={styles.row}>
+          <Image source={ride} style={styles.icon} />
+          <Text style={[styles.value, styles.userNoValue]}>
+            User ID: {personal?.userNo || "—"}
+          </Text>
+        </View>
+
+        <View style={styles.row}>
           <Image source={message} style={styles.icon} />
           <Text style={styles.value}>{emailValue}</Text>
         </View>
@@ -287,6 +294,7 @@ const styles = StyleSheet.create({
   icon: { width: 30, height: 30, marginRight: 10 },
 
   value: { fontSize: 16, fontWeight: "600" },
+  userNoValue: { letterSpacing: 1, color: "#2563EB" },
 
   input: {
     borderBottomWidth: 1,

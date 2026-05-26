@@ -9,7 +9,7 @@ import {
 
 /* ICONS */
 
-import passenger1 from "../assets/passenger1.png";
+import UserAvatar from "./ui/UserAvatar";
 import madhapurIcon from "../assets/madhapuricon.png";
 import kondapurIcon from "../assets/kondapuricon.png";
 
@@ -23,7 +23,7 @@ const RideHistoryDriverview = ({ ride }) => {
         <Text style={styles.headerTitle}>Ride Details</Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 160 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
         {/* ROUTE */}
         <View style={styles.routeCard}>
           <View style={styles.routeItem}>
@@ -57,14 +57,7 @@ const RideHistoryDriverview = ({ ride }) => {
         ) : (
           passengers.map((p, index) => (
             <View key={p?._id || index} style={styles.passengerRow}>
-              <Image
-                source={
-                  p?.userId?.profile_img
-                    ? { uri: p.userId.profile_img }
-                    : passenger1
-                }
-                style={styles.avatar}
-              />
+              <UserAvatar user={p?.userId} size={44} />
 
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={styles.passengerName}>

@@ -29,8 +29,12 @@ import AnimatedLoad from "./ui/AnimatedLoad";
 import AnimatedTabs from "./ui/AnimatedTabs";
 import FadePanel from "./ui/FadePanel";
 import { useFocusEffect } from "@react-navigation/native";
+import ScreenContainer from "./ui/ScreenContainer";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LAYOUT, getScrollBottomPadding } from "../theme/layout";
 
 const MyRequest = () => {
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState("Passenger");
   const [rides, setRides] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -181,7 +185,7 @@ const MyRequest = () => {
   );
 
   return (
-    <View style={styles.container}>
+    <ScreenContainer style={styles.container}>
       <View style={styles.header}>
         <BackButton />
         <Text style={styles.headerTitle}>My Request</Text>
@@ -211,6 +215,9 @@ const MyRequest = () => {
           ListEmptyComponent={
             <Text style={styles.emptyText}>No Requests Found</Text>
           }
+          contentContainerStyle={{
+            paddingBottom: getScrollBottomPadding(insets.bottom),
+          }}
         />
       </FadePanel>
 
@@ -219,7 +226,7 @@ const MyRequest = () => {
         {renderSliderContent()}
       </BottomSlider> */}
       </AnimatedLoad>
-    </View>
+    </ScreenContainer>
   );
 };
 
@@ -231,9 +238,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F8FAFC",
-    padding: 20,
-    paddingTop: 40,
-    paddingBottom:70,
+    paddingHorizontal: LAYOUT.spacing.screen,
+    paddingBottom: LAYOUT.spacing.sm,
   },
 
  header: {
@@ -243,7 +249,7 @@ const styles = StyleSheet.create({
 },
 
 headerTitle: {
-  fontSize: 22,
+  fontSize: LAYOUT.font.title,
   fontWeight: "800",
   marginLeft: 10,
   color: "#111827",

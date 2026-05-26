@@ -1,13 +1,12 @@
 import React, { useState, useMemo } from "react";
 import {
   View,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import KeyboardAwareScreen from "./ui/KeyboardAwareScreen";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import FromToInput from "../Components/FromToInput.jsx";
 import VehicleInfo from "./VehicleInfo.jsx";
@@ -16,7 +15,14 @@ import ToggleComponent from "./ToggleComponent";
 import PriceCard from "./PriceCard.jsx";
 import { validators } from "../Utils.js";
 
-const CreateRideComponentOne = ({ rideData, updateRideData, submitted }) => {
+const CreateRideComponentOne = ({
+  rideData,
+  updateRideData,
+  submitted,
+  vehicleInfo,
+  userName,
+  onPressAddVehicle,
+}) => {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [touchedTime, setTouchedTime] = useState(false);
 
@@ -73,15 +79,12 @@ const CreateRideComponentOne = ({ rideData, updateRideData, submitted }) => {
 
   return (
     <View style={styles.mainContainer}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          <VehicleInfo />
+      <KeyboardAwareScreen scrollable contentContainerStyle={styles.scrollContent}>
+          <VehicleInfo
+            vehicleInfo={vehicleInfo}
+            userName={userName}
+            onPressAdd={onPressAddVehicle}
+          />
 
           <FromToInput fields={fields} />
 
@@ -155,8 +158,7 @@ const CreateRideComponentOne = ({ rideData, updateRideData, submitted }) => {
               updateRideData("quickReserve", value)
             }
           />
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScreen>
 
       {/* 🔹 Time Picker */}
       {showTimePicker && (

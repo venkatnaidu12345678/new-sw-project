@@ -1,3 +1,5 @@
+import { LAYOUT } from "./layout";
+
 /** Shared input colors — fixes invisible placeholders on Android */
 export const INPUT_COLORS = {
   placeholder: "#9CA3AF",
@@ -11,10 +13,10 @@ export const inputFieldStyle = {
   color: INPUT_COLORS.text,
   borderWidth: 1,
   borderColor: INPUT_COLORS.border,
-  borderRadius: 12,
-  paddingHorizontal: 14,
+  borderRadius: LAYOUT.radius.md,
+  paddingHorizontal: LAYOUT.spacing.md,
   backgroundColor: INPUT_COLORS.background,
-  fontSize: 15,
+  fontSize: LAYOUT.font.body,
 };
 
 /** Spread on any TextInput */

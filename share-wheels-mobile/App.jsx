@@ -1,18 +1,14 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
+import { StatusBar, StyleSheet, View } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
-  StatusBar,
-  StyleSheet,
-  View,
-} from "react-native";
+  SafeAreaProvider,
+  initialWindowMetrics,
+} from "react-native-safe-area-context";
 import { NavigationContainer } from "@react-navigation/native";
 
 import AuthNavigator from "./src/Navigation/AuthNavigator";
-import SplashPaint from "./src/Components/SplashComponents/SplashPaint";
-import {
-  StarRender,
-  AnimatedAppName,
-  WelcomeText,
-} from "./src/Components/SplashComponents/SplashTopAnimation";
+import { AdsProvider } from "./src/context/AdsContext";
 import {
   requestUserPermission,
   getDeviceToken,
@@ -23,30 +19,30 @@ import {
 
 export default function App() {
   const navigationRef = useRef(null);
-  const [currentRoute, setCurrentRoute] = useState("Splash");
 
   useEffect(() => {
     async function initFCM() {
-      const permissionGranted = await requestUserPermission();
-      if (!permissionGranted) {
-        return;
-      }
-
-      const token = await getDeviceToken();
-      if (token) {
-        console.log("FCM token initialized:", token);
+      try {
+        const permissionGranted = await requestUserPermission();
+        if (!permissionGranted) return;
+        const token = await getDeviceToken();
+        if (token) {
+          console.log("FCM token initialized:", token);
+        }
+      } catch (err) {
+        console.warn("FCM init skipped:", err?.message || err);
       }
     }
 
-    const unsubscribeForeground = registerForegroundHandler(remoteMessage => {
+    const unsubscribeForeground = registerForegroundHandler((remoteMessage) => {
       console.log("Foreground notification received:", remoteMessage);
     });
 
-    const unsubscribeOpened = registerNotificationOpenedApp(remoteMessage => {
+    const unsubscribeOpened = registerNotificationOpenedApp((remoteMessage) => {
       console.log("Notification opened:", remoteMessage);
     });
 
-    handleInitialNotification(remoteMessage => {
+    handleInitialNotification((remoteMessage) => {
       console.log("Opened from quit state:", remoteMessage);
     });
 
@@ -58,46 +54,27 @@ export default function App() {
     };
   }, []);
 
-  // ✅ Routes where SplashPaint should be visible
-  const SPLASH_ROUTES = ["Splash", "Signin", "Signup", "Otp"];
-
-  const updateRoute = () => {
-    const route = navigationRef.current?.getCurrentRoute();
-    setCurrentRoute(route?.name || "Splash"); // ✅ fallback
-  };
-
   return (
-    <View style={styles.mainContainer}>
-      <StatusBar
-        translucent
-        backgroundColor="transparent"
-        barStyle="dark-content"
-      />
-
-      ✅ Splash animation layer
-      {SPLASH_ROUTES.includes(currentRoute) && (
-        <SplashPaint>
-          <StarRender />
-          <AnimatedAppName />
-          <WelcomeText />
-          
-        </SplashPaint>
-      )}
-
-      <NavigationContainer
-        ref={navigationRef}
-        onReady={updateRoute}       // ✅ fixed
-        onStateChange={updateRoute} // ✅ fixed
-      >
-        <AuthNavigator />
-      </NavigationContainer>
-    </View>
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+      <GestureHandlerRootView style={styles.mainContainer}>
+        <StatusBar
+          translucent={false}
+          backgroundColor="#F8FAFC"
+          barStyle="dark-content"
+        />
+        <NavigationContainer ref={navigationRef}>
+          <AdsProvider>
+            <AuthNavigator />
+          </AdsProvider>
+        </NavigationContainer>
+      </GestureHandlerRootView>
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#F8FAFC",
   },
 });

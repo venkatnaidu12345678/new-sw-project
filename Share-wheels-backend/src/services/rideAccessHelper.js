@@ -16,7 +16,7 @@ const getRideParticipantRole = (ride, userId) => {
 
 const canAccessRideChat = (ride, userId) => {
   const role = getRideParticipantRole(ride, userId);
-  return role === "driver" || role === "passenger";
+  return role === "driver" || role === "passenger" || role === "courier";
 };
 
 module.exports = { getRideParticipantRole, canAccessRideChat };

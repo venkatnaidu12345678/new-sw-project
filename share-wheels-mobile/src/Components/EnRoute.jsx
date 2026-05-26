@@ -17,6 +17,9 @@ import {
 
 import carIcon from "../assets/caricon.png";
 import courierIcon from "../assets/courier.png";
+import UserAvatar from "./ui/UserAvatar";
+import { profileFromUrl } from "../Utils/profileImage";
+import { LAYOUT } from "../theme/layout";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
@@ -35,14 +38,11 @@ const PassengerCard = memo(({ item, onSendRequest, isSent }) => {
         
         {/* LEFT: IMAGE + DETAILS */}
         <View style={{ flexDirection: "row", flex: 1 }}>
-          <Image
-  source={
-    item.profile
-      ? { uri: item.profile }
-      : { uri: "https://via.placeholder.com/100" } // fallback from internet
-  }
-  style={styles.profileImage}
-/>
+          <UserAvatar
+            user={profileFromUrl(item.profile)}
+            size={LAYOUT.sizes.avatarMd + 4}
+            style={styles.profileImage}
+          />
           
           <View style={{ marginLeft: 10, flex: 1 }}>
             <Text style={styles.name}>{item.name}</Text>

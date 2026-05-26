@@ -5,6 +5,14 @@ const userSchema = new mongoose.Schema(
     name: { type: String, default: "" },
     email: { type: String, unique: true, required: true },
     mobile: { type: String, unique: true, required: true },
+    /** Permanent rider ID for OTP verification (immutable) */
+    userNo: {
+      type: String,
+      unique: true,
+      sparse: true,
+      immutable: true,
+      index: true,
+    },
     gender: { type: String, enum: ["male", "female", "other"], required: true },
     password: { type: String, select: false },
     profile_img: { type: String, default: "" },
@@ -14,6 +22,8 @@ const userSchema = new mongoose.Schema(
       type: { type: String, default: "" },
       license_number: { type: String, default: "" },
       car_image: { type: String, default: "" },
+      license_image: { type: String, default: "" },
+      rc_image: { type: String, default: "" },
       car_no: { type: String, default: "" },
       issue_date: { type: Date },
       expiry_date: { type: Date },
@@ -26,5 +36,27 @@ const userSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+userSchema.pre("save", async function assignUserNo() {
+  if (!this.isNew || this.userNo) return;
+  const User = this.constructor;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const candidate = String(Math.floor(100000 + Math.random() * 900000));
+    if (!(await User.exists({ userNo: candidate }))) {
+      this.userNo = candidate;
+      return;
+    }
+  }
+  throw new Error("Could not generate unique user number");
+});
+
+userSchema.pre("findOneAndUpdate", function blockUserNoChange(next) {
+  const update = this.getUpdate() || {};
+  const set = update.$set || update;
+  if (set.userNo !== undefined) {
+    return next(new Error("userNo cannot be changed"));
+  }
+  next();
+});
 
 module.exports = mongoose.model("User", userSchema);

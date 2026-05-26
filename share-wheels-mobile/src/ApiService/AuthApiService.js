@@ -1,4 +1,6 @@
 import { baseUrl, endPoints } from "../Config";
+import { parseApiResponse } from "../Utils/parseApiResponse";
+import { appendImageFile } from "../Utils/imageUpload";
 
 export const signupApi = async (data) => {
   try {
@@ -82,27 +84,36 @@ export const userTermsApi = async (token, isAccepted) => {
   }
 };
 
-export const editVechileApi = async (token, data) => {
+export const editVechileApi = async (token, data, imageFiles = {}) => {
   try {
+    const formData = new FormData();
+    const fields = [
+      "company",
+      "model",
+      "type",
+      "license_number",
+      "car_no",
+      "issue_date",
+      "expiry_date",
+    ];
+    fields.forEach((key) => {
+      const val = data[key];
+      if (val != null && String(val).trim() !== "") {
+        formData.append(key, String(val).trim());
+      }
+    });
+    appendImageFile(formData, "car_image", imageFiles.car_image);
+    appendImageFile(formData, "license_image", imageFiles.license_image);
+    appendImageFile(formData, "rc_image", imageFiles.rc_image);
+
     const res = await fetch(baseUrl + endPoints.editVechileurl, {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(data),
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
     });
 
-    const text = await res.text(); // get raw response
-    try {
-      const json = JSON.parse(text); // try to parse JSON
-      return json;
-    } catch {
-      console.error("Server returned non-JSON response:", text);
-      return { success: false, message: "Server returned invalid response" };
-    }
+    return await parseApiResponse(res);
   } catch (e) {
-    console.log("Verify token error", e);
     return { success: false, message: e.message };
   }
 };

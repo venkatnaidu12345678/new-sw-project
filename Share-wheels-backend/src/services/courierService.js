@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Courier = require("../models/courierModel");
 const Ride = require("../models/rideModel");
 const { parseAmount } = require("../schemas/commonSchemas");
+const { ensureParticipantBoardingOtp } = require("./rideVerificationService");
 
 const createCourierRequest = async (user, body) => {
   const {
@@ -63,6 +64,7 @@ const requestCourier = async (user, body) => {
     courier_receiver_details: { name: receiver_name, mobile: receiver_mobile, alternate_mobile: receiver_alternate_mobile, Address: receiver_address },
   };
   if (ride.CanCarryCourier) {
+    await ensureParticipantBoardingOtp(courierData, user._id);
     ride.all_deliveries.push(courierData);
     await ride.save();
     return { status: 200, body: { success: true, message: "Courier directly assigned", data: ride.all_deliveries } };
@@ -83,11 +85,13 @@ const acceptCourier = async (user, { rideId, courierId }) => {
   if (!ride || ride.users_request_Couriers.length === 0) return { status: 404, body: { success: false, message: "Courier request not found" } };
   if (ride.creator.toString() !== user._id.toString()) return { status: 403, body: { success: false, message: "Only driver can accept" } };
   const courierData = ride.users_request_Couriers[0];
+  const deliveryEntry = { ...courierData.toObject(), assignedAt: new Date() };
+  await ensureParticipantBoardingOtp(deliveryEntry, deliveryEntry.userId);
   const updateResult = await Ride.updateOne(
     { _id: rideId, "users_request_Couriers._id": new mongoose.Types.ObjectId(courierId) },
     {
       $pull: { users_request_Couriers: { _id: new mongoose.Types.ObjectId(courierId) } },
-      $push: { all_deliveries: { ...courierData.toObject(), assignedAt: new Date() } },
+      $push: { all_deliveries: deliveryEntry },
     }
   );
   if (updateResult.modifiedCount === 0) return { status: 400, body: { success: false, message: "Failed to move courier" } };

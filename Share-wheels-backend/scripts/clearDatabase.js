@@ -4,7 +4,7 @@
  * Requires: CONFIRM_CLEAR_DB=yes in environment or pass --yes flag
  */
 require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") });
-const mongoose = require("mongoose");
+const { connectMongo, disconnectMongo, mongoUriHint } = require("./mongoConnect");
 
 const run = async () => {
   const confirmed =
@@ -23,20 +23,16 @@ const run = async () => {
     process.exit(1);
   }
 
-  const dbHint = process.env.MONGO_URI.includes("@")
-    ? process.env.MONGO_URI.split("@")[1]
-    : process.env.MONGO_URI;
+  console.log("Connecting to:", mongoUriHint());
 
-  console.log("Connecting to:", dbHint);
-
-  await mongoose.connect(process.env.MONGO_URI);
-  const dbName = mongoose.connection.db.databaseName;
+  const connection = await connectMongo();
+  const dbName = connection.db.databaseName;
 
   console.log(`Dropping database: ${dbName}`);
-  await mongoose.connection.dropDatabase();
+  await connection.dropDatabase();
   console.log("Done — all collections and data removed.");
 
-  await mongoose.disconnect();
+  await disconnectMongo();
   process.exit(0);
 };
 

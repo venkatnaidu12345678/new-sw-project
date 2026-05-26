@@ -46,6 +46,13 @@ const courierDateSchema = new mongoose.Schema(
 );
 
 /** Embedded passenger on a Ride */
+const participantVerificationFields = {
+  boardingOtp: { type: String },
+  boardingOtpExpires: { type: Date },
+  isBoardingVerified: { type: Boolean, default: false },
+  verifiedAt: { type: Date },
+};
+
 const passengerOnRideSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
@@ -53,6 +60,7 @@ const passengerOnRideSchema = new mongoose.Schema(
     ride_amount: rideAmountField,
     status: { type: String, default: "accepted" },
     joinedAt: { type: Date, default: Date.now },
+    ...participantVerificationFields,
   },
   { _id: true }
 );
@@ -93,6 +101,7 @@ const courierOnRideSchema = new mongoose.Schema(
     },
     requestedAt: { type: Date, default: Date.now },
     assignedAt: { type: Date },
+    ...participantVerificationFields,
   },
   { _id: true }
 );
@@ -121,6 +130,18 @@ const locationPointSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const participantLocationSchema = new mongoose.Schema(
+  {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    role: { type: String, enum: ["driver", "passenger", "courier"], required: true },
+    name: { type: String, default: "" },
+    lat: { type: Number, required: true },
+    lng: { type: Number, required: true },
+    updatedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const liveTrackingSchema = new mongoose.Schema(
   {
     isActive: { type: Boolean, default: false },
@@ -130,6 +151,10 @@ const liveTrackingSchema = new mongoose.Schema(
       lat: Number,
       lng: Number,
       updatedAt: Date,
+    },
+    participantLocations: {
+      type: [participantLocationSchema],
+      default: [],
     },
     locationHistory: {
       type: [locationPointSchema],

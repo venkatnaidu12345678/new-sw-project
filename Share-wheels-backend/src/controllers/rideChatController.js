@@ -12,11 +12,17 @@ const handle = async (res, fn) => {
 
 module.exports = {
   getMessages: async (req, res) =>
-    handle(res, () => rideChatService.getMessages(req.user, req.params.rideId)),
+    handle(res, () =>
+      rideChatService.getMessages(req.user, req.params.rideId, {
+        peerId: req.query.peerId,
+      })
+    ),
   sendMessage: async (req, res) =>
     handle(res, () => rideChatService.sendMessage(req.user, req.params.rideId, req.body)),
   updateLocation: async (req, res) =>
-    handle(res, () => rideTrackingService.updateDriverLocation(req.user, req.params.rideId, req.body)),
+    handle(res, () =>
+      rideTrackingService.updateParticipantLocation(req.user, req.params.rideId, req.body)
+    ),
   getTracking: async (req, res) =>
     handle(res, () => rideTrackingService.getTrackingForUser(req.user, req.params.rideId)),
 };

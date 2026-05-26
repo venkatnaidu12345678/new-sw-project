@@ -5,6 +5,10 @@ const UserRides = require("../models/userRides");
 const Courier = require("../models/courierModel");
 const User = require("../models/userModel");
 const { sendPushNotification } = require("../utils/firebaseAdmin");
+const {
+  ensureParticipantBoardingOtp,
+  assertAllParticipantsVerified,
+} = require("./rideVerificationService");
 
 const acceptPassengerRequest = async (user, { rideId, passenger_userId }) => {
   if (!rideId || !passenger_userId) return { status: 400, body: { message: "rideId & passenger_userId required" } };
@@ -13,7 +17,15 @@ const acceptPassengerRequest = async (user, { rideId, passenger_userId }) => {
   if (ride.creator.toString() !== user._id.toString()) return { status: 403, body: { message: "Only ride creator can accept requests" } };
   const reqObj = ride.passenger_requested_ride.find((item) => item.userId.toString() === passenger_userId.toString());
   if (!reqObj) return { status: 404, body: { message: "Passenger request not found" } };
-  ride.passengers.push({ userId: reqObj.userId, requires_seats: reqObj.requires_seats, ride_amount: reqObj.ride_amount, status: "accepted", joinedAt: new Date() });
+  const passengerEntry = {
+    userId: reqObj.userId,
+    requires_seats: reqObj.requires_seats,
+    ride_amount: reqObj.ride_amount,
+    status: "accepted",
+    joinedAt: new Date(),
+  };
+  await ensureParticipantBoardingOtp(passengerEntry, reqObj.userId);
+  ride.passengers.push(passengerEntry);
   ride.passenger_requested_ride = ride.passenger_requested_ride.filter((item) => item.userId.toString() !== passenger_userId.toString());
   await ride.save();
   await UserRides.findOneAndUpdate(
@@ -71,6 +83,8 @@ const startRide = async (user, { rideId }) => {
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
   if (ride.creator.toString() !== userId.toString()) return { status: 403, body: { success: false, message: "Only ride creator can start the ride" } };
   if (ride.status !== "pending") return { status: 400, body: { success: false, message: "Ride cannot be started" } };
+  const verifyBlock = assertAllParticipantsVerified(ride);
+  if (verifyBlock) return verifyBlock;
   ride.status = "started";
   ride.liveTracking = {
     isActive: true,
@@ -78,6 +92,7 @@ const startRide = async (user, { rideId }) => {
     driverLocation: ride.liveTracking?.driverLocation || null,
     locationHistory: ride.liveTracking?.locationHistory || [],
   };
+  ride.markModified("liveTracking");
   await ride.save();
 
   if (global.io) {
@@ -152,7 +167,23 @@ const pickCourier = async (user, { rideId, courierId }) => {
   courier.driver_assigned_courier = { userId: user.id, rideId };
   courier.courier_status = "driver_assigned";
   await courier.save();
-  ride.all_deliveries.push({ userId: courier.creator, courierId: courier._id, courierNumber: courier.courierNumber, from: courier.from, to: courier.to, courier_type: courier.courier_type, what_to_deliver: courier.what_to_deliver, courier_img: courier.courier_img, amount_will: courier.amount_will, date: { startDate: courier.date?.startDate, endDate: courier.date?.endDate }, timeSlot: courier.timeSlot, courier_receiver_details: courier.courier_receiver_details, assignedAt: new Date() });
+  const courierEntry = {
+    userId: courier.creator,
+    courierId: courier._id,
+    courierNumber: courier.courierNumber,
+    from: courier.from,
+    to: courier.to,
+    courier_type: courier.courier_type,
+    what_to_deliver: courier.what_to_deliver,
+    courier_img: courier.courier_img,
+    amount_will: courier.amount_will,
+    date: { startDate: courier.date?.startDate, endDate: courier.date?.endDate },
+    timeSlot: courier.timeSlot,
+    courier_receiver_details: courier.courier_receiver_details,
+    assignedAt: new Date(),
+  };
+  await ensureParticipantBoardingOtp(courierEntry, courier.creator);
+  ride.all_deliveries.push(courierEntry);
   await ride.save();
   const driver = await User.findById(user.id);
   const courierOwner = await User.findById(courier.creator);

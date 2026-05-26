@@ -20,6 +20,7 @@ import FixedButton from "../Components/FixedButton";
 import ImagePicker from "../Components/ImagePicker";
 import { courierRequest } from "../ApiService/ridesApiServices";
 import BackButton from "../Components/BackButton";
+import KeyboardAwareScreen from "../Components/ui/KeyboardAwareScreen";
 import { INPUT_COLORS } from "../theme/inputTheme";
 
 const CourierRequest = () => {
@@ -99,6 +100,11 @@ const CourierRequest = () => {
       return;
     }
 
+    if (!payload.courier_img) {
+      Alert.alert("Required", "Please upload a courier parcel image.");
+      return;
+    }
+
     try {
       const token = await AsyncStorage.getItem("token");
 
@@ -160,13 +166,16 @@ const CourierRequest = () => {
   };
 
   return (
-    <View style={styles.safe}>
-     
-        <View style={styles.header}>
-    <BackButton />
-    <Text style={styles.title}>Create Courier Request</Text>
-  </View>
-   <ScrollView contentContainerStyle={styles.container}>
+    <KeyboardAwareScreen style={styles.safe}>
+      <View style={styles.header}>
+        <BackButton />
+        <Text style={styles.title}>Create Courier Request</Text>
+      </View>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
 
         {/* FROM / TO */}
          <View style={styles.card}>
@@ -326,7 +335,7 @@ const CourierRequest = () => {
       </ScrollView>
 
       <FixedButton title="Create" onPress={handleCreateRequest} />
-    </View>
+    </KeyboardAwareScreen>
   );
 };
 

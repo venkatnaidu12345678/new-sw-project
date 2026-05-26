@@ -1,6 +1,8 @@
 const express = require("express");
 const adminController = require("../controllers/adminController");
+const adminAdController = require("../controllers/adminAdController");
 const adminAuthMiddleware = require("../middlewares/adminAuthMiddleware");
+const adUploadMiddleware = require("../middlewares/adUploadMiddleware");
 
 const router = express.Router();
 
@@ -17,5 +19,12 @@ router.patch("/rides/:id/status", adminController.updateRideStatus);
 router.patch("/users/:id/verify", adminController.updateUserVerification);
 router.get("/tracking/active", adminController.activeTracking);
 router.get("/tracking/:id", adminController.trackingDetail);
+
+router.get("/ads/meta", adminAdController.getMeta);
+router.get("/ads", adminAdController.listAds);
+router.post("/ads", adminAdController.createAd);
+router.post("/ads/upload", adUploadMiddleware, adminAdController.uploadMedia);
+router.patch("/ads/:id", adminAdController.updateAd);
+router.delete("/ads/:id", adminAdController.deleteAd);
 
 module.exports = router;

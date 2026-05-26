@@ -4,6 +4,8 @@ import driverIcon from "../assets/caricon.png";
 import passengerIcon from "../assets/upcomingperson.png";
 import courierIcon from "../assets/courier.png";
 import { getRideDisplayFare } from "../Utils/fareUtils";
+import UserAvatar from "./ui/UserAvatar";
+import { LAYOUT } from "../theme/layout";
 
 const UpcomingRide = ({ data, onPress }) => {
 
@@ -51,9 +53,17 @@ const UpcomingRide = ({ data, onPress }) => {
       onPress={onPress}
       activeOpacity={0.8}
     >
+      <UserAvatar
+        user={data?.creator}
+        size={LAYOUT.sizes.avatarSm + 4}
+        style={styles.avatar}
+      />
+
       <View style={styles.left}>
         <Text style={styles.title}>{route}</Text>
-
+        {data?.creator?.name ? (
+          <Text style={styles.driverName}>{data.creator.name}</Text>
+        ) : null}
         <Text style={styles.subtitle}>
           {car} | {seats} Seats | ₹{price}/Seat | {formattedDate}
         </Text>
@@ -78,26 +88,36 @@ export default UpcomingRide;
 
 const styles = StyleSheet.create({
   card: {
-    height: 80,
+    minHeight: LAYOUT.sizes.inputHeight + 24,
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1.5,
-    borderRadius: 15,
-    paddingHorizontal: 16,
-    marginBottom: 12,
+    borderRadius: LAYOUT.radius.md,
+    paddingHorizontal: LAYOUT.spacing.md,
+    paddingVertical: LAYOUT.spacing.sm,
+    marginBottom: LAYOUT.spacing.md,
+    gap: LAYOUT.spacing.sm,
   },
-
+  avatar: {
+    marginRight: 2,
+  },
   left: {
     flex: 1,
   },
+  driverName: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#374151",
+    marginTop: 2,
+  },
 
   title: {
-    fontSize: 15,
+    fontSize: LAYOUT.font.body,
     fontWeight: "700",
   },
 
   subtitle: {
-    fontSize: 12,
+    fontSize: LAYOUT.font.small,
     color: "#6B7280",
     marginTop: 2,
   },
