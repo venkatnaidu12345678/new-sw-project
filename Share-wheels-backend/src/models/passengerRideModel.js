@@ -27,6 +27,7 @@ const passengerRideSchema = new mongoose.Schema(
       default: "pending",
     },
     date: { type: Date, required: true },
+    date_end: { type: Date, default: null },
   },
   { timestamps: true }
 );

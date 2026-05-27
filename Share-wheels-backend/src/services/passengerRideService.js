@@ -15,11 +15,20 @@ const {
 } = require("../utils/socketEmit");
 
 const createPassengerRequest = async (user, { from, to, ride_need_date, seats_needed, date, luggage_included, amount_will }) => {
-  if (!from || !to || !ride_need_date || !seats_needed) return { status: 400, body: { error: "All fields are required" } };
+  if (!from || !to || !ride_need_date || !seats_needed) {
+    return { status: 400, body: { error: "All fields are required" } };
+  }
   const amount = parseAmount(amount_will);
   if (amount === null || amount <= 0) {
     return { status: 400, body: { error: "Valid price (amount_will) is required" } };
   }
+  const startDateRaw = date?.startDate ?? date;
+  const endDateRaw = date?.endDate ?? null;
+
+  if (!startDateRaw) {
+    return { status: 400, body: { error: "Start date is required" } };
+  }
+
   const passengerRide = await PassengerRide.create({
     creator: user._id,
     passenger_rideId: new mongoose.Types.ObjectId().toString(),
@@ -29,7 +38,8 @@ const createPassengerRequest = async (user, { from, to, ride_need_date, seats_ne
     amount_will: amount,
     ride_need_date,
     luggage_included,
-    date: date ? new Date(date) : new Date(),
+    date: new Date(startDateRaw),
+    date_end: endDateRaw ? new Date(endDateRaw) : null,
   });
   return { status: 200, body: { message: "Passenger request created", passengerRide } };
 };
@@ -37,13 +47,27 @@ const createPassengerRequest = async (user, { from, to, ride_need_date, seats_ne
 const getOpenRequests = async (user) => {
   const driverRides = await Ride.find({ creator: user._id });
   if (!driverRides || driverRides.length === 0) return { status: 200, body: [] };
-  const dateQueries = driverRides.filter((ride) => ride.date).map((ride) => {
-    const start = new Date(ride.date);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(ride.date);
-    end.setHours(23, 59, 59, 999);
-    return { date: { $gte: start, $lte: end } };
-  });
+
+  // Build overlap conditions: passenger date range overlaps a driver's ride day.
+  // Passenger considered open if: passenger.date <= dayEnd AND (passenger.date_end is null OR passenger.date_end >= dayStart)
+  const dateQueries = driverRides
+    .filter((ride) => ride.date)
+    .map((ride) => {
+      const dayStart = new Date(ride.date);
+      dayStart.setHours(0, 0, 0, 0);
+
+      const dayEnd = new Date(ride.date);
+      dayEnd.setHours(23, 59, 59, 999);
+
+      return {
+        $and: [
+          { date: { $lte: dayEnd } },
+          {
+            $or: [{ date_end: null }, { date_end: { $gte: dayStart } }],
+          },
+        ],
+      };
+    });
   const openRequests = await PassengerRide.find({
     status: "pending",
     creator: { $ne: user._id },

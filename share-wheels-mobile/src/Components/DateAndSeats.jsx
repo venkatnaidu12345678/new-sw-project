@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -7,27 +7,42 @@ import {
   StyleSheet,
 } from "react-native";
 
-import Calender from "../Components/Calender";
+import CalenderRange from "./CalenderRange";
 import person from "../assets/person.png";
 import seatsicon from "../assets/seatsicon.png";
 import calendar from "../assets/calender.png";
-import { validateDate, validateSeats } from "../Utils";
+import { validateSeats } from "../Utils";
+import { parseLocalDate } from "../Utils/dateUtils";
 
-const DateAndSeats = ({ rideData, updateRideData, submitted }) => {
+const DateAndSeats = ({ rideData, updateRideData, submitted, embedded = false }) => {
 
   const seats = parseInt(rideData.availableSeats || "1");
 
   // ✅ Track user interaction
   const [touched, setTouched] = useState({
-    date: false,
+    dateStart: false,
+    dateEnd: false,
     seats: false,
   });
 
-  // ✅ Validation logic
+  const today = useMemo(() => {
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    return t;
+  }, []);
+
+  const validateDateRange = () => {
+    const start = parseLocalDate(rideData.dateStart);
+    const end = parseLocalDate(rideData.dateEnd);
+    if (!start) return "Start date is required";
+    if (!end) return "End date is required";
+    if (start < today) return "Start date cannot be in the past";
+    if (end < start) return "End date must be on/after start date";
+    return "";
+  };
+
   const dateError =
-    submitted || touched.date
-      ? validateDate(rideData.date)
-      : "";
+    submitted || touched.dateStart || touched.dateEnd ? validateDateRange() : "";
 
   const seatsError =
     submitted || touched.seats
@@ -57,37 +72,50 @@ const DateAndSeats = ({ rideData, updateRideData, submitted }) => {
         {/* -------- DATE -------- */}
         <View style={[
           styles.card,
-          (submitted || touched.date) && !isDateValid && styles.errorBorder
+          embedded && styles.cardEmbedded,
+          (submitted || touched.dateStart || touched.dateEnd) &&
+            !isDateValid &&
+            styles.errorBorder
         ]}>
           <View style={styles.header}>
             <Image source={calendar} style={styles.cardIcon} />
             <Text style={styles.sectionLabel}>
-              Date
-              {(submitted || touched.date) && !isDateValid && (
+              Date range
+              {(submitted || touched.dateStart || touched.dateEnd) &&
+                !isDateValid && (
                 <Text style={styles.required}> *</Text>
               )}
             </Text>
           </View>
 
           <View style={{ marginTop: 8 }}>
-            <Calender
+            <CalenderRange
               rideData={rideData}
               updateRideData={(key, value) => {
                 updateRideData(key, value);
-                setTouched((prev) => ({ ...prev, date: true }));
+                if (key === "dateStart") {
+                  setTouched((prev) => ({ ...prev, dateStart: true }));
+                }
+                if (key === "dateEnd") {
+                  setTouched((prev) => ({ ...prev, dateEnd: true }));
+                }
               }}
-              isInvalid={(submitted || touched.date) && !isDateValid}
+              startLabel="From date"
+              endLabel="To date"
             />
           </View>
 
           <Text style={styles.errorText}>
-            {(submitted || touched.date) ? (dateError || " ") : " "}
+            {submitted || touched.dateStart || touched.dateEnd
+              ? dateError || " "
+              : " "}
           </Text>
         </View>
 
         {/* -------- SEATS -------- */}
         <View style={[
           styles.card,
+          embedded && styles.cardEmbedded,
           (submitted || touched.seats) && !isSeatsValid && styles.errorBorder
         ]}>
           <View style={styles.header}>
@@ -146,6 +174,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     minHeight: 140,
     justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+
+  cardEmbedded: {
+    backgroundColor: "#F8FAFC",
+    padding: 12,
+    minHeight: 130,
   },
 
   header: {

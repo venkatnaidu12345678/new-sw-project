@@ -98,7 +98,10 @@ const buildFullUserSnapshot = async (userId) => {
 
   const classifyRide = (r, role) => {
     const item = slimRide(r, role);
-    const done = r.status === "completed" || r.status === "cancelled";
+    const done =
+      r.status === "completed" ||
+      r.status === "cancelled" ||
+      r.status === "expired";
     const rideDate = r.date ? new Date(r.date) : null;
     if (done) history.push(item);
     else if (r.status === "pending" || r.status === "started") upcoming.push(item);

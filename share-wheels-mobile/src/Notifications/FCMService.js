@@ -1,15 +1,30 @@
 import { Platform } from "react-native";
-import messaging from "@react-native-firebase/messaging";
+import {
+  getFCMMessaging,
+  AuthorizationStatus,
+  getToken,
+  onMessage,
+  onNotificationOpenedApp,
+  getInitialNotification,
+  onTokenRefresh,
+  requestPermission,
+  registerDeviceForRemoteMessages,
+  isDeviceRegisteredForRemoteMessages,
+} from "./firebaseMessaging";
 import { displayForegroundNotification } from "./displayLocalNotification";
 
+const messaging = () => getFCMMessaging();
+
 export async function requestUserPermission() {
+  const msg = messaging();
+
   if (Platform.OS === "ios") {
-    const authStatus = await messaging().requestPermission();
+    const authStatus = await requestPermission(msg);
     const enabled =
-      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+      authStatus === AuthorizationStatus.AUTHORIZED ||
+      authStatus === AuthorizationStatus.PROVISIONAL;
     if (enabled) {
-      await messaging().registerDeviceForRemoteMessages();
+      await registerDeviceForRemoteMessages(msg);
     }
     return enabled;
   }
@@ -27,38 +42,39 @@ export async function requestUserPermission() {
 
 export async function getDeviceToken() {
   try {
+    const msg = messaging();
     if (Platform.OS === "ios") {
-      const registered = messaging().isDeviceRegisteredForRemoteMessages;
+      const registered = isDeviceRegisteredForRemoteMessages(msg);
       if (!registered) {
-        await messaging().registerDeviceForRemoteMessages();
+        await registerDeviceForRemoteMessages(msg);
       }
     }
-    return await messaging().getToken();
+    return await getToken(msg);
   } catch (error) {
     console.warn("[FCM] getToken failed:", error.message);
     return null;
   }
 }
 
-export function registerForegroundHandler(onMessage) {
-  return messaging().onMessage(async (remoteMessage) => {
+export function registerForegroundHandler(onMessageCb) {
+  return onMessage(messaging(), async (remoteMessage) => {
     try {
       await displayForegroundNotification(remoteMessage);
     } catch (e) {
       console.warn("[FCM] foreground display:", e.message);
     }
-    onMessage?.(remoteMessage);
+    onMessageCb?.(remoteMessage);
   });
 }
 
 export function registerNotificationOpenedApp(onNotification) {
-  return messaging().onNotificationOpenedApp((remoteMessage) => {
+  return onNotificationOpenedApp(messaging(), (remoteMessage) => {
     onNotification?.(remoteMessage);
   });
 }
 
 export async function handleInitialNotification(onNotification) {
-  const remoteMessage = await messaging().getInitialNotification();
+  const remoteMessage = await getInitialNotification(messaging());
   if (remoteMessage) {
     onNotification?.(remoteMessage);
   }
@@ -66,17 +82,20 @@ export async function handleInitialNotification(onNotification) {
 }
 
 export function registerTokenRefreshHandler(onToken) {
-  return messaging().onTokenRefresh((token) => {
+  return onTokenRefresh(messaging(), (token) => {
     onToken?.(token);
   });
 }
 
 export async function configureIosForegroundPresentation() {
   if (Platform.OS === "ios") {
-    await messaging().setForegroundPresentationOptions({
-      alert: true,
-      badge: true,
-      sound: true,
-    });
+    const msg = messaging();
+    if (typeof msg.setForegroundPresentationOptions === "function") {
+      await msg.setForegroundPresentationOptions({
+        alert: true,
+        badge: true,
+        sound: true,
+      });
+    }
   }
 }

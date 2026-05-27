@@ -83,4 +83,5 @@ export const endPoints = {
   feedbackurl: "/feedback",
   notificationsurl: "/notifications",
   registerFcmTokenurl: "/auth/register-fcm-token",
+  legalPoliciesurl: "/legal/policies",
 };

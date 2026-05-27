@@ -11,6 +11,36 @@ const {
   isRideScheduledTimePassed,
   isRideScheduledTimeFuture,
 } = require("../utils/rideScheduleUtils");
+const { expireStalePendingRides } = require("./rideExpiryService");
+
+const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const parseCalendarDateParts = (dateStr) => {
+  const parts = String(dateStr).trim().split("-").map(Number);
+  if (parts.length < 3 || parts.some((n) => Number.isNaN(n))) return null;
+  return { year: parts[0], month: parts[1], day: parts[2] };
+};
+
+/** Match rides stored as UTC midnight or local calendar day (legacy). */
+const calendarDayRange = (dateStr) => {
+  const p = parseCalendarDateParts(dateStr);
+  if (!p) return null;
+  const { year, month, day } = p;
+  const utcStart = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+  const utcEnd = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+  const localStart = new Date(year, month - 1, day, 0, 0, 0, 0);
+  const localEnd = new Date(year, month - 1, day, 23, 59, 59, 999);
+  return {
+    startDate: new Date(Math.min(utcStart.getTime(), localStart.getTime())),
+    endDate: new Date(Math.max(utcEnd.getTime(), localEnd.getTime())),
+  };
+};
+
+const parseRideDateForStorage = (dateStr) => {
+  const p = parseCalendarDateParts(dateStr);
+  if (!p) return null;
+  return new Date(Date.UTC(p.year, p.month - 1, p.day, 0, 0, 0, 0));
+};
 
 const getRidesData = async ({ rideIds }) => {
   if (!rideIds || !Array.isArray(rideIds)) {
@@ -34,8 +64,10 @@ const createRide = async (user, payload) => {
   if (!vehicle || !vehicle.company || !vehicle.car_no) {
     return { status: 400, body: { error: "Please add your vehicle details first" } };
   }
-  const rideDate = new Date(date);
-  if (isNaN(rideDate)) return { status: 400, body: { error: "Invalid date format" } };
+  const rideDate = parseRideDateForStorage(date);
+  if (!rideDate || isNaN(rideDate.getTime())) {
+    return { status: 400, body: { error: "Invalid date format" } };
+  }
 
   const parsedAmount = parseAmount(ride_amount);
   if (parsedAmount === null || parsedAmount <= 0) {
@@ -67,26 +99,32 @@ const createRide = async (user, payload) => {
 
 const getRides = async (query, authUser) => {
   let { from, to, date } = query;
-  if (!from || !to || !date) return { status: 400, body: { message: "from, to and date are required" } };
-  from = from.trim();
-  to = to.trim();
-  const startDate = new Date(date);
-  startDate.setHours(0, 0, 0, 0);
-  const endDate = new Date(date);
-  endDate.setHours(23, 59, 59, 999);
+  if (!from || !to || !date) {
+    return { status: 400, body: { message: "from, to and date are required" } };
+  }
+  from = String(from).trim();
+  to = String(to).trim();
+  const range = calendarDayRange(date);
+  if (!range) {
+    return { status: 400, body: { message: "Invalid date format" } };
+  }
+
   const findFilter = {
-    from: { $regex: from, $options: "i" },
-    to: { $regex: to, $options: "i" },
-    date: { $gte: startDate, $lte: endDate },
+    from: { $regex: escapeRegex(from), $options: "i" },
+    to: { $regex: escapeRegex(to), $options: "i" },
+    date: { $gte: range.startDate, $lte: range.endDate },
     status: "pending",
   };
   if (authUser?._id) {
     findFilter.creator = { $ne: authUser._id };
   }
+
   const rides = await Ride.find(findFilter)
     .populate("creator", "name email mobile profile_img")
-    .sort({ createdAt: -1 });
-  if (!rides.length) return { status: 404, body: { message: "No rides found" } };
+    .sort({ createdAt: -1 })
+    .lean();
+
+  // Original API: JSON array of rides (empty array when none)
   return { status: 200, body: rides };
 };
 
@@ -262,6 +300,10 @@ const refIdStr = (ref) =>
 const USER_PUBLIC_FIELDS = "name email mobile profile_img gender userNo";
 
 const listRidesByPhase = async (user, completed) => {
+  if (!completed) {
+    await expireStalePendingRides();
+  }
+
   const userIdRaw = user?._id || user?.id;
   if (!userIdRaw) {
     return { status: 401, body: { success: false, message: "User not authenticated" } };
@@ -287,7 +329,7 @@ const listRidesByPhase = async (user, completed) => {
 
   const query = completed
     ? {
-        status: "completed",
+        status: { $in: ["completed", "cancelled", "expired"] },
         ...membership,
       }
     : {
@@ -320,7 +362,9 @@ const listRidesByPhase = async (user, completed) => {
     .sort(completed ? { date: -1, startTime: -1 } : { date: 1, startTime: 1 })
     .lean();
 
-  const allowedStatuses = completed ? ["completed"] : ["pending", "started"];
+  const allowedStatuses = completed
+    ? ["completed", "cancelled", "expired"]
+    : ["pending", "started"];
 
   const updatedRides = rides
     .filter((ride) => allowedStatuses.includes(ride.status))

@@ -12,18 +12,43 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { userTermsApi } from "../ApiService/AuthApiService"; // ✅ make sure this path is correct
+import { getLegalPolicies } from "../ApiService/legalApiService";
 
-const TermsPopup = ({ visible, onSuccess, setRefresh }) => {
+const TermsPopup = ({ visible = true, onSuccess, setRefresh }) => {
   const [loading, setLoading] = useState(false);
   const [agreed, setAgreed] = useState(false);
 
-  const termsData = [
-    { clause: "Permissions & Data Usage", paragraph: "To ensure optimal functionality and an enhanced user experience, the application may request access to the following permissions:" },
-    { clause: "1. Camera & Photo Library", paragraph: "Access to the camera and photo library is required to enable users to capture, upload, and manage images within the application. Images are used strictly for application-related features and are not accessed or shared without user authorization." },
-    { clause: "2. Location Information", paragraph: "The application may collect location data (GPS or network-based) to support location-dependent features such as verification, tagging, and service availability. Location data is used only for these purposes." },
-    { clause: "3. Notifications", paragraph: "Notification permission is requested to deliver important updates, service alerts, reminders, and other essential communications related to the application. Users retain full control over notification preferences and may enable or disable notifications at any time through device settings." },
-    { clause: "Data Security & Privacy", paragraph: "All personal data is handled with strict confidentiality and protected using industry-standard security measures. User information is never sold, rented, or misused." },
-  ];
+  const [termsText, setTermsText] = useState("");
+  const [policiesLoading, setPoliciesLoading] = useState(false);
+
+  const loadTerms = async () => {
+    setPoliciesLoading(true);
+    try {
+      const policies = await getLegalPolicies();
+      setTermsText(policies?.terms?.content || policies?.terms?.content || "");
+    } catch (e) {
+      // Keep UX stable even if the request fails.
+      setTermsText("");
+    } finally {
+      setPoliciesLoading(false);
+    }
+  };
+
+  // Load policies when modal becomes visible.
+  React.useEffect(() => {
+    if (visible) loadTerms();
+  }, [visible]);
+
+  const renderParagraphs = (text) => {
+    const raw = String(text || "").trim();
+    if (!raw) return null;
+    const parts = raw.split(/\n\s*\n/g);
+    return parts.map((p, i) => (
+      <View key={`${i}`} style={styles.clauseContainer}>
+        <Text style={styles.clauseText}>{p}</Text>
+      </View>
+    ));
+  };
 
   const handleAccept = async () => {
     if (!agreed) {
@@ -75,12 +100,17 @@ const TermsPopup = ({ visible, onSuccess, setRefresh }) => {
           <Text style={styles.heading}>Terms of Service</Text>
 
           <ScrollView style={styles.scrollContainer}>
-            {termsData.map((item, index) => (
-              <View key={index} style={styles.clauseContainer}>
-                <Text style={styles.clauseTitle}>{item.clause}</Text>
-                <Text style={styles.clauseText}>{item.paragraph}</Text>
+            {policiesLoading ? (
+              <View style={{ paddingVertical: 20 }}>
+                <ActivityIndicator color="#2563EB" />
               </View>
-            ))}
+            ) : (
+              renderParagraphs(termsText) || (
+                <Text style={styles.clauseText}>
+                  Terms are not available right now. Please try again later.
+                </Text>
+              )
+            )}
           </ScrollView>
 
           <Pressable style={styles.checkboxRow} onPress={() => setAgreed(!agreed)}>
@@ -111,7 +141,6 @@ const styles = StyleSheet.create({
   heading: { fontSize: 20, fontWeight: "bold", marginBottom: 10, textAlign: "center" },
   scrollContainer: { flex: 1, marginBottom: 10 },
   clauseContainer: { marginBottom: 15 },
-  clauseTitle: { fontWeight: "bold", marginBottom: 5, fontSize: 16 },
   clauseText: { fontSize: 14, color: "#555", lineHeight: 20 },
   checkboxRow: { flexDirection: "row", alignItems: "center", marginBottom: 15 },
   checkbox: { width: 22, height: 22, borderWidth: 2, borderColor: "#555", borderRadius: 4, justifyContent: "center", alignItems: "center" },

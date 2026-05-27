@@ -10,6 +10,7 @@ const nav = [
   { to: "/ads", label: "Ads", icon: "A" },
   { to: "/locations", label: "Locations", icon: "G" },
   { to: "/feedback", label: "Feedback", icon: "F" },
+  { to: "/legal", label: "Legal", icon: "T" },
 ];
 
 export default function Layout() {

@@ -42,9 +42,17 @@ import ScreenHeader from "./ui/ScreenHeader";
 import { LAYOUT } from "../theme/layout";
 import { profileData } from "../Navigation/AuthNavigator";
 
-if (Platform.OS === "android") {
-  UIManager.setLayoutAnimationEnabledExperimental &&
-    UIManager.setLayoutAnimationEnabledExperimental(true);
+// LayoutAnimation on Android New Architecture does not need this (no-op when enabled).
+const isBridgeless =
+  typeof global !== "undefined" &&
+  (global.RN$Bridgeless === true || global.__turboModuleProxy != null);
+
+if (
+  Platform.OS === "android" &&
+  !isBridgeless &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
 const refUserId = (ref) =>

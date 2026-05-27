@@ -12,7 +12,7 @@ import {
 
 const SCREEN_HEIGHT = Dimensions.get("window").height;
 
-const BottomSlider = ({ visible, onClose, children,height=500 }) => {
+const BottomSlider = ({ visible, onClose, children, height = 500, scrollable = true }) => {
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const dragY = useRef(new Animated.Value(0)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
@@ -100,9 +100,13 @@ const BottomSlider = ({ visible, onClose, children,height=500 }) => {
           <Text style={styles.closeText}>✕</Text>
         </TouchableOpacity>
 
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {children}
-        </ScrollView>
+        {scrollable ? (
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {children}
+          </ScrollView>
+        ) : (
+          children
+        )}
       </Animated.View>
     </>
   );

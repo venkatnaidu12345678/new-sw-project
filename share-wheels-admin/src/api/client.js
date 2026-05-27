@@ -12,7 +12,21 @@ export const api = async (path, options = {}) => {
   if (token) headers.Authorization = `Bearer ${token}`;
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
-  const data = await res.json().catch(() => ({}));
+  const raw = await res.text();
+  let data = {};
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      const snippet = raw.replace(/<[^>]+>/g, " ").trim().slice(0, 120);
+      if (/cannot (GET|POST|PUT|PATCH|DELETE)/i.test(snippet)) {
+        throw new Error(
+          `${snippet}. Restart the Share Wheels backend (port 3001) so admin location routes load.`
+        );
+      }
+      throw new Error(snippet || `Invalid response (${res.status})`);
+    }
+  }
 
   if (!res.ok) {
     throw new Error(data.message || data.error || `Request failed (${res.status})`);
@@ -84,7 +98,7 @@ export const deleteLocation = (id) =>
   api(`/admin/locations/${id}`, { method: "DELETE" });
 export const bulkUpsertLocations = (names) =>
   api("/admin/locations/bulk", {
-    method: "PUT",
+    method: "POST",
     body: JSON.stringify({ names }),
   });
 export const clearAllLocations = () => api("/admin/locations/all", { method: "DELETE" });
@@ -95,6 +109,13 @@ export const getFeedbacks = (params = {}) => {
 };
 export const updateFeedback = (id, body) =>
   api(`/admin/feedback/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+
+export const getLegalPolicies = () => api("/legal/policies");
+export const updateLegalPolicies = (policies) =>
+  api("/admin/legal/policies", {
+    method: "PUT",
+    body: JSON.stringify(policies),
+  });
 
 export const uploadAdMedia = async (file, mediaType = "image") => {
   const token = getToken();

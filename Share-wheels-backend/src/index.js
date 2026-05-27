@@ -18,6 +18,7 @@ const adRoutes = require("./routes/adRoutes");
 const locationRoutes = require("./routes/locationRoutes");
 const feedbackRoutes = require("./routes/feedbackRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
+const legalRoutes = require("./routes/legalRoutes");
 
 const app = express();
 
@@ -37,6 +38,7 @@ app.use("/ads", adRoutes);
 app.use("/locations", locationRoutes);
 app.use("/feedback", feedbackRoutes);
 app.use("/notifications", notificationRoutes);
+app.use("/legal", legalRoutes);
 
 connectDatabase();
 

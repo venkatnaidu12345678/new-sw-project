@@ -3,7 +3,7 @@ import { View, Text, TextInput, StyleSheet } from "react-native";
 import { validatePrice } from "../Utils";
 import { INPUT_COLORS } from "../theme/inputTheme";
 
-const PriceCard = ({ rideData, updateRideData, submitted }) => {
+const PriceCard = ({ rideData, updateRideData, submitted, compact = false, accent = false }) => {
 
   // ✅ Track interaction
   const [touched, setTouched] = useState(false);
@@ -27,8 +27,8 @@ const PriceCard = ({ rideData, updateRideData, submitted }) => {
     <View style={styles.mainContainer}>
 
       {/* Label + Star */}
-      <Text style={styles.priceLabel}>
-        Amount
+      <Text style={[styles.priceLabel, compact && styles.priceLabelCompact]}>
+        Price per seat
         {(submitted || touched) && !isValid && (
           <Text style={styles.required}> *</Text>
         )}
@@ -37,12 +37,14 @@ const PriceCard = ({ rideData, updateRideData, submitted }) => {
       {/* Input Box */}
       <View style={[
         styles.priceBox,
+        compact && styles.priceBoxCompact,
+        accent && styles.priceBoxAccent,
         (submitted || touched) && !isValid && styles.errorBorder
       ]}>
-        <Text style={styles.rupee}>₹</Text>
+        <Text style={[styles.rupee, compact && styles.rupeeCompact, accent && styles.rupeeAccent]}>₹</Text>
 
         <TextInput
-          style={styles.priceInput}
+          style={[styles.priceInput, compact && styles.priceInputCompact]}
           value={rideData.ride_amount}
           onChangeText={handlePriceChange}
           keyboardType="numeric"
@@ -70,25 +72,49 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "600",
     marginBottom: 10,
-    
     color: "#1F2937",
+  },
+
+  priceLabelCompact: {
+    fontSize: 14,
+    marginBottom: 8,
+    color: "#374151",
   },
 
   priceBox: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: INPUT_COLORS.border,
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    borderColor:"#0e0c0c",
+    backgroundColor: INPUT_COLORS.background,
+  },
+
+  priceBoxCompact: {
+    borderRadius: 12,
+    paddingVertical: 6,
+  },
+
+  priceBoxAccent: {
+    backgroundColor: "#FFFBEB",
+    borderColor: "#FDE68A",
+  },
+
+  rupeeAccent: {
+    color: "#D97706",
   },
 
   rupee: {
     fontSize: 24,
     fontWeight: "700",
     marginRight: 6,
+    color: "#1F2937",
+  },
+
+  rupeeCompact: {
+    fontSize: 20,
   },
 
   priceInput: {
@@ -96,6 +122,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     flex: 1,
     color: INPUT_COLORS.text,
+  },
+
+  priceInputCompact: {
+    fontSize: 20,
+    fontWeight: "600",
   },
 
   required: {

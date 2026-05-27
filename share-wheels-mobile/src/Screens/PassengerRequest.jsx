@@ -1,85 +1,99 @@
-import React, { useState, useRef } from "react";
-import {
-  View,
-  StyleSheet,
-  Alert,
-  Text,
-  TouchableOpacity,
-  Image,
-  TextInput,
-} from "react-native";
-
+import React, { useState, useRef, useMemo } from "react";
+import { Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
 
-/* ICON */
 import ScreenHeader from "../Components/ui/ScreenHeader";
-
-/* COMPONENTS */
 import ToggleComponent from "../Components/ToggleComponent";
 import DateAndSeats from "../Components/DateAndSeats";
 import FixedButton from "../Components/FixedButton";
 import FromToInput from "../Components/FromToInput";
 import KeyboardAwareScreen from "../Components/ui/KeyboardAwareScreen";
+import {
+  RequestHero,
+  RequestSection,
+  RequestPriceInput,
+} from "../Components/ui/RequestFormUI";
 
-/* API */
 import { createpassengerrequest } from "../ApiService/ridesApiServices";
 import { validateLocation, validatePrice } from "../Utils";
-import { INPUT_COLORS } from "../theme/inputTheme";
+import { PASSENGER_THEME as T } from "../theme/requestFormTheme";
+import { DS } from "../theme/designSystem";
 
 const PassengerRequest = () => {
   const navigation = useNavigation();
   const formRef = useRef();
+  const [submitted, setSubmitted] = useState(false);
 
   const [payload, setPayload] = useState({
     from: "",
     to: "",
     ride_need_date: "",
     seats_needed: 1,
-    date: "",
+    dateStart: "",
+    dateEnd: "",
     luggage_included: true,
     amount_will: "",
   });
 
-  const updateRideData = (key, value) => {
-    setPayload((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
+  const updatePayload = (key, value) => {
+    setPayload((prev) => ({ ...prev, [key]: value }));
   };
 
-  /* ---------------- FIELDS ---------------- */
+  const scheduleData = useMemo(
+    () => ({
+      ...payload,
+      availableSeats: String(payload.seats_needed || 1),
+    }),
+    [payload]
+  );
+
+  const updateScheduleData = (key, value) => {
+    if (key === "availableSeats") {
+      setPayload((prev) => ({
+        ...prev,
+        seats_needed: Number(value) || 1,
+      }));
+      return;
+    }
+    setPayload((prev) => ({ ...prev, [key]: value }));
+  };
+
   const fields = [
     {
       key: "from",
       label: "From",
-      placeholder: "Enter pickup location",
+      placeholder: "Enter starting location",
       value: payload.from,
-      onChangeText: (text) => updateRideData("from", text),
+      onChangeText: (text) => updatePayload("from", text),
       rules: [(v) => validateLocation(v, "From")],
     },
     {
       key: "to",
       label: "To",
-      placeholder: "Enter drop location",
+      placeholder: "Enter destination",
       value: payload.to,
-      onChangeText: (text) => updateRideData("to", text),
+      onChangeText: (text) => updatePayload("to", text),
       rules: [(v) => validateLocation(v, "To")],
     },
   ];
 
-  /* ---------------- SUBMIT ---------------- */
   const handleCreateRequest = async () => {
-    const isValid = formRef.current?.validate();
-    if (!isValid) return;
+    setSubmitted(true);
 
-    if (!payload.date) {
-      Alert.alert("Error", "Please select date");
+    const isValid = formRef.current?.validate();
+    if (!isValid) {
+      Alert.alert("Check your details", "Please fill in From and To locations.");
+      return;
+    }
+
+    if (!payload.dateStart || !payload.dateEnd) {
+      Alert.alert("Check your details", "Please select a date range.");
       return;
     }
 
     if (!payload.seats_needed) {
-      Alert.alert("Error", "Seats required");
+      Alert.alert("Check your details", "Seats required.");
       return;
     }
 
@@ -91,7 +105,6 @@ const PassengerRequest = () => {
 
     try {
       const token = await AsyncStorage.getItem("token");
-
       if (!token) {
         Alert.alert("Error", "User not authenticated");
         return;
@@ -99,15 +112,19 @@ const PassengerRequest = () => {
 
       const finalPayload = {
         ...payload,
-        ride_need_date: payload.date,
+        ride_need_date: payload.dateStart,
         amount_will: Number(payload.amount_will),
+        date: {
+          startDate: payload.dateStart,
+          endDate: payload.dateEnd,
+        },
       };
 
       const response = await createpassengerrequest(token, finalPayload);
 
       Alert.alert(
-        "Success",
-        response?.message || "Request created successfully",
+        "Request posted",
+        response?.message || "Passenger request created successfully.",
         [
           {
             text: "OK",
@@ -116,134 +133,99 @@ const PassengerRequest = () => {
         ]
       );
     } catch (error) {
-      console.log("❌ Passenger Request Error:", error);
+      console.log("Passenger Request Error:", error);
       Alert.alert("Error", error?.message || "Failed to create request");
     }
   };
 
   return (
-    <KeyboardAwareScreen
-      style={styles.safe}
-      scrollable
-      contentContainerStyle={styles.container}
-    >
-
+    <>
+      <KeyboardAwareScreen
+        style={{ flex: 1, backgroundColor: T.pageBg }}
+        scrollable
+        contentContainerStyle={{
+          paddingHorizontal: DS.spacing.screen,
+          paddingTop: DS.spacing.md,
+          paddingBottom: 120,
+        }}
+      >
         <ScreenHeader
-          title="Create Passenger Request"
+          title="Passenger request"
           onBack={() => {
-            if (navigation.canGoBack()) {
-              navigation.goBack();
-            } else {
-              navigation.navigate("Request");
-            }
+            if (navigation.canGoBack()) navigation.goBack();
+            else navigation.navigate("Request");
           }}
         />
 
-        {/* FORM TITLE */}
-       
-
-        {/* FROM + TO */}
-        <FromToInput ref={formRef} fields={fields} />
-
-        {/* DATE + SEATS */}
-        <DateAndSeats
-          rideData={payload}
-          updateRideData={updateRideData}
+        <RequestHero
+          theme={T}
+          icon="person"
+          title="Need a ride?"
+          subtitle="Tell drivers where you're going, when, and how much you'll pay per seat."
+          pills={["Share costs", "Flexible dates"]}
         />
 
-        {/* LUGGAGE */}
-        <ToggleComponent
-          title="Luggage Included"
-          value={payload.luggage_included}
-          onChange={(value) =>
-            updateRideData("luggage_included", value)
-          }
-        />
+        <RequestSection
+          theme={T}
+          accent={T.sections.route}
+          title="Route"
+          subtitle="From and To locations"
+        >
+          <FromToInput ref={formRef} fields={fields} variant="route" />
+        </RequestSection>
 
-        {/* PRICE */}
-        <View style={styles.priceCard}>
-          <Text style={styles.priceLabel}>Offered Amount (₹)</Text>
-          <TextInput
-            placeholder="Enter amount you will pay"
-            placeholderTextColor={INPUT_COLORS.placeholder}
-            keyboardType="numeric"
-            style={styles.priceInput}
+        <RequestSection
+          theme={T}
+          accent={T.sections.schedule}
+          title="When & seats"
+          subtitle="Date range and seats you need"
+        >
+          <DateAndSeats
+            rideData={scheduleData}
+            updateRideData={updateScheduleData}
+            submitted={submitted}
+            embedded
+          />
+        </RequestSection>
+
+        <RequestSection
+          theme={T}
+          accent={T.sections.preferences}
+          title="Preferences"
+          subtitle="Luggage and comfort"
+        >
+          <ToggleComponent
+            title="Luggage included"
+            subtitle="Let drivers know you're carrying bags"
+            icon={require("../assets/courier.png")}
+            iconBg="#FEF3C7"
+            value={payload.luggage_included}
+            onChange={(value) => updatePayload("luggage_included", value)}
+            compact
+          />
+        </RequestSection>
+
+        <RequestSection
+          theme={T}
+          accent={T.sections.pricing}
+          title="Your offer"
+          subtitle="Amount you're willing to pay"
+          style={{ marginBottom: DS.spacing.sm }}
+        >
+          <RequestPriceInput
+            theme={T}
             value={payload.amount_will}
             onChangeText={(text) =>
-              updateRideData("amount_will", text.replace(/[^0-9]/g, ""))
+              updatePayload("amount_will", text.replace(/[^0-9]/g, ""))
             }
+            placeholder="Enter amount per seat (₹)"
           />
-        </View>
+        </RequestSection>
+      </KeyboardAwareScreen>
 
-        {/* BUTTON */}
-      <FixedButton title="Create" onPress={handleCreateRequest} />
-    </KeyboardAwareScreen>
+      <FixedButton title="Post request" onPress={handleCreateRequest} />
+    </>
   );
 };
 
 export default PassengerRequest;
-
-/* ---------------- STYLES ---------------- */
-
-const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-  },
-
-  container: {
-    flexGrow: 1,
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 40,
-  },
-
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 30,
-  },
-
-  backIcon: {
-    width: 49,
-    height: 49,
-    resizeMode: "contain",
-  },
-
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: "700",
-    marginLeft: 10,
-  },
-
-  title: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 20,
-    textAlign: "center",
-  },
-
-  priceCard: {
-    marginTop: 16,
-    marginBottom: 8,
-  },
-
-  priceLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 8,
-  },
-
-  priceInput: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: INPUT_COLORS.border,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    backgroundColor: INPUT_COLORS.background,
-    color: INPUT_COLORS.text,
-    fontSize: 15,
-  },
-});

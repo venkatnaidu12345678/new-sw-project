@@ -291,6 +291,7 @@ const RideHistory = () => {
       <BottomSlider
         visible={isSliderVisible}
         onClose={() => setSliderVisible(false)}
+        scrollable={false}
       >
         {renderSliderContent()}
       </BottomSlider>

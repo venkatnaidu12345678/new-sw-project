@@ -10,11 +10,12 @@ import {
 import DateTimePicker from "@react-native-community/datetimepicker";
 
 import calendar from "../assets/calender.png";
+import { formatLocalISODate, parseLocalDate } from "../Utils/dateUtils";
 
 const Calender = ({ rideData, updateRideData }) => {
   const [showDate, setShowDate] = useState(false);
 
-  const currentDate = rideData.date ? new Date(rideData.date) : new Date();
+  const currentDate = parseLocalDate(rideData.date) || new Date();
 
   // ✅ TODAY (no past dates allowed)
   const today = new Date();
@@ -24,8 +25,7 @@ const Calender = ({ rideData, updateRideData }) => {
     setShowDate(false);
 
     if (event?.type === "set" && selectedDate) {
-      const formattedDate = selectedDate.toISOString().split("T")[0];
-      updateRideData("date", formattedDate);
+      updateRideData("date", formatLocalISODate(selectedDate));
     }
   };
 
@@ -44,7 +44,7 @@ const Calender = ({ rideData, updateRideData }) => {
         >
           <Text style={styles.text}>
             {rideData.date
-              ? new Date(rideData.date).toDateString()
+              ? parseLocalDate(rideData.date)?.toDateString() || "Select Date"
               : "Select Date"}
           </Text>
         </TouchableOpacity>

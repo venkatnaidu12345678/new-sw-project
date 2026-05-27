@@ -130,7 +130,7 @@ const listCouriers = async ({ page = 1, limit = 20, status }) => {
 };
 
 const updateRideStatus = async (rideId, status) => {
-  const allowed = ["pending", "started", "completed", "cancelled"];
+  const allowed = ["pending", "started", "completed", "cancelled", "expired"];
   if (!allowed.includes(status)) {
     return { status: 400, body: { message: "Invalid status" } };
   }

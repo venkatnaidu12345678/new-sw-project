@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -12,90 +12,62 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import BackButton from "../Components/BackButton";
+import { getLegalPolicies } from "../ApiService/legalApiService";
+
 const TABS = [
-  { label: "Terms of Service", icon: "document-text-outline" },
-  { label: "Privacy Policy", icon: "shield-checkmark-outline" },
-  { label: "Disclaimer", icon: "alert-circle-outline" },
+  { key: "terms", label: "Terms of Service", icon: "document-text-outline" },
+  { key: "privacy", label: "Privacy Policy", icon: "shield-checkmark-outline" },
+  { key: "disclaimer", label: "Disclaimer", icon: "alert-circle-outline" },
 ];
 
-const LEGAL_CONTENT = {
-  "Terms of Service": {
-    lastUpdated: "January 11, 2026",
-    sections: [
-      {
-        heading: "1. Acceptance of Terms",
-        body: "By accessing and using ShareWheels, you agree to be bound by these terms and conditions.",
-      },
-      {
-        heading: "2. User Responsibilities",
-        body: "Users must provide accurate information and comply with all applicable laws and regulations.",
-      },
-      {
-        heading: "3. Service Description",
-        body: "ShareWheels connects drivers with passengers seeking transportation through a shared mobility platform.",
-      },
-      {
-        heading: "4. Payment Terms",
-        body: "All payments are processed securely through the platform. Users must ensure valid payment methods.",
-      },
-      {
-        heading: "5. Termination",
-        body: "Accounts that violate policies may be suspended or permanently terminated without prior notice.",
-      },
-    ],
-  },
-
-  "Privacy Policy": {
-    lastUpdated: "January 11, 2026",
-    sections: [
-      {
-        heading: "Information We Collect",
-        body: "We collect personal information including name, phone number, location data, and device details.",
-      },
-      {
-        heading: "How We Use Information",
-        body: "This information is used to operate the platform, match drivers and riders, and improve services.",
-      },
-      {
-        heading: "Information Confidentiality",
-        body: "All collected information is stored securely and never shared with third parties without user consent.",
-      },
-    ],
-  },
-
-  Disclaimer: {
-    lastUpdated: "January 11, 2026",
-    sections: [
-      {
-        heading: "Service Availability",
-        body: "ShareWheels services are provided as-is without guarantees of uninterrupted availability.",
-      },
-      {
-        heading: "Limitation of Liability",
-        body: "ShareWheels is not responsible for indirect, incidental, or consequential damages.",
-      },
-    ],
-  },
+const splitParagraphs = (text) => {
+  const raw = String(text || "").trim();
+  if (!raw) return [];
+  return raw.split(/\n\s*\n/g).map((t) => t.trim()).filter(Boolean);
 };
 
 export default function LegalPage() {
   const navigation = useNavigation();
-  const [activeTab, setActiveTab] = useState("Terms of Service");
+  const [activeKey, setActiveKey] = useState("terms");
+  const [policies, setPolicies] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const tabKeys = Object.keys(LEGAL_CONTENT);
-  const currentIndex = tabKeys.indexOf(activeTab);
+  const activePolicy = policies ? policies[activeKey] : null;
+  const paragraphs = useMemo(() => splitParagraphs(activePolicy?.content), [activePolicy]);
+
+  const tabKeys = useMemo(() => TABS.map((t) => t.key), []);
+  const currentIndex = tabKeys.indexOf(activeKey);
 
   const goNext = () => {
     if (currentIndex < tabKeys.length - 1) {
-      setActiveTab(tabKeys[currentIndex + 1]);
+      setActiveKey(tabKeys[currentIndex + 1]);
     }
   };
 
   const goPrev = () => {
     if (currentIndex > 0) {
-      setActiveTab(tabKeys[currentIndex - 1]);
+      setActiveKey(tabKeys[currentIndex - 1]);
     }
   };
+
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    getLegalPolicies()
+      .then((data) => {
+        // backend returns: {terms, privacy, disclaimer}
+        if (!mounted) return;
+        setPolicies(data?.terms ? data : data?.policies || data);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setPolicies(null);
+      })
+      .finally(() => mounted && setLoading(false));
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const panResponder = PanResponder.create({
     onMoveShouldSetPanResponder: (_, gestureState) => {
@@ -110,7 +82,7 @@ export default function LegalPage() {
     },
   });
 
-  const content = LEGAL_CONTENT[activeTab];
+  const activeLabel = TABS.find((t) => t.key === activeKey)?.label || "Legal";
 
   return (
     <SafeAreaView style={styles.container}>
@@ -132,13 +104,13 @@ export default function LegalPage() {
         style={styles.tabs}
       >
         {TABS.map((tab) => {
-          const active = activeTab === tab.label;
+          const active = activeKey === tab.key;
 
           return (
             <TouchableOpacity
-              key={tab.label}
+              key={tab.key}
               style={styles.tabItem}
-              onPress={() => setActiveTab(tab.label)}
+              onPress={() => setActiveKey(tab.key)}
             >
               <View style={styles.tabContent}>
                 <Ionicons
@@ -166,18 +138,27 @@ export default function LegalPage() {
       {/* Content */}
       <ScrollView style={styles.content} {...panResponder.panHandlers}>
         <View style={styles.card}>
-          <Text style={styles.pageTitle}>{activeTab}</Text>
+          <Text style={styles.pageTitle}>{activeLabel}</Text>
 
           <Text style={styles.updated}>
-            Last Updated: {content.lastUpdated}
+            {activePolicy?.updatedAt
+              ? `Last Updated: ${new Date(activePolicy.updatedAt).toLocaleDateString()}`
+              : "Last Updated: —"}
           </Text>
 
-          {content.sections.map((section, index) => (
-            <View key={index} style={styles.block}>
-              <Text style={styles.heading}>{section.heading}</Text>
-              <Text style={styles.body}>{section.body}</Text>
-            </View>
-          ))}
+          {loading ? (
+            <Text style={styles.body}>Loading…</Text>
+          ) : paragraphs.length ? (
+            paragraphs.map((p, i) => (
+              <View key={i} style={styles.block}>
+                <Text style={styles.body}>{p}</Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.body}>
+              No content available. Please check back later.
+            </Text>
+          )}
         </View>
 
         {/* Support Box */}

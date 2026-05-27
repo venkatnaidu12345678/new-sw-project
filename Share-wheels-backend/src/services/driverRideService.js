@@ -17,7 +17,11 @@ const {
   ensureParticipantBoardingOtp,
   assertAllParticipantsVerified,
 } = require("./rideVerificationService");
-const { canStartOutsideSchedule } = require("../utils/rideScheduleUtils");
+const {
+  canStartOutsideSchedule,
+  isRidePastStartGracePeriod,
+} = require("../utils/rideScheduleUtils");
+const { expireRide } = require("./rideExpiryService");
 
 const getBookedSeats = (ride) =>
   (ride.passengers || []).reduce(
@@ -149,7 +153,21 @@ const startRide = async (user, { rideId }) => {
             ? "Ride is already in progress"
             : ride.status === "completed"
               ? "Ride is already completed"
-              : "Ride cannot be started in its current state",
+              : ride.status === "expired"
+                ? "This ride has expired and can no longer be started"
+                : "Ride cannot be started in its current state",
+      },
+    };
+  }
+
+  if (isRidePastStartGracePeriod(ride)) {
+    await expireRide(ride);
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message:
+          "This ride has expired because it was not started within 6 hours of the scheduled time",
       },
     };
   }

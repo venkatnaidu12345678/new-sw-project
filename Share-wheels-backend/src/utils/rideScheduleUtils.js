@@ -43,9 +43,28 @@ const isRideScheduledTimeFuture = (ride) => {
 const canStartOutsideSchedule = (ride) =>
   isRideScheduledTimePassed(ride) || isRideScheduledTimeFuture(ride);
 
+const RIDE_START_GRACE_MS = 6 * 60 * 60 * 1000;
+
+/** Scheduled start + grace window (default 6h). */
+const getRideStartGraceDeadline = (ride, graceMs = RIDE_START_GRACE_MS) => {
+  const start = parseRideScheduledStart(ride);
+  if (!start) return null;
+  return new Date(start.getTime() + graceMs);
+};
+
+/** Pending rides past scheduled start + grace should auto-expire. */
+const isRidePastStartGracePeriod = (ride, graceMs = RIDE_START_GRACE_MS) => {
+  if (ride?.status !== "pending") return false;
+  const deadline = getRideStartGraceDeadline(ride, graceMs);
+  return deadline ? deadline.getTime() <= Date.now() : false;
+};
+
 module.exports = {
   parseRideScheduledStart,
   isRideScheduledTimePassed,
   isRideScheduledTimeFuture,
   canStartOutsideSchedule,
+  RIDE_START_GRACE_MS,
+  getRideStartGraceDeadline,
+  isRidePastStartGracePeriod,
 };

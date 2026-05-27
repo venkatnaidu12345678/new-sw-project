@@ -1,31 +1,46 @@
-import React, { useState , useRef  } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  Image,
-  Alert,
-  ScrollView,
-} from "react-native";
-
+import React, { useState, useRef } from "react";
+import { Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Picker } from "@react-native-picker/picker";
-import { useNavigation } from "@react-navigation/native"; // ✅ ADDED
-import { validateLocation, validatePhone, validateForm, validatePrice } from "../Utils"; 
-import clock from "../assets/clock2.png";
+import { useNavigation } from "@react-navigation/native";
+
 import FromToInput from "../Components/FromToInput";
-import Calender from "../Components/Calender";
+import CalenderRange from "../Components/CalenderRange";
 import FixedButton from "../Components/FixedButton";
 import ImagePicker from "../Components/ImagePicker";
-import { courierRequest } from "../ApiService/ridesApiServices";
-import BackButton from "../Components/BackButton";
 import KeyboardAwareScreen from "../Components/ui/KeyboardAwareScreen";
-import { INPUT_COLORS } from "../theme/inputTheme";
+import ScreenHeader from "../Components/ui/ScreenHeader";
+import {
+  RequestHero,
+  RequestSection,
+  RequestPriceInput,
+  StyledTextInput,
+  StyledPicker,
+  StyledField,
+} from "../Components/ui/RequestFormUI";
+
+import { courierRequest } from "../ApiService/ridesApiServices";
+import { validateLocation, validatePrice } from "../Utils";
+import { COURIER_THEME as T } from "../theme/requestFormTheme";
+import { DS } from "../theme/designSystem";
+
+const TIME_SLOTS = [
+  { label: "Select time slot", value: "" },
+  { label: "Morning", value: "morning" },
+  { label: "Afternoon", value: "afternoon" },
+  { label: "Evening", value: "evening" },
+];
+
+const COURIER_TYPES = [
+  { label: "Select courier type", value: "" },
+  { label: "Document", value: "document" },
+  { label: "Parcel", value: "parcel" },
+  { label: "Package", value: "package" },
+];
 
 const CourierRequest = () => {
-  const navigation = useNavigation(); // ✅ ADDED
- const fromToRef = useRef();
+  const navigation = useNavigation();
+  const fromToRef = useRef();
+
   const [payload, setPayload] = useState({
     from: "",
     to: "",
@@ -33,64 +48,62 @@ const CourierRequest = () => {
     what_to_deliver: "",
     courier_img: null,
     amount_will: "",
-    date: "",
+    dateStart: "",
+    dateEnd: "",
     timeSlot: "",
-
     receiver_name: "",
     receiver_mobile: "",
     receiver_alternate_mobile: "",
     receiver_address: "",
   });
 
-  const updateRideData = (key, value) => {
-    setPayload((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
+  const updatePayload = (key, value) => {
+    setPayload((prev) => ({ ...prev, [key]: value }));
   };
 
   const fields = [
     {
       key: "from",
       label: "From",
-      placeholder: "Enter pickup location",
+      placeholder: "Pickup location",
       value: payload.from,
-      onChangeText: (text) => updateRideData("from", text),
+      onChangeText: (text) => updatePayload("from", text),
       rules: [(v) => validateLocation(v, "From")],
-      required: true,
     },
     {
       key: "to",
       label: "To",
-      placeholder: "Enter drop location",
+      placeholder: "Delivery destination",
       value: payload.to,
-      onChangeText: (text) => updateRideData("to", text),
+      onChangeText: (text) => updatePayload("to", text),
       rules: [(v) => validateLocation(v, "To")],
-      required: true,
-    
     },
   ];
 
   const handleCreateRequest = async () => {
-    
-    // ✅ Validation
-    if (!payload.from || !payload.to) {
-      Alert.alert("Validation", "Pickup and drop locations are required");
+    const routeValid = fromToRef.current?.validate?.() ?? true;
+    if (!routeValid) {
+      Alert.alert("Check your details", "Please fill in From and To locations.");
       return;
     }
 
-    if (!payload.receiver_name || !payload.receiver_mobile) {
-      Alert.alert("Validation", "Receiver name and mobile required");
+    if (!payload.receiver_name?.trim() || !payload.receiver_mobile?.trim()) {
+      Alert.alert("Validation", "Receiver name and mobile are required.");
       return;
     }
 
-    if (!payload.date) {
-      Alert.alert("Validation", "Please select date");
+    if (!payload.dateStart || !payload.dateEnd) {
+      Alert.alert("Validation", "Please select a date range.");
       return;
     }
 
     if (!payload.timeSlot) {
-      Alert.alert("Validation", "Please select time slot");
+      Alert.alert("Validation", "Please select a time slot.");
+      return;
+    }
+
+    if (!payload.courier_type) {
+      Alert.alert("Validation", "Please select courier type.");
       return;
     }
 
@@ -101,13 +114,12 @@ const CourierRequest = () => {
     }
 
     if (!payload.courier_img) {
-      Alert.alert("Required", "Please upload a courier parcel image.");
+      Alert.alert("Required", "Please upload a photo of the parcel.");
       return;
     }
 
     try {
       const token = await AsyncStorage.getItem("token");
-
       if (!token) {
         Alert.alert("Error", "User not authenticated");
         return;
@@ -117,24 +129,20 @@ const CourierRequest = () => {
         ...payload,
         amount_will: Number(payload.amount_will),
         date: {
-          startDate: payload.date,
-          endDate: null,
+          startDate: payload.dateStart,
+          endDate: payload.dateEnd,
         },
       };
 
-      console.log("Final Payload:", finalPayload);
-
       const response = await courierRequest(token, finalPayload);
 
-      // ✅ SUCCESS ALERT WITH NAVIGATION
       Alert.alert(
-        "Success",
-        response?.message || "Courier request created",
+        "Request posted",
+        response?.message || "Courier request created successfully.",
         [
           {
             text: "OK",
             onPress: () => {
-              // Reset form
               setPayload({
                 from: "",
                 to: "",
@@ -142,291 +150,211 @@ const CourierRequest = () => {
                 what_to_deliver: "",
                 courier_img: null,
                 amount_will: "",
-                date: "",
+                dateStart: "",
+                dateEnd: "",
                 timeSlot: "",
                 receiver_name: "",
                 receiver_mobile: "",
                 receiver_alternate_mobile: "",
                 receiver_address: "",
               });
-
-              // Navigate to Request screen
-              navigation.navigate("Request", {
-                activeTab: "courier",
-              });// ⚠️ make sure this name matches your navigator
+              navigation.navigate("Request", { activeTab: "courier" });
             },
           },
         ]
       );
-
     } catch (error) {
       console.log("Courier Request Error:", error);
       Alert.alert("Error", "Failed to create request");
     }
   };
 
+  const dateAccent = {
+    bg: T.date.bg,
+    border: T.date.border,
+    icon: T.date.icon,
+    label: T.date.icon,
+    surface: T.surface,
+  };
+
+  const pickerAccent = {
+    bg: T.picker.bg,
+    border: T.picker.border,
+    icon: T.picker.icon || T.heroIcon,
+  };
+
   return (
-    <KeyboardAwareScreen style={styles.safe}>
-      <View style={styles.header}>
-        <BackButton />
-        <Text style={styles.title}>Create Courier Request</Text>
-      </View>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+    <>
+      <KeyboardAwareScreen
+        style={{ flex: 1, backgroundColor: T.pageBg }}
+        scrollable
+        contentContainerStyle={{
+          paddingHorizontal: DS.spacing.screen,
+          paddingTop: DS.spacing.md,
+          paddingBottom: 120,
+        }}
       >
+        <ScreenHeader
+          title="Courier request"
+          onBack={() => {
+            if (navigation.canGoBack()) navigation.goBack();
+            else navigation.navigate("Request");
+          }}
+        />
 
-        {/* FROM / TO */}
-         <View style={styles.card}>
-          
-          <FromToInput ref={fromToRef} fields={fields} />
-        </View>
+        <RequestHero
+          theme={T}
+          icon="cube"
+          title="Send a parcel"
+          subtitle="Share pickup, delivery details, and what you're sending with drivers on your route."
+          pills={["Documents", "Parcels", "Packages"]}
+        />
 
-        {/* DATE */}
-        <View style={styles.card}>
-         
-           <Text style={styles.label}>Date</Text>
-            
-          <Calender
+        <RequestSection
+          theme={T}
+          accent={T.sections.route}
+          title="Route"
+          subtitle="From and To for pickup & delivery"
+        >
+          <FromToInput ref={fromToRef} fields={fields} variant="route" />
+        </RequestSection>
+
+        <RequestSection
+          theme={T}
+          accent={T.sections.schedule}
+          title="Schedule"
+          subtitle="When the parcel should be delivered"
+        >
+          <CalenderRange
             rideData={payload}
-            updateRideData={updateRideData}
+            updateRideData={updatePayload}
+            startLabel="From date"
+            endLabel="To date"
+            accent={dateAccent}
           />
-        </View>
-        
 
-        {/* TIME SLOT */}
-        <View style={styles.card}>
-          <View style={styles.labelRow}>
-            <Image source={clock} style={styles.smallIcon} />
-            <Text style={styles.label}>Time Slot</Text>
-          </View>
+          <StyledPicker
+            theme={T}
+            accent={pickerAccent}
+            label="Time slot"
+            icon="time-outline"
+            selectedValue={payload.timeSlot}
+            onValueChange={(v) => updatePayload("timeSlot", v)}
+            items={TIME_SLOTS}
+          />
+        </RequestSection>
 
-          <View style={styles.pickerBox}>
-            <Picker
-              selectedValue={payload.timeSlot}
-              style={styles.picker}
-              onValueChange={(v) => updateRideData("timeSlot", v)}
-            >
-              <Picker.Item label="Select Time Slot" value="" />
-              <Picker.Item label="Morning" value="morning" />
-              <Picker.Item label="Afternoon" value="afternoon" />
-              <Picker.Item label="Evening" value="evening" />
-            </Picker>
-          </View>
-        </View>
+        <RequestSection
+          theme={T}
+          accent={T.sections.parcel}
+          title="Parcel details"
+          subtitle="Type, photo, and description"
+        >
+          <StyledPicker
+            theme={T}
+            accent={pickerAccent}
+            label="Courier type"
+            icon="layers-outline"
+            selectedValue={payload.courier_type}
+            onValueChange={(v) => updatePayload("courier_type", v)}
+            items={COURIER_TYPES}
+          />
 
-        {/* COURIER TYPE */}
-        <View style={styles.card}>
-          <Text style={styles.label}>Courier Type</Text>
-
-          <View style={styles.pickerBox}>
-            <Picker
-              selectedValue={payload.courier_type}
-              style={styles.picker}
-              onValueChange={(v) =>
-                updateRideData("courier_type", v)
-              }
-            >
-              <Picker.Item label="Select Type" value="" />
-              <Picker.Item label="Document" value="document" />
-              <Picker.Item label="Parcel" value="parcel" />
-              <Picker.Item label="Package" value="package" />
-            </Picker>
-          </View>
-        </View>
-
-        {/* IMAGE */}
-        <View style={styles.card}>
           <ImagePicker
             type="courier"
-            onChange={(img) =>
-              updateRideData("courier_img", img)
-            }
+            onChange={(img) => updatePayload("courier_img", img)}
           />
-        </View>
 
-        {/* DESCRIPTION */}
-        <View style={styles.card}>
-          <Text style={styles.label}>What To Deliver</Text>
+          <StyledField label="What to deliver" theme={T}>
+            <StyledTextInput
+              theme={T}
+              accent={{ bg: "#FFF7ED", border: "#FED7AA", icon: T.heroIcon }}
+              icon="document-text-outline"
+              placeholder="Describe the parcel (size, weight, fragile, etc.)"
+              multiline
+              value={payload.what_to_deliver}
+              onChangeText={(text) => updatePayload("what_to_deliver", text)}
+            />
+          </StyledField>
+        </RequestSection>
 
-          <TextInput
-            placeholder="Enter courier details"
-            placeholderTextColor={INPUT_COLORS.placeholder}
-            multiline
-            numberOfLines={4}
-            style={[styles.descriptionInput, { color: INPUT_COLORS.text }]}
-            value={payload.what_to_deliver}
-            onChangeText={(text) =>
-              updateRideData("what_to_deliver", text)
-            }
-          />
-        </View>
-
-        {/* AMOUNT */}
-        <View style={styles.card}>
-          <Text style={styles.label}>Amount</Text>
-
-          <TextInput
-            placeholder="Enter amount"
-            placeholderTextColor={INPUT_COLORS.placeholder}
-            keyboardType="numeric"
-            style={styles.input}
+        <RequestSection
+          theme={T}
+          accent={T.sections.pricing}
+          title="Your offer"
+          subtitle="Amount you'll pay for delivery"
+        >
+          <RequestPriceInput
+            theme={T}
+            label="Delivery amount (₹)"
             value={payload.amount_will}
             onChangeText={(text) =>
-              updateRideData("amount_will", text.replace(/[^0-9]/g, ""))
+              updatePayload("amount_will", text.replace(/[^0-9]/g, ""))
             }
+            placeholder="Enter delivery amount (₹)"
           />
-        </View>
+        </RequestSection>
 
-        {/* RECEIVER DETAILS */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>
-            Receiver Details
-          </Text>
-
-          <TextInput
+        <RequestSection
+          theme={T}
+          accent={T.sections.receiver}
+          title="Receiver"
+          subtitle="Who will receive the parcel"
+          style={{ marginBottom: DS.spacing.sm }}
+        >
+          <StyledTextInput
+            theme={T}
+            accent={{ bg: "#EEF2FF", border: "#C7D2FE", icon: "#4F46E5" }}
+            icon="person-outline"
             placeholder="Receiver full name"
-            placeholderTextColor={INPUT_COLORS.placeholder}
-            style={styles.input}
             value={payload.receiver_name}
-            onChangeText={(text) =>
-              updateRideData("receiver_name", text)
-            }
+            onChangeText={(text) => updatePayload("receiver_name", text)}
           />
 
-          <TextInput
+          <StyledTextInput
+            theme={T}
+            accent={{ bg: "#EEF2FF", border: "#C7D2FE", icon: "#4F46E5" }}
+            icon="call-outline"
             placeholder="Receiver mobile (10 digits)"
-            placeholderTextColor={INPUT_COLORS.placeholder}
             keyboardType="phone-pad"
-            style={styles.input}
             value={payload.receiver_mobile}
             onChangeText={(text) =>
-              updateRideData("receiver_mobile", text)
+              updatePayload("receiver_mobile", text.replace(/[^0-9]/g, ""))
             }
+            maxLength={15}
           />
 
-          <TextInput
-            placeholder="Alternate mobile (required)"
-            placeholderTextColor={INPUT_COLORS.placeholder}
+          <StyledTextInput
+            theme={T}
+            accent={{ bg: "#F8FAFC", border: "#E2E8F0", icon: T.textMuted }}
+            icon="call-outline"
+            placeholder="Alternate mobile (optional)"
             keyboardType="phone-pad"
-            style={styles.input}
             value={payload.receiver_alternate_mobile}
             onChangeText={(text) =>
-              updateRideData(
+              updatePayload(
                 "receiver_alternate_mobile",
-                text
+                text.replace(/[^0-9]/g, "")
               )
             }
+            maxLength={15}
           />
 
-          <TextInput
+          <StyledTextInput
+            theme={T}
+            accent={{ bg: "#EEF2FF", border: "#C7D2FE", icon: "#4F46E5" }}
+            icon="location-outline"
             placeholder="Full delivery address"
-            placeholderTextColor={INPUT_COLORS.placeholder}
             multiline
-            numberOfLines={3}
-            style={styles.descriptionInput}
             value={payload.receiver_address}
-            onChangeText={(text) =>
-              updateRideData("receiver_address", text)
-            }
+            onChangeText={(text) => updatePayload("receiver_address", text)}
           />
-        </View>
-      </ScrollView>
+        </RequestSection>
+      </KeyboardAwareScreen>
 
-      <FixedButton title="Create" onPress={handleCreateRequest} />
-    </KeyboardAwareScreen>
+      <FixedButton title="Post request" onPress={handleCreateRequest} />
+    </>
   );
 };
 
 export default CourierRequest;
-
-const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: "#F3F4F6",
-    paddingTop:20,
-  },
-
-  container: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 120,
-  },
-  header: {
-  flexDirection: "row",
-  alignItems: "center",
-  paddingHorizontal: 10,
-  paddingVertical: 12,
-  backgroundColor: "#fff",
-  elevation: 2,
-},
-
-title: {
-  fontSize: 20,
-  fontWeight: "700",
-  marginLeft: 10,
-  color: "#111827",
-},
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    elevation: 2,
-  },
-  labelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 6,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 12,
-  },
-  label: {
-    fontSize: 14,
-    color: "#6B7280",
-    marginBottom: 6,
-  },
-  smallIcon: {
-    width: 18,
-    height: 18,
-    marginRight: 6,
-  },
-  input: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: INPUT_COLORS.border,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-    backgroundColor: INPUT_COLORS.background,
-    color: INPUT_COLORS.text,
-    fontSize: 15,
-  },
-  descriptionInput: {
-    borderWidth: 1,
-    borderColor: INPUT_COLORS.border,
-    borderRadius: 12,
-    padding: 12,
-    minHeight: 80,
-    marginBottom: 12,
-    backgroundColor: INPUT_COLORS.background,
-    color: INPUT_COLORS.text,
-    fontSize: 15,
-  },
-  pickerBox: {
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 12,
-    height: 50,
-    justifyContent: "center",
-  },
-  picker: {
-    height: 90,
-    width: "100%",
-  },
-});

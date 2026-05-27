@@ -10,6 +10,7 @@ import LiveTracking from "./pages/LiveTracking";
 import Ads from "./pages/Ads";
 import Locations from "./pages/Locations";
 import Feedbacks from "./pages/Feedbacks";
+import LegalPolicies from "./pages/LegalPolicies";
 
 const isAuthed = () => !!localStorage.getItem("adminToken");
 
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="ads" element={<Ads />} />
         <Route path="locations" element={<Locations />} />
         <Route path="feedback" element={<Feedbacks />} />
+        <Route path="legal" element={<LegalPolicies />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

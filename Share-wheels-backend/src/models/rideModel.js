@@ -38,7 +38,7 @@ const rideSchema = new mongoose.Schema(
     droput_Passengers: [passengerOnRideSchema],
     status: {
       type: String,
-      enum: ["pending", "started", "completed", "cancelled"],
+      enum: ["pending", "started", "completed", "cancelled", "expired"],
       default: "pending",
     },
     cancel_reason: { type: String, default: null },

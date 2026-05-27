@@ -21,7 +21,21 @@ import { useLocationSuggestions } from "../hooks/useLocationSuggestions";
 
 const BLUR_HIDE_MS = 280;
 
-const FromToInput = forwardRef(({ fields = [] }, ref) => {
+const ROUTE_FIELD_STYLE = {
+  from: {
+    label: { color: "#15803D" },
+    input: { backgroundColor: "#F0FDF4", borderColor: "#BBF7D0" },
+    dot: "#22C55E",
+  },
+  to: {
+    label: { color: "#C2410C" },
+    input: { backgroundColor: "#FFF7ED", borderColor: "#FED7AA" },
+    dot: "#F97316",
+  },
+};
+
+const FromToInput = forwardRef(({ fields = [], variant }, ref) => {
+  const isRoute = variant === "route";
   const [dropdownState, setDropdownState] = useState({});
   const [errors, setErrors] = useState({});
   const blurTimers = useRef({});
@@ -68,14 +82,31 @@ const FromToInput = forwardRef(({ fields = [] }, ref) => {
     }
   };
 
+  const getFieldState = useCallback(
+    (key) => {
+      const raw = dropdownState[key];
+      return {
+        show: Boolean(raw?.show),
+        data: Array.isArray(raw?.data) ? raw.data : [],
+      };
+    },
+    [dropdownState]
+  );
+
   const scheduleHideDropdown = (key) => {
     clearBlurTimer(key);
     blurTimers.current[key] = setTimeout(() => {
       if (selectingRef.current) return;
-      setDropdownState((prev) => ({
-        ...prev,
-        [key]: { ...(prev[key] || {}), show: false },
-      }));
+      setDropdownState((prev) => {
+        const current = prev[key];
+        return {
+          ...prev,
+          [key]: {
+            show: false,
+            data: Array.isArray(current?.data) ? current.data : [],
+          },
+        };
+      });
     }, BLUR_HIDE_MS);
   };
 
@@ -116,90 +147,148 @@ const FromToInput = forwardRef(({ fields = [] }, ref) => {
     }, 100);
   }, []);
 
-  return (
-    <>
-      {fields.map((field, index) => {
-        const state = dropdownState[field.key] || {
-          show: false,
-          data: [],
-        };
-        const error = errors[field.key];
-        const showDropdown = state.show && state.data.length > 0;
+  const renderField = (field, index) => {
+    const state = getFieldState(field.key);
+    const error = errors[field.key];
+    const showDropdown = state.show && state.data.length > 0;
+    const routeStyle = isRoute ? ROUTE_FIELD_STYLE[field.key] : null;
 
-        return (
-          <View
-            key={field.key}
-            style={[styles.container, { zIndex: 100 - index }]}
-          >
-            <Text style={styles.label}>
-              {field.label}
-              {field.rules && <Text style={styles.star}> *</Text>}
-            </Text>
+    return (
+      <View
+        key={field.key}
+        style={[
+          styles.container,
+          isRoute && styles.routeField,
+          { zIndex: 100 - index },
+        ]}
+      >
+        <Text style={[styles.label, routeStyle?.label]}>
+          {field.label}
+          {field.rules && <Text style={styles.star}> *</Text>}
+        </Text>
 
-            <TextInput
-              style={[styles.input, error && styles.inputError]}
-              placeholder={field.placeholder}
-              placeholderTextColor={INPUT_COLORS.placeholder}
-              value={field.value}
-              blurOnSubmit={false}
-              onChangeText={(text) => {
-                handleSearch(field.key, text, field.onChangeText);
-                if (error) {
-                  setErrors((prev) => ({ ...prev, [field.key]: "" }));
-                }
-              }}
-              onFocus={() => {
-                clearBlurTimer(field.key);
-                if (state.data.length > 0) {
-                  setDropdownState((prev) => ({
-                    ...prev,
-                    [field.key]: { ...state, show: true },
-                  }));
-                }
-              }}
-              onBlur={() => {
-                scheduleHideDropdown(field.key);
-                validateField(field);
-              }}
-            />
+        <TextInput
+          style={[
+            styles.input,
+            routeStyle?.input,
+            error && styles.inputError,
+          ]}
+          placeholder={field.placeholder}
+          placeholderTextColor={INPUT_COLORS.placeholder}
+          value={field.value}
+          blurOnSubmit={false}
+          onChangeText={(text) => {
+            handleSearch(field.key, text, field.onChangeText);
+            if (error) {
+              setErrors((prev) => ({ ...prev, [field.key]: "" }));
+            }
+          }}
+          onFocus={() => {
+            clearBlurTimer(field.key);
+            const text = String(field.value || "").trim();
+            const data =
+              state.data.length > 0
+                ? state.data
+                : text
+                  ? filterLocations(text)
+                  : [];
+            if (data.length > 0) {
+              setDropdownState((prev) => ({
+                ...prev,
+                [field.key]: { show: true, data },
+              }));
+            }
+          }}
+          onBlur={() => {
+            scheduleHideDropdown(field.key);
+            validateField(field);
+          }}
+        />
 
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-            {showDropdown ? (
-              <View style={styles.dropdownWrapper}>
-                <ScrollView
-                  nestedScrollEnabled
-                  keyboardShouldPersistTaps="always"
-                  keyboardDismissMode="none"
-                  style={styles.dropdownScroll}
+        {showDropdown ? (
+          <View style={styles.dropdownWrapper}>
+            <ScrollView
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="always"
+              keyboardDismissMode="none"
+              style={styles.dropdownScroll}
+            >
+              {state.data.map((item, idx) => (
+                <Pressable
+                  key={`${item}-${idx}`}
+                  style={({ pressed }) => [
+                    styles.item,
+                    pressed && styles.itemPressed,
+                  ]}
+                  onPress={() =>
+                    handleSelect(field.key, item, field.onChangeText)
+                  }
                 >
-                  {state.data.map((item, idx) => (
-                    <Pressable
-                      key={`${item}-${idx}`}
-                      style={({ pressed }) => [
-                        styles.item,
-                        pressed && styles.itemPressed,
-                      ]}
-                      onPress={() =>
-                        handleSelect(field.key, item, field.onChangeText)
-                      }
-                    >
-                      <Text style={styles.itemText}>{item}</Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </View>
-            ) : null}
+                  <Text style={styles.itemText}>{item}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
           </View>
-        );
-      })}
-    </>
-  );
+        ) : null}
+      </View>
+    );
+  };
+
+  if (isRoute && fields.length >= 2) {
+    const fromStyle = ROUTE_FIELD_STYLE.from;
+    const toStyle = ROUTE_FIELD_STYLE.to;
+    return (
+      <View style={styles.routeCard}>
+        <View style={styles.routeTimeline}>
+          <View style={[styles.routeDot, { backgroundColor: fromStyle.dot }]} />
+          <View style={styles.routeLine} />
+          <View style={[styles.routeDot, { backgroundColor: toStyle.dot }]} />
+        </View>
+        <View style={styles.routeFields}>
+          {fields.map((field, index) => renderField(field, index))}
+        </View>
+      </View>
+    );
+  }
+
+  return <>{fields.map((field, index) => renderField(field, index))}</>;
 });
 
 export default FromToInput;
 
 const styles = StyleSheet.create({
+  routeCard: {
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
+  routeTimeline: {
+    width: 20,
+    alignItems: "center",
+    paddingTop: 28,
+    paddingBottom: 28,
+    marginRight: 10,
+  },
+  routeDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  routeLine: {
+    flex: 1,
+    width: 2,
+    backgroundColor: "#E2E8F0",
+    marginVertical: 6,
+    borderRadius: 1,
+  },
+  routeFields: {
+    flex: 1,
+    minWidth: 0,
+  },
+  routeField: {
+    marginBottom: 14,
+  },
   container: {
     marginBottom: 18,
   },

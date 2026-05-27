@@ -3,6 +3,7 @@ const adminController = require("../controllers/adminController");
 const adminAdController = require("../controllers/adminAdController");
 const adminLocationController = require("../controllers/adminLocationController");
 const adminFeedbackController = require("../controllers/adminFeedbackController");
+const adminLegalController = require("../controllers/adminLegalController");
 const adminAuthMiddleware = require("../middlewares/adminAuthMiddleware");
 const adUploadMiddleware = require("../middlewares/adUploadMiddleware");
 
@@ -32,11 +33,16 @@ router.delete("/ads/:id", adminAdController.deleteAd);
 router.get("/locations", adminLocationController.listLocations);
 router.post("/locations", adminLocationController.createLocation);
 router.put("/locations/bulk", adminLocationController.bulkUpsertLocations);
+router.post("/locations/bulk", adminLocationController.bulkUpsertLocations);
 router.delete("/locations/all", adminLocationController.clearAllLocations);
 router.patch("/locations/:id", adminLocationController.updateLocation);
 router.delete("/locations/:id", adminLocationController.deleteLocation);
 
 router.get("/feedback", adminFeedbackController.list);
 router.patch("/feedback/:id", adminFeedbackController.update);
+
+// Legal policies (terms/privacy/disclaimer)
+router.get("/legal/policies", adminLegalController.listPolicies);
+router.put("/legal/policies", adminLegalController.upsertPolicies);
 
 module.exports = router;

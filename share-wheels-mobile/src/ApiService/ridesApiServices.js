@@ -323,6 +323,13 @@ export const courierRequest = async (token, rideData) => {
   }
 };
 
+/** Normalize GET /rides/get-rides body (array or wrapped object). */
+export const normalizeRidesList = (data) => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.rides)) return data.rides;
+  return [];
+};
+
 export const getAllRides = async (token, filters = {}) => {
   const { from, to, date } = filters;
 
@@ -332,22 +339,28 @@ export const getAllRides = async (token, filters = {}) => {
     if (to) queryParams.append("to", to);
     if (date) queryParams.append("date", date);
 
-    const response = await fetch(`${baseUrl}${endPoints.getallridesurl}?${queryParams.toString()}`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    const response = await fetch(
+      `${baseUrl}${endPoints.getallridesurl}?${queryParams.toString()}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
 
-    const data = await response.json().catch(() => ({}));
-    console.log("All Rides Status:", data);
+    const data = await parseApiResponse(response);
 
     if (!response.ok) {
-      throw new Error(data?.message || `Error ${response.status}`);
+      const msg = data?.message || data?.error || "";
+      if (response.status === 404 && /no rides found/i.test(msg)) {
+        return [];
+      }
+      throw new Error(msg || `Error ${response.status}`);
     }
 
-    return data;
+    return normalizeRidesList(data);
   } catch (err) {
     console.error("Get All Rides API Error:", err.message);
     throw err;

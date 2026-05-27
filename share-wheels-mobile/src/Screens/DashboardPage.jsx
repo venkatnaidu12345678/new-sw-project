@@ -30,6 +30,7 @@ import AnimatedLoad from "../Components/ui/AnimatedLoad";
 import AdPlacement from "../Components/ads/AdPlacement";
 import { useAds } from "../context/AdsContext";
 import { useLocationSuggestions } from "../hooks/useLocationSuggestions";
+import { formatLocalISODate } from "../Utils/dateUtils";
 
 const DashboardPage = () => {
   const navigation = useNavigation();
@@ -119,12 +120,11 @@ const DashboardPage = () => {
       const filters = {
         from: fromValue,
         to: toValue,
-        date: date?.toISOString()?.split("T")[0],
+        date: formatLocalISODate(date),
       };
 
-      const resp = await getAllRides(token, filters);
-      const list = Array.isArray(resp) ? resp : resp?.rides || [];
-      setAllRides(list);
+      const list = await getAllRides(token, filters);
+      setAllRides(Array.isArray(list) ? list : []);
     } catch (err) {
       console.log("Get All Rides Error:", err?.message);
       setErrorMsg(getApiErrorMessage(err, "Could not search rides."));
