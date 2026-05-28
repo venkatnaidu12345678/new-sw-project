@@ -9,6 +9,13 @@ import {
 } from "../services/rideSocket";
 import { mergeTrackingFromSocket, normalizeRideId } from "../Utils/trackingMerge";
 
+const extractRideId = (payload) =>
+  payload?.rideId ||
+  payload?.rideID ||
+  payload?.ride?._id ||
+  payload?.ride?.id ||
+  payload?.ride;
+
 /**
  * Live ride map data: initial HTTP load + real-time socket `locationUpdate`.
  * Works for driver, passenger, and courier (all roles on the ride room).
@@ -49,7 +56,7 @@ export const useRideTracking = ({ rideId, token, enabled }) => {
         await connectRideSocket(token);
         joinRideRoom(rid);
         unsub = subscribeLocationUpdates((payload) => {
-          if (normalizeRideId(payload?.rideId) !== rid) return;
+          if (normalizeRideId(extractRideId(payload)) !== rid) return;
           setTracking((prev) => mergeTrackingFromSocket(prev, payload));
         });
       } catch (e) {

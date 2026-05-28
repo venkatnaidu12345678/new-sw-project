@@ -1,37 +1,9 @@
-import { Platform } from "react-native";
+import Env from "react-native-config";
 
-/**
- * Local backend connection
- * ─────────────────────────────────────────────────────────────
- * Physical Android phone (same Wi‑Fi): set LAN_HOST to your PC IP (ipconfig).
- * Android emulator: set USE_ANDROID_EMULATOR = true (uses 10.0.2.2).
- * iOS simulator: uses localhost automatically.
- */
-export const LAN_HOST = "192.168.0.116";
-const API_PORT = 3001;
+const PRODUCTION_URL =
+  Env.PRODUCTION_URL || "https://share-wheels-backend-m3wp.onrender.com";
 
-/** true = emulator (10.0.2.2) | false = physical phone on same Wi‑Fi (LAN_HOST) */
-export const USE_ANDROID_EMULATOR = false;
-
-/** true = http://YOUR_PC:3001 | false = production Render URL */
-export const USE_LOCAL_BACKEND = __DEV__;
-
-const PRODUCTION_URL = "https://share-wheels-backend-m3wp.onrender.com";
-
-const resolveLocalBaseUrl = () => {
-  if (Platform.OS === "android") {
-    const host = USE_ANDROID_EMULATOR ? "10.0.2.2" : LAN_HOST;
-    return `http://${host}:${API_PORT}`;
-  }
-  // iOS Simulator → localhost; physical iPhone → set USE_IOS_SIMULATOR = false
-  const USE_IOS_SIMULATOR = true;
-  const host = USE_IOS_SIMULATOR ? "localhost" : LAN_HOST;
-  return `http://${host}:${API_PORT}`;
-};
-
-export const baseUrl = USE_LOCAL_BACKEND
-  ? resolveLocalBaseUrl()
-  : PRODUCTION_URL;
+export const baseUrl = PRODUCTION_URL;
 
 if (__DEV__) {
   console.log("[ShareWheels] API baseUrl:", baseUrl);

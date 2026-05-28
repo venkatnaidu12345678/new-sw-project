@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Platform, PermissionsAndroid, NativeModules } from "react-native";
+import { Alert, Platform, PermissionsAndroid, NativeModules } from "react-native";
 import { updateRideLocation } from "../ApiService/chatApiServices";
 import {
   connectRideSocket,
@@ -43,7 +43,40 @@ const WATCH_OPTIONS = {
   maximumAge: 60000,
 };
 
+let locationConsentGranted = false;
+
+const askTrackingConsent = () =>
+  new Promise((resolve) => {
+    if (locationConsentGranted) {
+      resolve(true);
+      return;
+    }
+    Alert.alert(
+      "Allow live location tracking",
+      "Share Wheels needs your location during rides so drivers, passengers, and couriers can track each other live.",
+      [
+        { text: "Not now", style: "cancel", onPress: () => resolve(false) },
+        {
+          text: "Allow",
+          onPress: () => {
+            locationConsentGranted = true;
+            resolve(true);
+          },
+        },
+      ],
+      { cancelable: true, onDismiss: () => resolve(false) }
+    );
+  });
+
 const hasLocationPermission = async () => {
+  if (Platform.OS === "ios") {
+    try {
+      const status = await Geolocation.requestAuthorization("whenInUse");
+      return status === "granted";
+    } catch {
+      return false;
+    }
+  }
   if (Platform.OS !== "android") return true;
   try {
     const fine = await PermissionsAndroid.check(
@@ -59,6 +92,17 @@ const hasLocationPermission = async () => {
 };
 
 const requestLocationPermission = async () => {
+  const consent = await askTrackingConsent();
+  if (!consent) return false;
+
+  if (Platform.OS === "ios") {
+    try {
+      const status = await Geolocation.requestAuthorization("whenInUse");
+      return status === "granted";
+    } catch {
+      return false;
+    }
+  }
   if (Platform.OS !== "android") return true;
 
   if (await hasLocationPermission()) return true;
@@ -154,8 +198,9 @@ const sendCoords = async (token, rideId, latitude, longitude) => {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
     throw new Error("Invalid GPS coordinates");
   }
-  emitLocationViaSocket(rideId, latitude, longitude);
-  const data = await updateRideLocation(token, rideId, latitude, longitude);
+  const id = rideId?.toString?.() || rideId;
+  emitLocationViaSocket(id, latitude, longitude);
+  const data = await updateRideLocation(token, id, latitude, longitude);
   if (__DEV__) {
     console.log("[GPS] sent", rideId, latitude, longitude, data?.success);
   }

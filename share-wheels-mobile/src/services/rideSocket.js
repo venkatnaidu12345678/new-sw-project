@@ -103,8 +103,9 @@ export const leaveRideRoom = (rideId) => {
 
 export const emitLocationViaSocket = (rideId, lat, lng) => {
   if (!socket?.connected || !rideId) return;
+  const id = rideId?.toString?.() || rideId;
   socket.emit("updateLocation", {
-    rideId,
+    rideId: id,
     lat,
     lng,
     latitude: lat,
