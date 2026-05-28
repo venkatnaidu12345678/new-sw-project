@@ -7,6 +7,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
+import LinearGradient from "react-native-linear-gradient";
 
 /* ICONS */
 import seat from "../assets/seatIcon.png";
@@ -36,7 +37,7 @@ const RideHistoryCourierview = ({ ride, loading }) => {
       ) : (
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={{ paddingBottom: 110 }}
       >
         {/* ROUTE */}
         <View style={styles.routeCard}>
@@ -105,14 +106,14 @@ const RideHistoryCourierview = ({ ride, loading }) => {
       )}
 
       {/* TOTAL FARE */}
-      <View style={styles.totalCard}>
+      <LinearGradient colors={["#1D4ED8", "#2563EB"]} style={styles.totalCard}>
         <View>
           <Text style={styles.totalLabel}>Total Fare</Text>
           <Text style={styles.totalAmount}>
             ₹{getCourierFare(ride)}
           </Text>
         </View>
-      </View>
+      </LinearGradient>
     </View>
   );
 };
@@ -134,11 +135,11 @@ export default RideHistoryCourierview;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#F8FAFC",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 16,
-    marginBottom: 90,
+    marginBottom: 86,
   },
 
   header: {
@@ -157,6 +158,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 20,
     padding: 16,
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
     elevation: 2,
     marginBottom: 16,
   },
@@ -240,7 +243,9 @@ const styles = StyleSheet.create({
   driverCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
     padding: 14,
     borderRadius: 16,
     marginBottom: 20,
@@ -296,9 +301,13 @@ const styles = StyleSheet.create({
     bottom: 16,
     left: 16,
     right: 16,
-    backgroundColor: "#2563EB",
     borderRadius: 18,
     padding: 28,
+    shadowColor: "#1E3A8A",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 4,
   },
 
   totalLabel: {

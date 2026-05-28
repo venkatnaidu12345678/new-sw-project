@@ -143,20 +143,26 @@ const PassengerRequest = () => {
       <KeyboardAwareScreen
         style={{ flex: 1, backgroundColor: T.pageBg }}
         scrollable
-        contentContainerStyle={{
+        header={
+          <ScreenHeader
+            title="Passenger request"
+            backgroundColor={T.pageBg}
+            onBack={() => {
+              if (navigation.canGoBack()) navigation.goBack();
+              else navigation.navigate("Request");
+            }}
+          />
+        }
+        headerStyle={{
           paddingHorizontal: DS.spacing.screen,
           paddingTop: DS.spacing.md,
+          backgroundColor: T.pageBg,
+        }}
+        contentContainerStyle={{
+          paddingHorizontal: DS.spacing.screen,
           paddingBottom: 120,
         }}
       >
-        <ScreenHeader
-          title="Passenger request"
-          onBack={() => {
-            if (navigation.canGoBack()) navigation.goBack();
-            else navigation.navigate("Request");
-          }}
-        />
-
         <RequestHero
           theme={T}
           icon="person"

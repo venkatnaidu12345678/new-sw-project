@@ -21,24 +21,31 @@ const AuthScreenLayout = ({
   onBack,
 }) => (
   <ScreenContainer backgroundColor={AUTH_COLORS.background} edges={["top", "bottom"]}>
-    <KeyboardAwareScreen scrollable contentContainerStyle={styles.scroll}>
-      {showBack && (
-        <TouchableOpacity onPress={onBack} style={styles.backBtn} hitSlop={12}>
-          <Text style={styles.backText}>← Back</Text>
-        </TouchableOpacity>
-      )}
+    <KeyboardAwareScreen
+      scrollable
+      contentContainerStyle={styles.scroll}
+      header={
+        <View style={styles.headerBlock}>
+          {showBack ? (
+            <TouchableOpacity onPress={onBack} style={styles.backBtn} hitSlop={12}>
+              <Text style={styles.backText}>← Back</Text>
+            </TouchableOpacity>
+          ) : null}
 
-      <View style={styles.brandRow}>
-        <Image source={icon} style={styles.logo} resizeMode="contain" />
-        <View>
-          <Text style={styles.brand}>Share Wheels</Text>
-          <Text style={styles.brandTag}>Ride together, save together</Text>
+          <View style={styles.brandRow}>
+            <Image source={icon} style={styles.logo} resizeMode="contain" />
+            <View>
+              <Text style={styles.brand}>Share Wheels</Text>
+              <Text style={styles.brandTag}>Ride together, save together</Text>
+            </View>
+          </View>
+
+          <Text style={styles.title}>{title}</Text>
+          {!!subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         </View>
-      </View>
-
-      <Text style={styles.title}>{title}</Text>
-      {!!subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
-
+      }
+      headerStyle={styles.headerWrap}
+    >
       <View style={styles.form}>{children}</View>
       {footer}
     </KeyboardAwareScreen>
@@ -48,6 +55,14 @@ const AuthScreenLayout = ({
 export default AuthScreenLayout;
 
 const styles = StyleSheet.create({
+  headerWrap: {
+    paddingHorizontal: AUTH_SPACING.screen,
+    paddingTop: LAYOUT.spacing.sm,
+    backgroundColor: AUTH_COLORS.background,
+  },
+  headerBlock: {
+    flexShrink: 0,
+  },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: AUTH_SPACING.screen,

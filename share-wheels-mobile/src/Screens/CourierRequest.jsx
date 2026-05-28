@@ -188,20 +188,26 @@ const CourierRequest = () => {
       <KeyboardAwareScreen
         style={{ flex: 1, backgroundColor: T.pageBg }}
         scrollable
-        contentContainerStyle={{
+        header={
+          <ScreenHeader
+            title="Courier request"
+            backgroundColor={T.pageBg}
+            onBack={() => {
+              if (navigation.canGoBack()) navigation.goBack();
+              else navigation.navigate("Request");
+            }}
+          />
+        }
+        headerStyle={{
           paddingHorizontal: DS.spacing.screen,
           paddingTop: DS.spacing.md,
+          backgroundColor: T.pageBg,
+        }}
+        contentContainerStyle={{
+          paddingHorizontal: DS.spacing.screen,
           paddingBottom: 120,
         }}
       >
-        <ScreenHeader
-          title="Courier request"
-          onBack={() => {
-            if (navigation.canGoBack()) navigation.goBack();
-            else navigation.navigate("Request");
-          }}
-        />
-
         <RequestHero
           theme={T}
           icon="cube"

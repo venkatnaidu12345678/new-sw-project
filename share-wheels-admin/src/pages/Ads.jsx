@@ -288,7 +288,7 @@ export default function Ads() {
 
       <div className="toolbar">
         <input
-          placeholder="Search by title/type/placementù"
+          placeholder="Search by title/type/placementÔøΩ"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{ maxWidth: 360 }}
@@ -339,7 +339,7 @@ export default function Ads() {
                   {PLACEMENT_LABELS[ad.placement] || ad.placement}
                 </div>
                 <div className="ad-card-stats">
-                  {ad.impressions || 0} views ù {ad.clicks || 0} clicks
+                  {ad.impressions || 0} views ÔøΩ {ad.clicks || 0} clicks
                 </div>
                 <div className="ad-card-actions">
                   <button className="btn btn-secondary btn-sm" onClick={() => startEdit(ad)}>

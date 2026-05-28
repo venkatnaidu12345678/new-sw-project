@@ -22,6 +22,12 @@ const {
   isRidePastStartGracePeriod,
 } = require("../utils/rideScheduleUtils");
 const { expireRide } = require("./rideExpiryService");
+const {
+  escapeRegex,
+  getRideDayBounds,
+  passengerOverlapsRideDay,
+  courierOverlapsRideDay,
+} = require("../utils/rideDateQueryUtils");
 
 const getBookedSeats = (ride) =>
   (ride.passengers || []).reduce(
@@ -221,16 +227,25 @@ const endRide = async (user, { rideId }) => {
 };
 
 const enrouteRequests = async (user, { from, to, date }) => {
-  if (!from || !to || !date) return { status: 400, body: { success: false, message: "from, to and date are required" } };
-  const selectedDate = new Date(date);
-  const startOfDay = new Date(selectedDate); startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(selectedDate); endOfDay.setHours(23, 59, 59, 999);
+  if (!from || !to || !date) {
+    return { status: 400, body: { success: false, message: "from, to and date are required" } };
+  }
+
+  const bounds = getRideDayBounds(date);
+  if (!bounds) {
+    return { status: 400, body: { success: false, message: "Invalid date" } };
+  }
+
+  const fromTrim = String(from).trim();
+  const toTrim = String(to).trim();
+  const { start: startOfDay, end: endOfDay } = bounds;
+
   const passengers = await PassengerRide.find({
-    from: { $regex: `^${from}$`, $options: "i" },
-    to: { $regex: `^${to}$`, $options: "i" },
+    from: { $regex: escapeRegex(fromTrim), $options: "i" },
+    to: { $regex: escapeRegex(toTrim), $options: "i" },
     status: "pending",
     creator: { $ne: user._id },
-    date: { $gte: startOfDay, $lte: endOfDay },
+    ...passengerOverlapsRideDay(startOfDay, endOfDay),
     $or: [{ assigned_to: { $exists: false } }, { "assigned_to.rideId": null }],
   }).populate("creator", "name gender profile_img");
   const passengerRequests = passengers.map((p) => ({
@@ -248,13 +263,15 @@ const enrouteRequests = async (user, { from, to, date }) => {
     status: p.status,
   }));
   const couriers = await Courier.find({
-    from: { $regex: `^${from}$`, $options: "i" },
-    to: { $regex: `^${to}$`, $options: "i" },
+    from: { $regex: escapeRegex(fromTrim), $options: "i" },
+    to: { $regex: escapeRegex(toTrim), $options: "i" },
     creator: { $ne: user._id },
     courier_status: { $in: ["pending", "request_to_driver"] },
-    "driver_assigned_courier.rideId": { $exists: false },
-    "date.startDate": { $lte: selectedDate },
-    $or: [{ "date.endDate": { $gte: selectedDate } }, { "date.endDate": null }],
+    $or: [
+      { driver_assigned_courier: { $exists: false } },
+      { "driver_assigned_courier.rideId": null },
+    ],
+    ...courierOverlapsRideDay(startOfDay, endOfDay),
   }).populate("creator", "name gender profile_img");
   const courierRequests = couriers.map((c) => ({
     request_type: "courier",

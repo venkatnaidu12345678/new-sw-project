@@ -64,7 +64,8 @@ import { DS } from "../theme/designSystem";
 import caricon from "../assets/caricon.png";
 import courier from "../assets/courier.png"
 import { useRoute, useNavigation } from "@react-navigation/native";
-import { convertDate, convertTime } from '../Utils'
+import { convertDate, convertTime } from '../Utils';
+import { formatLocalISODate } from "../Utils/dateUtils";
 import { getRideDisplayFare, getPassengerFare, getCourierFare } from '../Utils/fareUtils'
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator } from "react-native";
@@ -637,7 +638,7 @@ const UpcomingDetailsPage = ({ route }) => {
       backgroundColor="#fff"
       style={{ paddingHorizontal: LAYOUT.spacing.screen }}
     >
-      <ScreenHeader title="Ride details" />
+      <ScreenHeader title="Ride details" backgroundColor="#fff" />
 
       <View style={styles.buttonContainer}>
         <TouchableOpacity
@@ -1223,7 +1224,7 @@ const UpcomingDetailsPage = ({ route }) => {
           <EnRoute
             from={rideData?.from}
             to={rideData?.to}
-            date={rideData?.date}
+            date={formatLocalISODate(rideData?.date)}
             rideId={rideData?._id}
             onPickSuccess={handleEnroutePickSuccess}
           />

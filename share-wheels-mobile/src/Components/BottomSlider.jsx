@@ -1,21 +1,36 @@
 import React, { useRef, useEffect } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   Animated,
   PanResponder,
   Dimensions,
-  TouchableOpacity,
   ScrollView,
 } from "react-native";
+import LinearGradient from "react-native-linear-gradient";
 
 const SCREEN_HEIGHT = Dimensions.get("window").height;
+const DEFAULT_THEME = {
+  backdropColor: "#000",
+  backdropOpacity: 0.42,
+  gradient: ["#FFFFFF", "#F8FAFC", "#F1F5F9"],
+  borderColor: "#CBD5E1",
+  handleColor: "#94A3B8",
+  closeColor: "#334155",
+};
 
-const BottomSlider = ({ visible, onClose, children, height = 500, scrollable = true }) => {
+const BottomSlider = ({
+  visible,
+  onClose,
+  children,
+  height = 500,
+  scrollable = true,
+  theme = {},
+}) => {
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const dragY = useRef(new Animated.Value(0)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
+  const mergedTheme = { ...DEFAULT_THEME, ...theme };
 
   useEffect(() => {
     if (visible) {
@@ -27,7 +42,7 @@ const BottomSlider = ({ visible, onClose, children, height = 500, scrollable = t
           useNativeDriver: true,
         }),
         Animated.timing(backdropOpacity, {
-          toValue: 0.4,
+          toValue: mergedTheme.backdropOpacity,
           duration: 250,
           useNativeDriver: true,
         }),
@@ -46,7 +61,7 @@ const BottomSlider = ({ visible, onClose, children, height = 500, scrollable = t
         }),
       ]).start();
     }
-  }, [visible,height]);
+  }, [visible, height, mergedTheme.backdropOpacity]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -82,31 +97,40 @@ const BottomSlider = ({ visible, onClose, children, height = 500, scrollable = t
 
   return (
     <>
-      <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]} />
+      <Animated.View
+        style={[
+          styles.backdrop,
+          { opacity: backdropOpacity, backgroundColor: mergedTheme.backdropColor },
+        ]}
+      />
 
       <Animated.View
         style={[
           styles.slider,
+          { borderTopColor: mergedTheme.borderColor },
           {
             transform: [{ translateY: Animated.add(translateY, dragY) }],
           },
         ]}
       >
         <View {...panResponder.panHandlers} style={styles.dragArea}>
-          <View style={styles.dragHandle} />
+          <View style={[styles.dragHandle, { backgroundColor: mergedTheme.handleColor }]} />
         </View>
 
-        <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
-          <Text style={styles.closeText}>✕</Text>
-        </TouchableOpacity>
-
-        {scrollable ? (
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {children}
-          </ScrollView>
-        ) : (
-          children
-        )}
+        <LinearGradient
+          colors={mergedTheme.gradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.sliderSurface}
+        >
+          {scrollable ? (
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {children}
+            </ScrollView>
+          ) : (
+            children
+          )}
+        </LinearGradient>
       </Animated.View>
     </>
   );
@@ -126,16 +150,24 @@ const styles = StyleSheet.create({
     right: 0,
     height: SCREEN_HEIGHT * 0.75,
     backgroundColor: "#fff",
+    borderTopWidth: 1.2,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingHorizontal: 0,
+    paddingTop: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
     zIndex:1000,
     elevation: 12,
+  },
+  sliderSurface: {
+    flex: 1,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 10,
   },
   dragArea: {
     paddingVertical: 10,
@@ -146,15 +178,5 @@ const styles = StyleSheet.create({
     height: 5,
     backgroundColor: "#D0D0D0",
     borderRadius: 3,
-  },
-  closeBtn: {
-    position: "absolute",
-    right: 16,
-    top: 10,
-    zIndex: 10,
-  },
-  closeText: {
-    fontSize: 22,
-    fontWeight: "700",
   },
 });

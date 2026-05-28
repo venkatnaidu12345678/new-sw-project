@@ -35,6 +35,25 @@ import ScreenContainer from "./ui/ScreenContainer";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LAYOUT, getScrollBottomPadding } from "../theme/layout";
 
+const ROLE_THEME = {
+  Passenger: {
+    card: ["#ECFDF5", "#F8FAFC", "#FFFFFF"],
+    border: "#34D399",
+    chip: "#059669",
+    statusSoft: "#DCFCE7",
+    statusText: "#166534",
+    price: "#047857",
+  },
+  Courier: {
+    card: ["#FFF7ED", "#FFFBEB", "#FFFFFF"],
+    border: "#FB923C",
+    chip: "#EA580C",
+    statusSoft: "#FFEDD5",
+    statusText: "#C2410C",
+    price: "#C2410C",
+  },
+};
+
 const resolveRequestDate = (item) => {
   const primary = formatRequestDate(item?.date);
   if (primary !== "N/A") return primary;
@@ -128,9 +147,6 @@ const MyRequest = () => {
 
   useMyRequestsSocket(fetchRequests);
 
-  const getBorderColor = (role) =>
-    role === "Passenger" ? "#16A34A" : "#F97316";
-
   const filteredRides = rides.filter(
     (r) => r.role.toLowerCase() === activeTab.toLowerCase()
   );
@@ -150,22 +166,27 @@ const MyRequest = () => {
     setSelectedRide(null);
   };
 
-  const renderRide = ({ item }) => (
-    <TouchableOpacity activeOpacity={0.85} onPress={() => handleRidePress(item)}>
+  const renderRide = ({ item }) => {
+    const theme = ROLE_THEME[item.role] || ROLE_THEME.Passenger;
+
+    return (
+    <TouchableOpacity activeOpacity={0.88} onPress={() => handleRidePress(item)}>
       <LinearGradient
-        colors={["#F1F5F9", "#F8FAFC"]}
+        colors={theme.card}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
         style={[
           styles.card,
-          { borderColor: getBorderColor(item.role) },
+          { borderColor: theme.border },
         ]}
       >
         <View style={styles.topRow}>
-          <View style={styles.roleChip(item.role)}>
+          <View style={[styles.roleChip, { backgroundColor: theme.chip }]}>
             <Text style={styles.roleText}>{item.role}</Text>
           </View>
 
-          <View style={styles.statusChip(item.role)}>
-            <Text style={styles.statusText(item.role)}>
+          <View style={[styles.statusChip, { backgroundColor: theme.statusSoft }]}>
+            <Text style={[styles.statusText, { color: theme.statusText }]}>
               {item.status}
             </Text>
           </View>
@@ -207,10 +228,14 @@ const MyRequest = () => {
         </View>
 
         <View style={styles.line} />
-        <Text style={styles.price}>{item.price}</Text>
+        <View style={styles.priceRow}>
+          <Text style={styles.priceLabel}>Offer</Text>
+          <Text style={[styles.price, { color: theme.price }]}>{item.price}</Text>
+        </View>
       </LinearGradient>
     </TouchableOpacity>
   );
+  };
 
   return (
     <ScreenContainer style={styles.container}>
@@ -308,11 +333,15 @@ headerTitle: {
   },
 
   card: {
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 12,
-    borderWidth: 1.5,
-  
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 14,
+    borderWidth: 1.4,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 2,
   },
 
   topRow: {
@@ -321,32 +350,25 @@ headerTitle: {
     marginBottom: 10,
   },
 
-  roleChip: (role) => ({
-    backgroundColor:
-      role === "Passenger" ? "#16A34A" : "#F97316",
+  roleChip: {
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 999,
-  }),
+  },
 
   roleText: {
     color: "#fff",
-    fontSize: 11,
+    fontSize: 11.5,
+    fontWeight: "700",
   },
 
-  statusChip: (role) => ({
-    backgroundColor:
-      role === "Passenger" ? "#DCFCE7" : "#FFE4CC",
+  statusChip: {
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 999,
-  }),
+  },
 
-  statusText: (role) => ({
-    color:
-      role === "Passenger" ? "#16A34A" : "#EA580C",
-    fontSize: 11,
-  }),
+  statusText: { fontSize: 11, fontWeight: "700" },
 
   routeRow: {
     flexDirection: "row",
@@ -356,14 +378,15 @@ headerTitle: {
 
   routeText: {
     marginLeft: 6,
-    fontWeight: "600",
+    fontWeight: "700",
     flex: 1,
+    color: "#0F172A",
   },
 
   metaRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
+    gap: 10,
     marginBottom: 10,
   },
 
@@ -371,6 +394,12 @@ headerTitle: {
     flexDirection: "row",
     alignItems: "center",
     maxWidth: "48%",
+    backgroundColor: "rgba(255,255,255,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(226,232,240,0.9)",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
   },
 
   metaIcon: {
@@ -382,6 +411,7 @@ headerTitle: {
   metaText: {
     fontSize: 12,
     flexShrink: 1,
+    color: "#475569",
   },
 
   line: {
@@ -392,6 +422,17 @@ headerTitle: {
 
   price: {
     fontWeight: "700",
+    fontSize: 16,
+  },
+  priceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  priceLabel: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "600",
   },
 
   icon: {

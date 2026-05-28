@@ -165,20 +165,26 @@ const CreateRidePage = () => {
       <KeyboardAwareScreen
         style={{ flex: 1, backgroundColor: CR.pageBg }}
         scrollable
-        contentContainerStyle={{
+        header={
+          <ScreenHeader
+            title="Create ride"
+            backgroundColor={CR.pageBg}
+            onBack={() => {
+              if (navigation.canGoBack()) navigation.goBack();
+              else navigation.navigate("Navigator", { screen: "Home" });
+            }}
+          />
+        }
+        headerStyle={{
           paddingHorizontal: DS.spacing.screen,
           paddingTop: DS.spacing.md,
+          backgroundColor: CR.pageBg,
+        }}
+        contentContainerStyle={{
+          paddingHorizontal: DS.spacing.screen,
           paddingBottom: 120,
         }}
       >
-        <ScreenHeader
-          title="Create ride"
-          onBack={() => {
-            if (navigation.canGoBack()) navigation.goBack();
-            else navigation.navigate("Navigator", { screen: "Home" });
-          }}
-        />
-
         <CreateRideComponentOne
           ref={formRef}
           rideData={rideData}

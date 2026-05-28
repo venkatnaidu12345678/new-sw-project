@@ -161,14 +161,10 @@ export const buildMyRequestDetail = (ride) => {
     return {
       ...ride,
       extraRows: [
-        { label: "Courier No.", value: raw.courierNumber },
         { label: "Courier Type", value: raw.courier_type },
         { label: "Receiver Name", value: recv?.name },
         { label: "Receiver Mobile", value: recv?.mobile },
-        { label: "Receiver Alt. Mobile", value: recv?.alternate_mobile },
         { label: "Receiver Address", value: recv?.Address || recv?.address },
-        { label: "Requested At", value: fmtDateTime(raw.requestedAt) },
-        { label: "Request ID", value: raw.requestId || ride?.id },
       ],
     };
   }
@@ -177,11 +173,7 @@ export const buildMyRequestDetail = (ride) => {
     ...ride,
     extraRows: [
       { label: "Driver", value: raw.driver?.name },
-      { label: "Driver Mobile", value: raw.driver?.mobile },
       { label: "Luggage", value: raw.luggage },
-      { label: "Requested At", value: fmtDateTime(raw.requestedAt) },
-      { label: "Request ID", value: raw.requestId || ride?.id },
-      { label: "Ride ID", value: raw.rideId },
     ],
   };
 };

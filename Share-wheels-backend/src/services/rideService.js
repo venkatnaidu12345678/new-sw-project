@@ -10,6 +10,7 @@ const { notifyUser } = require("./notificationService");
 const {
   isRideScheduledTimePassed,
   isRideScheduledTimeFuture,
+  parseRideScheduledStart,
 } = require("../utils/rideScheduleUtils");
 const { expireStalePendingRides } = require("./rideExpiryService");
 
@@ -134,9 +135,10 @@ const cancelRide = async (user, { rideId, reason }) => {
   if (ride.creator.toString() !== user._id.toString()) {
     return { status: 403, body: { message: "Only ride creator can cancel this ride" } };
   }
-  const [hours, minutes] = ride.startTime.split(":");
-  const rideStart = new Date(ride.date);
-  rideStart.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+  const rideStart = parseRideScheduledStart(ride);
+  if (!rideStart || Number.isNaN(rideStart.getTime())) {
+    return { status: 400, body: { message: "Invalid ride schedule" } };
+  }
   if (rideStart - new Date() < 60 * 60 * 1000) {
     return {
       status: 400,

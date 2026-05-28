@@ -337,14 +337,18 @@ const RideDetails = ({ navigation, route }) => {
 
   return (
     <ScreenContainer backgroundColor="#fff" edges={["top", "bottom"]}>
-    <KeyboardAwareScreen style={styles.container}>
+      <ScreenHeader
+        title="Ride Details"
+        backgroundColor="#fff"
+        style={styles.fixedHeader}
+      />
+      <KeyboardAwareScreen style={styles.container}>
       <ScrollView
+        style={styles.scroll}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.scrollContent}
       >
-
-        <ScreenHeader title="Ride Details" />
 
         {/* DATE */}
         <View style={styles.dateRow}>
@@ -593,7 +597,16 @@ export default RideDetails;
 /* 🔹 STYLES */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F7FB" },
-  scrollContent: { paddingBottom: 32 },
+  fixedHeader: {
+    paddingHorizontal: LAYOUT.spacing.screen,
+    paddingTop: LAYOUT.spacing.xs,
+    marginBottom: LAYOUT.spacing.xs,
+  },
+  scroll: { flex: 1 },
+  scrollContent: {
+    paddingHorizontal: LAYOUT.spacing.screen,
+    paddingBottom: 32,
+  },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   header: { flexDirection: "row", alignItems: "center", padding: 14, paddingTop: 8 },
   backIcon: { width: 24, height: 24 },

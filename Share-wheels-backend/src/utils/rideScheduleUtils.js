@@ -11,20 +11,46 @@ const parseRideScheduledStart = (ride) => {
   if (!raw) return rideDay;
 
   const rawStr = String(raw).trim();
-  if (/T/.test(rawStr) || rawStr.includes("Z")) {
-    const iso = new Date(rawStr);
-    if (!Number.isNaN(iso.getTime())) return iso;
+  const applyTimeOnRideDay = (hours, minutes, seconds = 0, millis = 0) => {
+    const d = new Date(rideDay);
+    d.setHours(hours, minutes, seconds, millis);
+    return d;
+  };
+
+  const hhmmMatch = rawStr.match(/^(\d{1,2}):(\d{2})/);
+  if (hhmmMatch) {
+    return applyTimeOnRideDay(
+      parseInt(hhmmMatch[1], 10),
+      parseInt(hhmmMatch[2], 10),
+      0,
+      0
+    );
   }
 
-  const match = rawStr.match(/^(\d{1,2}):(\d{2})/);
-  if (match) {
-    const d = new Date(rideDay);
-    d.setHours(parseInt(match[1], 10), parseInt(match[2], 10), 0, 0);
-    return d;
+  // Some clients send an ISO datetime from the time picker.
+  // Use only its time component and always anchor it to ride.date.
+  if (/T/.test(rawStr) || rawStr.includes("Z")) {
+    const iso = new Date(rawStr);
+    if (!Number.isNaN(iso.getTime())) {
+      return applyTimeOnRideDay(
+        iso.getHours(),
+        iso.getMinutes(),
+        iso.getSeconds(),
+        iso.getMilliseconds()
+      );
+    }
   }
 
   const parsed = new Date(rawStr);
-  return Number.isNaN(parsed.getTime()) ? rideDay : parsed;
+  if (!Number.isNaN(parsed.getTime())) {
+    return applyTimeOnRideDay(
+      parsed.getHours(),
+      parsed.getMinutes(),
+      parsed.getSeconds(),
+      parsed.getMilliseconds()
+    );
+  }
+  return rideDay;
 };
 
 /** True when scheduled start is in the past (driver may start late). */

@@ -432,9 +432,16 @@ export const enrouteRequest = async (token, payload) => {
       };
     }
 
+    const requests = Array.isArray(result?.data)
+      ? result.data
+      : Array.isArray(result?.requests)
+        ? result.requests
+        : [];
+
     return {
-      success: true,
-      requests: result?.requests || result?.data || [],
+      success: result?.success !== false,
+      requests,
+      total: result?.total ?? requests.length,
     };
   } catch (error) {
     console.log("❌ API ERROR:", error);

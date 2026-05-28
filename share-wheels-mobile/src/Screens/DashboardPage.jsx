@@ -299,7 +299,12 @@ const DashboardPage = () => {
       <View style={styles.body}>
         {showAllRides ? (
           <View style={styles.flex}>
-            <ScreenHeader title="Search results" onBack={exitSearchResults} />
+            <ScreenHeader
+              title="Search results"
+              onBack={exitSearchResults}
+              backgroundColor="#F8FAFC"
+              style={styles.searchHeader}
+            />
             <SearchLocation {...searchProps} />
             <AllridesComponent
               rides={allRides}
@@ -402,5 +407,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
     color: "#64748B",
     marginTop: LAYOUT.spacing.md,
+  },
+  searchHeader: {
+    paddingHorizontal: LAYOUT.spacing.screen,
+    paddingTop: LAYOUT.spacing.xs,
   },
 });

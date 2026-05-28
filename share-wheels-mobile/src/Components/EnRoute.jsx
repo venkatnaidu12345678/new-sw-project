@@ -22,6 +22,7 @@ import DriverParticipantPopover from "./ui/DriverParticipantPopover";
 import { profileFromUrl } from "../Utils/profileImage";
 import { buildEnrouteDetail } from "../Utils/driverParticipantDetails";
 import { LAYOUT } from "../theme/layout";
+import { formatLocalISODate } from "../Utils/dateUtils";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
@@ -92,6 +93,8 @@ const isPickSuccess = (response) =>
   response?.success === true || response?.status === true;
 
 const EnRoutePassengers = ({ from, to, date, rideId, onPickSuccess }) => {
+  const rideDate = formatLocalISODate(date) || "";
+
   const [activeTab, setActiveTab] = useState("all");
   const [sentRequests, setSentRequests] = useState({});
   const [data, setData] = useState([]);
@@ -122,20 +125,27 @@ const EnRoutePassengers = ({ from, to, date, rideId, onPickSuccess }) => {
     );
   };
 
-  useEnrouteSocket({ from, to, date, onRequestRemoved: removePickedFromList });
+  useEnrouteSocket({ from, to, date: rideDate, onRequestRemoved: removePickedFromList });
 
   const fetchData = async () => {
+    if (!from?.trim() || !to?.trim() || !rideDate) {
+      setData([]);
+      return;
+    }
+
     try {
       setLoading(true);
 
       const token = await AsyncStorage.getItem("token");
 
-      const payload = { from, to, date };
+      const payload = { from: from.trim(), to: to.trim(), date: rideDate };
 
       const response = await enrouteRequest(token, payload);
 
-      if (response?.success && response?.requests?.length) {
-        const formatted = response.requests.map((item, index) => {
+      const list = response?.requests ?? [];
+
+      if (response?.success && list.length > 0) {
+        const formatted = list.map((item, index) => {
           const isCourier = item.request_type
             ?.toLowerCase()
             .includes("courier");
@@ -172,10 +182,10 @@ const EnRoutePassengers = ({ from, to, date, rideId, onPickSuccess }) => {
   };
 
   useEffect(() => {
-    if (from && to) {
+    if (from && to && rideDate) {
       fetchData();
     }
-  }, [from, to, date, reloadapi]);
+  }, [from, to, rideDate, reloadapi]);
 
   const filteredData = useMemo(() => {
     if (activeTab === "all") return data;
@@ -183,7 +193,7 @@ const EnRoutePassengers = ({ from, to, date, rideId, onPickSuccess }) => {
   }, [activeTab, data]);
 
   const openDetails = (item) => {
-    setPopoverDetail(buildEnrouteDetail(item, from, to, date));
+    setPopoverDetail(buildEnrouteDetail(item, from, to, rideDate));
     setPopoverVisible(true);
     setPopoverLoading(true);
     requestAnimationFrame(() => {

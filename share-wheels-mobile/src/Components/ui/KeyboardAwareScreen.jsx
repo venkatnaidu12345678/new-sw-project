@@ -14,6 +14,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
  */
 const KeyboardAwareScreen = ({
   children,
+  header,
+  headerStyle,
   style,
   contentContainerStyle,
   scrollable = false,
@@ -48,6 +50,9 @@ const KeyboardAwareScreen = ({
       behavior={behavior}
       keyboardVerticalOffset={offset}
     >
+      {header ? (
+        <View style={[styles.headerSlot, headerStyle]}>{header}</View>
+      ) : null}
       {body}
     </KeyboardAvoidingView>
   );
@@ -56,6 +61,11 @@ const KeyboardAwareScreen = ({
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   scrollGrow: { flexGrow: 1 },
+  headerSlot: {
+    flexShrink: 0,
+    zIndex: 10,
+    elevation: 4,
+  },
 });
 
 export default KeyboardAwareScreen;

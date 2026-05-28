@@ -7,9 +7,15 @@ import { LAYOUT } from "../../theme/layout";
  * Consistent top bar: back button + title.
  * Pass onBack to override navigation.goBack() (e.g. dashboard search mode).
  */
-const ScreenHeader = ({ title, onBack, rightElement, style }) => {
+const ScreenHeader = ({ title, onBack, rightElement, style, backgroundColor }) => {
   return (
-    <View style={[styles.row, style]}>
+    <View
+      style={[
+        styles.row,
+        backgroundColor != null && { backgroundColor },
+        style,
+      ]}
+    >
       <BackButton onPress={onBack} style={styles.backBtn} />
       <Text style={styles.title} numberOfLines={1}>
         {title}

@@ -7,6 +7,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
+import LinearGradient from "react-native-linear-gradient";
 
 import UserAvatar from "./ui/UserAvatar";
 import madhapurIcon from "../assets/madhapuricon.png";
@@ -42,7 +43,7 @@ const RideHistoryDriverview = ({ ride, loading }) => {
       {loading ? (
         <ActivityIndicator style={{ marginTop: 24 }} color="#2563EB" />
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+        <ScrollView contentContainerStyle={{ paddingBottom: 110 }}>
           <View style={styles.routeCard}>
             <View style={styles.routeItem}>
               <Image source={madhapurIcon} style={styles.routeIcon} />
@@ -119,12 +120,12 @@ const RideHistoryDriverview = ({ ride, loading }) => {
         </ScrollView>
       )}
 
-      <View style={styles.totalCard}>
+      <LinearGradient colors={["#1D4ED8", "#2563EB"]} style={styles.totalCard}>
         <View>
           <Text style={styles.totalLabel}>Total Earning</Text>
           <Text style={styles.totalAmount}>₹{totalEarnings}</Text>
         </View>
-      </View>
+      </LinearGradient>
     </View>
   );
 };
@@ -134,11 +135,11 @@ export default RideHistoryDriverview;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#F8FAFC",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 16,
-    marginBottom: 90,
+    marginBottom: 86,
   },
   header: {
     flexDirection: "row",
@@ -155,6 +156,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 20,
     padding: 16,
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
     elevation: 2,
     marginBottom: 16,
   },
@@ -205,7 +208,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    borderBottomColor: "#E2E8F0",
   },
   passengerName: {
     fontSize: 14,
@@ -227,12 +230,16 @@ const styles = StyleSheet.create({
     bottom: 16,
     left: 16,
     right: 16,
-    backgroundColor: "#2563EB",
     borderRadius: 18,
     padding: 18,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    shadowColor: "#1E3A8A",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 4,
   },
   totalLabel: {
     fontSize: 12,

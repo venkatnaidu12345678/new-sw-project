@@ -201,7 +201,7 @@ export default function LiveTracking() {
 
           <div className="toolbar" style={{ marginBottom: 12 }}>
             <input
-              placeholder="Search route or driverù"
+              placeholder="Search route or driverÔøΩ"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{ maxWidth: 220 }}
@@ -244,7 +244,7 @@ export default function LiveTracking() {
                         onClick={() => setSelectedId(r.rideId)}
                       >
                         <td>{r.from} ? {r.to}</td>
-                        <td>{r.driver?.name || "ù"}</td>
+                        <td>{r.driver?.name || "ÔøΩ"}</td>
                         <td style={{ fontWeight: 800, color: r.location ? "#16a34a" : "#d97706" }}>
                           {r.location
                             ? `(${r.location.lat.toFixed(2)}, ${r.location.lng.toFixed(2)})`

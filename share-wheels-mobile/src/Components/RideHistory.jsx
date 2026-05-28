@@ -40,6 +40,11 @@ const roleColors = {
   Passenger: ["#16A34A", "#4ADE80"],
   Courier: ["#EA580C", "#FDBA74"],
 };
+const roleCardTheme = {
+  Driver: { card: ["#EFF6FF", "#F8FAFC", "#FFFFFF"], border: "#93C5FD" },
+  Passenger: { card: ["#ECFDF5", "#F8FAFC", "#FFFFFF"], border: "#86EFAC" },
+  Courier: { card: ["#FFF7ED", "#FFFBEB", "#FFFFFF"], border: "#FDBA74" },
+};
 
 const toDateLabel = (value) => {
   if (!value) return "—";
@@ -192,6 +197,7 @@ const RideHistory = () => {
 
   const renderItem = ({ item }) => {
     const colors = roleColors[item.role];
+    const cardTheme = roleCardTheme[item.role] || roleCardTheme.Driver;
 
     return (
       <TouchableOpacity onPress={() => handlePress(item)} activeOpacity={0.8}>
@@ -202,7 +208,12 @@ const RideHistory = () => {
           </View>
 
           <View style={styles.card}>
-            <LinearGradient colors={["#fff", "#f9fafb"]} style={styles.cardInner}>
+            <LinearGradient
+              colors={cardTheme.card}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.cardInner, { borderColor: cardTheme.border }]}
+            >
               <View style={styles.cardHeaderRow}>
                 <UserAvatar user={item?.creator} size={LAYOUT.sizes.avatarSm} />
                 <View style={styles.cardHeaderText}>
@@ -292,6 +303,13 @@ const RideHistory = () => {
         visible={isSliderVisible}
         onClose={() => setSliderVisible(false)}
         scrollable={false}
+        theme={{
+          gradient: ["#EFF6FF", "#F8FAFC", "#FFFFFF"],
+          borderColor: "#93C5FD",
+          handleColor: "#60A5FA",
+          closeColor: "#1E3A8A",
+          backdropOpacity: 0.45,
+        }}
       >
         {renderSliderContent()}
       </BottomSlider>
@@ -375,8 +393,12 @@ const styles = StyleSheet.create({
   cardInner: {
     borderRadius: 14,
     padding: 14,
-    backgroundColor: "#fff",
+    borderWidth: 1.2,
     elevation: 3,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
   },
 
   cardHeaderRow: {
@@ -404,13 +426,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
 
-  price: { fontWeight: "800", fontSize: 14 },
+  price: { fontWeight: "800", fontSize: 14, color: "#0F172A" },
 
-  route: { fontSize: 15, fontWeight: "600", marginBottom: 6 },
+  route: { fontSize: 15, fontWeight: "700", marginBottom: 6, color: "#0F172A" },
 
   bottomRow: { flexDirection: "row", justifyContent: "space-between" },
 
   meta: { fontSize: 12, color: "#64748B" },
 
-  status: { fontWeight: "600" },
+  status: { fontWeight: "700" },
 });
