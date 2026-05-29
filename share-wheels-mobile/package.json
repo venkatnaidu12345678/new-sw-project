@@ -8,8 +8,11 @@
     "lint": "eslint .",
     "start": "react-native start",
     "start:reset": "react-native start --reset-cache",
-    "adb:reverse": "adb reverse tcp:8081 tcp:8081",
+    "dev:ip": "node scripts/print-lan-ip.js",
+    "adb:reverse": "adb reverse tcp:8081 tcp:8081 && adb reverse tcp:3001 tcp:3001",
     "android:device": "npm run adb:reverse && react-native run-android",
+    "android:clean": "cd android && gradlew.bat clean && cd ..",
+    "android:rebuild": "npm run android:clean && react-native run-android",
     "test": "jest"
   },
   "dependencies": {

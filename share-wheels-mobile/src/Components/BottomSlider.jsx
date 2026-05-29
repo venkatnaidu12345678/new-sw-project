@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -6,6 +6,7 @@ import {
   PanResponder,
   Dimensions,
   ScrollView,
+  Pressable,
 } from "react-native";
 import LinearGradient from "react-native-linear-gradient";
 
@@ -31,10 +32,30 @@ const BottomSlider = ({
   const dragY = useRef(new Animated.Value(0)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const mergedTheme = { ...DEFAULT_THEME, ...theme };
+  const [mounted, setMounted] = useState(visible);
+  const onCloseRef = useRef(onClose);
+  const wasOpenRef = useRef(visible);
+  const aliveRef = useRef(true);
 
   useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let animation;
+
     if (visible) {
-      Animated.parallel([
+      wasOpenRef.current = true;
+      setMounted(true);
+      translateY.setValue(SCREEN_HEIGHT);
+      animation = Animated.parallel([
         Animated.spring(translateY, {
           toValue: 0,
           damping: 20,
@@ -46,12 +67,14 @@ const BottomSlider = ({
           duration: 250,
           useNativeDriver: true,
         }),
-      ]).start();
-    } else {
-      Animated.parallel([
+      ]);
+      animation.start();
+    } else if (wasOpenRef.current) {
+      wasOpenRef.current = false;
+      animation = Animated.parallel([
         Animated.timing(translateY, {
-          toValue: height,
-          duration: 250,
+          toValue: SCREEN_HEIGHT,
+          duration: 220,
           useNativeDriver: true,
         }),
         Animated.timing(backdropOpacity, {
@@ -59,9 +82,27 @@ const BottomSlider = ({
           duration: 200,
           useNativeDriver: true,
         }),
-      ]).start();
+      ]);
+      animation.start(({ finished }) => {
+        if (finished && aliveRef.current) {
+          dragY.setValue(0);
+          setMounted(false);
+        }
+      });
     }
-  }, [visible, height, mergedTheme.backdropOpacity]);
+
+    return () => {
+      animation?.stop?.();
+    };
+  }, [visible, mergedTheme.backdropOpacity, translateY, dragY, backdropOpacity]);
+
+  useEffect(() => {
+    return () => {
+      translateY.stopAnimation();
+      dragY.stopAnimation();
+      backdropOpacity.stopAnimation();
+    };
+  }, [translateY, dragY, backdropOpacity]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -79,7 +120,7 @@ const BottomSlider = ({
             useNativeDriver: true,
           }).start(() => {
             dragY.setValue(0);
-            onClose();
+            onCloseRef.current?.();
           });
         } else {
           Animated.spring(dragY, {
@@ -93,16 +134,18 @@ const BottomSlider = ({
     })
   ).current;
 
-  if (!visible) return null;
+  if (!mounted) return null;
 
   return (
     <>
-      <Animated.View
-        style={[
-          styles.backdrop,
-          { opacity: backdropOpacity, backgroundColor: mergedTheme.backdropColor },
-        ]}
-      />
+      <Pressable style={StyleSheet.absoluteFill} onPress={() => onCloseRef.current?.()}>
+        <Animated.View
+          style={[
+            styles.backdrop,
+            { opacity: backdropOpacity, backgroundColor: mergedTheme.backdropColor },
+          ]}
+        />
+      </Pressable>
 
       <Animated.View
         style={[

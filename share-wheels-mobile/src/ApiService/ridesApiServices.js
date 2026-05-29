@@ -837,3 +837,19 @@ export const courierSendRequestApi = async (token, payload) => {
     };
   }
 };
+
+export const cancelRideApi = async (token, { rideId, reason }) => {
+  const response = await fetch(`${baseUrl}${endPoints.cancelRideurl}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ rideId, reason }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.message || "Failed to cancel ride");
+  }
+  return data;
+};

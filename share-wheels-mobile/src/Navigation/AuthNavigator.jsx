@@ -5,6 +5,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import SplashScreen from "../Screens/Splash/SplashScreen";
 import LoginPage from "../Screens/Login/LoginPage";
 import SignupPage from "../Screens/Signup/SignupPage";
+import OtpVerificationPage from "../Screens/OtpVerification/OtpVerificationPage";
 import BottomNavigator from "../Components/BottomNavigator";
 import DashboardPage from "../Screens/DashboardPage";
 import CreateRidePage from "../Screens/CreateRidePage";
@@ -36,7 +37,7 @@ export const profileData = () => useContext(ProfileContext);
 const authScreenOptions = {
   headerShown: false,
   animation: "fade",
-  contentStyle: { backgroundColor: "#F8FAFC" },
+  contentStyle: { backgroundColor: "#0F172A" },
 };
 
 const AuthNavigator = () => {
@@ -146,6 +147,17 @@ const AuthNavigator = () => {
             >
               {(props) => (
                 <SignupPage
+                  {...props}
+                  triggerAuth={() => setRefresh((prev) => prev + 1)}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen
+              name="OtpVerification"
+              options={{ animation: "slide_from_right" }}
+            >
+              {(props) => (
+                <OtpVerificationPage
                   {...props}
                   triggerAuth={() => setRefresh((prev) => prev + 1)}
                 />

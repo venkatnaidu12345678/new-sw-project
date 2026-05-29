@@ -15,7 +15,8 @@ import {
   validatePassword,
   validateConfirmPassword,
 } from "../../Utils";
-import { AUTH_COLORS } from "../../theme/authTheme";
+import { AUTH_COLORS, AUTH_GRADIENTS } from "../../theme/authTheme";
+import LinearGradient from "react-native-linear-gradient";
 import { INPUT_COLORS } from "../../theme/inputTheme";
 
 const SignupPage = ({ navigation, triggerAuth }) => {
@@ -105,7 +106,7 @@ const SignupPage = ({ navigation, triggerAuth }) => {
         password,
       });
 
-      if (response?.token) {
+      if (response?.success !== false && response?.token) {
         await AsyncStorage.setItem("token", response.token);
         await AsyncStorage.setItem("user", JSON.stringify(response.user));
         if (response.user?.name) {
@@ -166,6 +167,12 @@ const SignupPage = ({ navigation, triggerAuth }) => {
         </View>
         <View style={styles.col}>
           <Text style={styles.label}>Gender *</Text>
+          <LinearGradient
+            colors={AUTH_GRADIENTS.cardBorder}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.pickerBorder}
+          >
           <View style={styles.pickerBox}>
             <Picker
               selectedValue={gender}
@@ -178,6 +185,7 @@ const SignupPage = ({ navigation, triggerAuth }) => {
               <Picker.Item label="Other" value="other" />
             </Picker>
           </View>
+          </LinearGradient>
           {!!errors.gender && <Text style={styles.error}>{errors.gender}</Text>}
         </View>
       </View>
@@ -223,7 +231,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#334155",
+    color: AUTH_COLORS.text,
     marginBottom: 6,
   },
   error: {
@@ -234,22 +242,23 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: "row", gap: 12 },
   col: { flex: 1 },
+  pickerBorder: {
+    borderRadius: 14,
+    padding: 1.5,
+    marginBottom: 4,
+  },
   pickerBox: {
     height: 50,
-    borderWidth: 1,
-    borderColor: AUTH_COLORS.border,
     borderRadius: 12,
     justifyContent: "center",
     backgroundColor: AUTH_COLORS.surface,
-    marginBottom: 12,
     overflow: "hidden",
   },
   picker: { height: 50, color: INPUT_COLORS.text },
   footer: {
     fontSize: 15,
-    color: AUTH_COLORS.textMuted,
-    marginTop: 8,
+    color: AUTH_COLORS.textMutedOnDark,
     textAlign: "center",
   },
-  link: { color: AUTH_COLORS.primary, fontWeight: "700" },
+  link: { color: AUTH_COLORS.link, fontWeight: "700" },
 });

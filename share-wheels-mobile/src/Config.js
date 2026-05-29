@@ -1,12 +1,66 @@
+import { Platform } from "react-native";
 import Env from "react-native-config";
+import { DEV_API_URL } from "./devConfig";
 
-const PRODUCTION_URL =
+const REMOTE_URL =
   Env.PRODUCTION_URL || "https://share-wheels-backend-m3wp.onrender.com";
 
-export const baseUrl = PRODUCTION_URL;
+const trimUrl = (url) => (url ? String(url).trim().replace(/\/$/, "") : "");
+
+/** Android emulator → host machine. iOS simulator → localhost. */
+const getPlatformDefaultLocalUrl = () => {
+  if (Platform.OS === "android") {
+    const model = String(Platform.constants?.Model || "");
+    const fingerprint = String(Platform.constants?.Fingerprint || "");
+    const isEmulator =
+      /sdk|emulator|google_sdk|Android SDK built for x86/i.test(model) ||
+      /generic|sdk|emulator|ranchu|goldfish/i.test(fingerprint);
+    if (isEmulator) return "http://10.0.2.2:3001";
+    // Physical device: localhost only works with `npm run adb:reverse`
+    return "http://localhost:3001";
+  }
+  return "http://localhost:3001";
+};
+
+const envLocalFlag = String(Env.USE_LOCAL_BACKEND || "").toLowerCase();
+const useLocalBackend =
+  __DEV__ && envLocalFlag !== "false" && envLocalFlag !== "0";
+
+const resolveLocalBaseUrl = () => {
+  // 1) .env (react-native-config, set at native build)
+  const fromEnv = trimUrl(Env.LOCAL_API_URL);
+  if (fromEnv) return fromEnv;
+
+  // 2) devConfig.js override (Metro reload, no rebuild)
+  const fromDev = trimUrl(DEV_API_URL);
+  if (fromDev) return fromDev;
+
+  // 3) Platform fallback
+  return getPlatformDefaultLocalUrl();
+};
+
+export const baseUrl = useLocalBackend ? resolveLocalBaseUrl() : trimUrl(REMOTE_URL);
+
+export const getApiConnectionHint = () => {
+  if (!useLocalBackend) {
+    return `Using remote API: ${baseUrl}`;
+  }
+  if (Platform.OS === "android" && /localhost|127\.0\.0\.1/.test(baseUrl)) {
+    return (
+      "Using localhost on a device requires USB debugging and:\n" +
+      "  npm run adb:reverse\n" +
+      "Or set LOCAL_API_URL in .env to your PC IP (npm run dev:ip), then rebuild the app."
+    );
+  }
+  if (Platform.OS === "android" && baseUrl.includes("10.0.2.2")) {
+    return "Emulator URL (10.0.2.2). On a physical phone, set LOCAL_API_URL to your PC Wi‑Fi IP in .env.";
+  }
+  return `Local API: ${baseUrl} — ensure Share-wheels-backend is running on port 3001.`;
+};
 
 if (__DEV__) {
-  console.log("[ShareWheels] API baseUrl:", baseUrl);
+  console.log("[ShareWheels] API baseUrl:", baseUrl, useLocalBackend ? "(local)" : "(remote)");
+  console.log("[ShareWheels]", getApiConnectionHint());
 }
 
 export const endPoints = {
@@ -16,6 +70,7 @@ export const endPoints = {
   verifyToken: "/auth/verify-token",
   upcomingRideurl: "/rides/upcoming-rides",
   createRideurl: "/rides/create-ride",
+  cancelRideurl: "/rides/ride/cancel",
   driveracceptspassengerrequesturl:
     "/driver-rides/driver-accept-passenger-request",
   acceptCourierurl: "/courier/accept-courier",

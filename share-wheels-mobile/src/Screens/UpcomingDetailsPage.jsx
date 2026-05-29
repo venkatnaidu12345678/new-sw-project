@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -30,7 +30,9 @@ import {
   listVerificationParticipants,
   verifyBoardingParticipant,
   updateRideSeats,
+  cancelRideApi,
 } from "../ApiService/ridesApiServices";
+import RideDriverActionForm from "../Components/RideDriverActionForm";
 import seat from "../assets/seatIcon.png";
 import car from "../assets/car.png";
 import dateIcon from "../assets/dateIcon.png";
@@ -82,6 +84,8 @@ import {
   isRideScheduledTimePassed,
   isRideScheduledTimeFuture,
   formatScheduledStart,
+  canDriverCancel,
+  formatLeadTimeHint,
 } from "../Utils/rideSchedule";
 import { getApiErrorMessage } from "../Utils/apiErrors";
 import { openPhoneCall } from "../Utils/phoneCall";
@@ -90,11 +94,19 @@ import { useRideSocket } from "../hooks/useAppSocket";
 const UpcomingDetailsPage = ({ route }) => {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const { rideData, refreshRides } = route.params;
+  const { rideData } = route.params || {};
+  const { setRefreshUpcomingrides } = profileData() || {};
 
+  const refreshUpcomingList = useCallback(() => {
+    setRefreshUpcomingrides?.((prev) => !prev);
+  }, [setRefreshUpcomingrides]);
 
-  const role = rideData?.myRole;
-  const isDriver = role === "driver";
+  const role = rideData?.myRole || route.params?.role;
+  const creatorId =
+    rideData?.creator?._id ||
+    rideData?.creator?.id ||
+    rideData?.creator;
+  const isDriverByRole = role === "driver";
   const isCourier = role === "courier";
 
   const [activeSlider, setActiveSlider] = useState(null);
@@ -118,7 +130,9 @@ const UpcomingDetailsPage = ({ route }) => {
   const [quickReserve, setQuickReserve] = useState(!!rideData?.QuickReserve);
   const [courierRequests, setCourierRequests] = useState([]);
   const [passengerRequests, setPassengerRequests] = useState([]);
-  const [rideStatus, setRideStatus] = useState(rideData?.status || "");
+  const [rideStatus, setRideStatus] = useState(
+    () => rideData?.status || rideData?.ride_status || "pending"
+  );
   const [detailsLoading, setDetailsLoading] = useState(true);
   const [driverToken, setDriverToken] = useState(null);
   const [verification, setVerification] = useState(null);
@@ -128,17 +142,40 @@ const UpcomingDetailsPage = ({ route }) => {
   const [seatsSaving, setSeatsSaving] = useState(false);
   const [chatUnread, setChatUnread] = useState({ driver: 0 });
   const [rideMeta, setRideMeta] = useState({});
+  const [scheduleInfo, setScheduleInfo] = useState({
+    date: rideData?.date,
+    startTime: rideData?.startTime,
+  });
+  const [driverActionSubmitting, setDriverActionSubmitting] = useState(false);
   const { ProfileDetails } = profileData();
   const myUserId =
     ProfileDetails?._id ||
     ProfileDetails?.id ||
     ProfileDetails?.data?.personalInfo?._id;
 
+  const isDriver =
+    isDriverByRole ||
+    (!!myUserId &&
+      !!creatorId &&
+      String(creatorId) === String(myUserId));
+
   const displayVehicle = rideMeta?.vehicle || rideData?.vehicle;
   const displayCreator = rideMeta?.creator || rideData?.creator;
+  const isMountedRef = useRef(true);
+  const popoverTimerRef = useRef(null);
 
   useEffect(() => {
-    AsyncStorage.getItem("token").then(setDriverToken);
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (popoverTimerRef.current) clearTimeout(popoverTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.getItem("token").then((token) => {
+      if (isMountedRef.current) setDriverToken(token);
+    });
   }, []);
 
   const rideIdStr = rideData?._id?.toString?.() || rideData?._id;
@@ -167,6 +204,12 @@ const UpcomingDetailsPage = ({ route }) => {
     if (data.QuickReserve != null) {
       setQuickReserve(!!data.QuickReserve);
     }
+    if (data.date != null || data.startTime != null) {
+      setScheduleInfo((prev) => ({
+        date: data.date ?? prev.date,
+        startTime: data.startTime ?? prev.startTime,
+      }));
+    }
   }, []);
 
   const fetchRideDetails = useCallback(async () => {
@@ -175,15 +218,16 @@ const UpcomingDetailsPage = ({ route }) => {
     if (!token || !rideId) return;
 
     try {
-      setDetailsLoading(true);
+      if (isMountedRef.current) setDetailsLoading(true);
       const res = await rideDetails(token, rideId);
+      if (!isMountedRef.current) return;
       if (res?.success === true) {
         applyRideDetails(res.data);
       }
     } catch (err) {
       console.log("Ride details error:", err.message);
     } finally {
-      setDetailsLoading(false);
+      if (isMountedRef.current) setDetailsLoading(false);
     }
   }, [rideData?._id, applyRideDetails]);
 
@@ -204,9 +248,9 @@ const UpcomingDetailsPage = ({ route }) => {
         applyRideDetails(response.details);
       }
       fetchRideDetails();
-      if (refreshRides) refreshRides();
+      refreshUpcomingList();
     },
-    [applyRideDetails, fetchRideDetails, refreshRides]
+    [applyRideDetails, fetchRideDetails, refreshUpcomingList]
   );
 
   const countIncoming = (messages, userId) => {
@@ -225,9 +269,11 @@ const UpcomingDetailsPage = ({ route }) => {
       const directRes = creatorId
         ? await getRideChatMessages(driverToken, rideIdStr, creatorId)
         : { messages: [] };
-      setChatUnread({
-        driver: countIncoming(directRes?.messages, myUserId),
-      });
+      if (isMountedRef.current) {
+        setChatUnread({
+          driver: countIncoming(directRes?.messages, myUserId),
+        });
+      }
     } catch {
       /* ignore */
     }
@@ -251,15 +297,27 @@ const UpcomingDetailsPage = ({ route }) => {
     setParticipantPopoverDetail(detail);
     setParticipantPopoverVisible(true);
     setParticipantPopoverLoading(true);
-    requestAnimationFrame(() => {
-      setTimeout(() => setParticipantPopoverLoading(false), 180);
-    });
+    if (popoverTimerRef.current) clearTimeout(popoverTimerRef.current);
+    popoverTimerRef.current = setTimeout(() => {
+      if (isMountedRef.current) setParticipantPopoverLoading(false);
+    }, 200);
   };
 
   const closeParticipantPopover = () => {
     setParticipantPopoverVisible(false);
     setParticipantPopoverLoading(false);
     setParticipantPopoverDetail(null);
+  };
+
+  const normalizedRideStatus = String(
+    rideStatus || rideData?.status || rideData?.ride_status || "pending"
+  ).toLowerCase();
+
+  const isRideStarted = normalizedRideStatus === "started";
+  const effectiveRide = {
+    ...rideData,
+    date: scheduleInfo.date ?? rideData?.date,
+    startTime: scheduleInfo.startTime ?? rideData?.startTime,
   };
 
   const bookedSeats = (passengers || []).reduce(
@@ -269,7 +327,7 @@ const UpcomingDetailsPage = ({ route }) => {
 
   const canEditSeats =
     isDriver &&
-    (rideStatus === "pending" || rideStatus === "started");
+    (normalizedRideStatus === "pending" || normalizedRideStatus === "started");
 
   const handleSaveSeats = async (totalSeats) => {
     try {
@@ -291,11 +349,29 @@ const UpcomingDetailsPage = ({ route }) => {
     }
   };
 
-  const isRideStarted = rideStatus === "started";
   const schedulePassed =
-    rideData?.isSchedulePassed ?? isRideScheduledTimePassed(rideData);
+    rideData?.isSchedulePassed ?? isRideScheduledTimePassed(effectiveRide);
   const scheduleEarly =
-    rideData?.isScheduleFuture ?? isRideScheduledTimeFuture(rideData);
+    rideData?.isScheduleFuture ?? isRideScheduledTimeFuture(effectiveRide);
+
+  const driverPendingRide = isDriver && normalizedRideStatus === "pending";
+  const canCancelNow = canDriverCancel(effectiveRide);
+
+  const openCancelRide = () => {
+    if (!canCancelNow) {
+      Alert.alert(
+        "Cannot cancel yet",
+        `Rides can only be cancelled at least 2 hours before the scheduled start.\n\n${formatLeadTimeHint(effectiveRide) || "Check the scheduled time."}`
+      );
+      return;
+    }
+    setActiveSlider("cancelRide");
+  };
+
+  const showBoardingOtp =
+    !isDriver &&
+    myBoarding &&
+    (normalizedRideStatus === "pending" || normalizedRideStatus === "started");
 
   useParticipantLocation({
     enabled: isRideStarted && !!driverToken && !!rideIdStr,
@@ -305,7 +381,11 @@ const UpcomingDetailsPage = ({ route }) => {
 
   // Background GPS for driver, passengers, and couriers while ride is active
   useEffect(() => {
-    if (rideStatus === "completed" || rideStatus === "cancelled") {
+    if (
+      normalizedRideStatus === "completed" ||
+      normalizedRideStatus === "cancelled" ||
+      normalizedRideStatus === "expired"
+    ) {
       clearActiveRideTracking();
     } else if (isRideStarted && rideIdStr) {
       setActiveRideTracking(rideIdStr);
@@ -377,9 +457,7 @@ const UpcomingDetailsPage = ({ route }) => {
       } else {
         Alert.alert("Error", response.message);
       }
-      if (refreshRides) {
-        refreshRides();
-      }
+      refreshUpcomingList();
     } catch (error) {
       console.log("Remove Error:", error);
       Alert.alert("Error", error.message);
@@ -500,7 +578,7 @@ const UpcomingDetailsPage = ({ route }) => {
   };
 
   const handleStartRide = () => {
-    if (rideActionLoading || rideStatus === "started") return;
+    if (rideActionLoading || normalizedRideStatus === "started") return;
 
     if (isDriver && verification?.pending > 0 && !schedulePassed && !scheduleEarly) {
       Alert.alert(
@@ -555,7 +633,6 @@ const UpcomingDetailsPage = ({ route }) => {
       setLoadingRide(false);
     }
   };
-  console.log('ridestat:', rideStatus)
   const handleContactDriver = () => {
     handleCall(
       rideData?.creator?.mobile ||
@@ -612,6 +689,22 @@ const UpcomingDetailsPage = ({ route }) => {
     }
   };
 
+  const handleCancelRideSubmit = async ({ reason }) => {
+    try {
+      setDriverActionSubmitting(true);
+      const token = await AsyncStorage.getItem("token");
+      await cancelRideApi(token, { rideId: rideData._id, reason });
+      refreshUpcomingList();
+      setActiveSlider(null);
+      Alert.alert("Ride cancelled", "All participants have been notified.", [
+        { text: "OK", onPress: () => navigation.goBack() },
+      ]);
+    } catch (err) {
+      Alert.alert("Could not cancel", getApiErrorMessage(err, err.message));
+      if (isMountedRef.current) setDriverActionSubmitting(false);
+    }
+  };
+
   const handleRemoveCourier = async (courierId) => {
     try {
       const token = await AsyncStorage.getItem("token");
@@ -661,6 +754,15 @@ const UpcomingDetailsPage = ({ route }) => {
           </TouchableOpacity>
         )}
 
+        {driverPendingRide && (
+          <TouchableOpacity
+            style={[styles.otpButton, { borderColor: "#DC2626", marginLeft: 8 }]}
+            onPress={openCancelRide}
+          >
+            <Text style={[styles.otpText, { color: "#DC2626" }]}>Cancel ride</Text>
+          </TouchableOpacity>
+        )}
+
         {!isDriver && (
           <TouchableOpacity
             style={[styles.otpButton, styles.chipWithBadge, { borderColor: "#2563EB", marginLeft: 8 }]}
@@ -693,7 +795,28 @@ const UpcomingDetailsPage = ({ route }) => {
         showsVerticalScrollIndicator={false}
       >
 
-        {isDriver && rideStatus === "pending" && scheduleEarly && (
+        {driverPendingRide && (
+          <View style={styles.driverActionsCard}>
+            <Text style={styles.driverActionsTitle}>Driver actions</Text>
+            <Text style={styles.driverActionsHint}>
+              {canCancelNow
+                ? "You may cancel until 2 hours before the scheduled start."
+                : `Cancel unlocks 2+ hours before start (${formatLeadTimeHint(effectiveRide)}).`}
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.driverActionBtn,
+                styles.driverActionCancel,
+                !canCancelNow && styles.driverActionMuted,
+              ]}
+              onPress={openCancelRide}
+            >
+              <Text style={styles.driverActionCancelText}>Cancel ride</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {isDriver && normalizedRideStatus === "pending" && scheduleEarly && (
           <View style={[styles.verificationBanner, { backgroundColor: "#EFF6FF" }]}>
             <Text style={styles.verificationBannerText}>
               Scheduled for {formatScheduledStart(rideData)} — you can start this ride early.
@@ -701,7 +824,7 @@ const UpcomingDetailsPage = ({ route }) => {
           </View>
         )}
 
-        {isDriver && rideStatus === "pending" && schedulePassed && (
+        {isDriver && normalizedRideStatus === "pending" && schedulePassed && (
           <View style={[styles.verificationBanner, { backgroundColor: "#EFF6FF" }]}>
             <Text style={styles.verificationBannerText}>
               Scheduled time has passed — you can still start this ride now.
@@ -710,7 +833,7 @@ const UpcomingDetailsPage = ({ route }) => {
         )}
 
         {isDriver &&
-          (rideStatus === "pending" || rideStatus === "started") &&
+          (normalizedRideStatus === "pending" || normalizedRideStatus === "started") &&
           verification?.total > 0 && (
           <View
             style={[
@@ -724,17 +847,17 @@ const UpcomingDetailsPage = ({ route }) => {
           >
             <Text style={styles.verificationBannerText}>
               {verification.allVerified
-                ? rideStatus === "started"
+                ? normalizedRideStatus === "started"
                   ? "All passengers and couriers verified."
                   : "All passengers and couriers verified. You can start the ride."
-                : rideStatus === "started"
+                : normalizedRideStatus === "started"
                   ? `${verification.pending} of ${verification.total} still need OTP verification — verify anytime during the ride.`
                   : `${verification.pending} of ${verification.total} still need OTP verification.`}
             </Text>
           </View>
         )}
 
-        {!isDriver && myBoarding && rideStatus === "pending" && (
+        {showBoardingOtp && (
           <View style={styles.boardingCard}>
             <Text style={styles.boardingTitle}>Your boarding details</Text>
             <Text style={styles.boardingLine}>
@@ -749,7 +872,9 @@ const UpcomingDetailsPage = ({ route }) => {
             <Text style={styles.boardingHint}>
               {myBoarding.isBoardingVerified
                 ? "Verified by driver ✓"
-                : "Share your User ID and OTP with the driver before the ride starts."}
+                : normalizedRideStatus === "started"
+                  ? "Ride in progress — keep your User ID and OTP visible for the driver if needed."
+                  : "Share your User ID and OTP with the driver before the ride starts."}
             </Text>
           </View>
         )}
@@ -852,7 +977,7 @@ const UpcomingDetailsPage = ({ route }) => {
             <Text style={styles.label}>
               <Image source={clock} style={styles.icon} /> Start Time
             </Text>
-            <Text style={styles.value}>{convertTime(rideData?.startTime)}</Text>
+            <Text style={styles.value}>{convertTime(effectiveRide?.startTime)}</Text>
           </View>
         </View>
 
@@ -1172,7 +1297,18 @@ const UpcomingDetailsPage = ({ route }) => {
       <BottomSlider
         visible={activeSlider !== null}
         onClose={() => setActiveSlider(null)}
-        height={activeSlider === "otp" ? 420 : 100}
+        scrollable={
+          activeSlider === "otp" ||
+          activeSlider === "enroute" ||
+          activeSlider === "removePassenger"
+        }
+        height={
+          activeSlider === "otp"
+            ? 420
+            : activeSlider === "cancelRide"
+              ? 480
+              : 100
+        }
       >
 
         {/* OTP */}
@@ -1239,6 +1375,14 @@ const UpcomingDetailsPage = ({ route }) => {
           />
         )}
 
+        {activeSlider === "cancelRide" && (
+          <RideDriverActionForm
+            submitting={driverActionSubmitting}
+            onSubmit={handleCancelRideSubmit}
+            onClose={() => setActiveSlider(null)}
+          />
+        )}
+
       </BottomSlider>
 
       <DriverParticipantPopover
@@ -1254,23 +1398,24 @@ const UpcomingDetailsPage = ({ route }) => {
           title={
             !rideStatus
               ? "Loading..."
-              : rideStatus === "pending"
+              : normalizedRideStatus === "pending"
                 ? "Start Ride"
-                : rideStatus === "started"
+                : normalizedRideStatus === "started"
                   ? "Complete Ride"
                   : "Ride Completed"
           }
           onPress={
-            rideStatus === "pending"
+            normalizedRideStatus === "pending"
               ? handleStartRide
-              : rideStatus === "started"
+              : normalizedRideStatus === "started"
                 ? handleEndRide
                 : null
           }
           disabled={
-            !rideStatus ||
-            rideStatus === "completed" ||
-            rideStatus === "cancelled" ||
+            !normalizedRideStatus ||
+            normalizedRideStatus === "completed" ||
+            normalizedRideStatus === "cancelled" ||
+            normalizedRideStatus === "expired" ||
             loadingRide
           }
           loading={loadingRide}
@@ -1292,6 +1437,44 @@ const styles = StyleSheet.create({
     marginBottom: LAYOUT.spacing.md,
     marginTop: LAYOUT.spacing.sm,
     gap: 8,
+  },
+  driverActionsCard: {
+    backgroundColor: "#FEF2F2",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  driverActionsTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#991B1B",
+    marginBottom: 4,
+  },
+  driverActionsHint: {
+    fontSize: 12,
+    color: "#7F1D1D",
+    lineHeight: 17,
+    marginBottom: 12,
+  },
+  driverActionBtn: {
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    borderWidth: 1,
+  },
+  driverActionCancel: {
+    backgroundColor: "#fff",
+    borderColor: "#DC2626",
+  },
+  driverActionMuted: {
+    opacity: 0.55,
+  },
+  driverActionCancelText: {
+    color: "#DC2626",
+    fontWeight: "700",
+    fontSize: 14,
   },
   chipWithBadge: {
     position: "relative",

@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import { View, TouchableOpacity, StyleSheet } from "react-native";
 import Icon from "react-native-vector-icons/FontAwesome";
+import LinearGradient from "react-native-linear-gradient";
 import AppTextInput from "./ui/AppTextInput";
+import { AUTH_GRADIENTS } from "../theme/authTheme";
 import { LAYOUT } from "../theme/layout";
 
 const AuthTextInput = ({
@@ -18,28 +20,38 @@ const AuthTextInput = ({
 
   return (
     <View style={styles.container}>
-      <AppTextInput
-        style={styles.input}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        keyboardType={keyboardType}
-        secureTextEntry={isPassword && !showPassword}
-        maxLength={maxLength}
-        autoCapitalize={autoCapitalize}
-      />
-      {isPassword && (
-        <TouchableOpacity
-          style={styles.eyeButton}
-          onPress={() => setShowPassword(!showPassword)}
-        >
-          <Icon
-            name={showPassword ? "eye" : "eye-slash"}
-            size={20}
-            color="#64748B"
+      <LinearGradient
+        colors={AUTH_GRADIENTS.cardBorder}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.border}
+      >
+        <View style={styles.inner}>
+          <AppTextInput
+            style={styles.input}
+            value={value}
+            onChangeText={onChangeText}
+            placeholder={placeholder}
+            keyboardType={keyboardType}
+            secureTextEntry={isPassword && !showPassword}
+            maxLength={maxLength}
+            autoCapitalize={autoCapitalize}
           />
-        </TouchableOpacity>
-      )}
+          {isPassword && (
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowPassword(!showPassword)}
+              hitSlop={8}
+            >
+              <Icon
+                name={showPassword ? "eye" : "eye-slash"}
+                size={20}
+                color="#64748B"
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+      </LinearGradient>
     </View>
   );
 };
@@ -48,12 +60,23 @@ export default AuthTextInput;
 
 const styles = StyleSheet.create({
   container: {
+    marginBottom: LAYOUT.spacing.sm,
+  },
+  border: {
+    borderRadius: LAYOUT.radius.md + 2,
+    padding: 1.5,
+  },
+  inner: {
     position: "relative",
-    marginBottom: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: LAYOUT.radius.md,
+    overflow: "hidden",
   },
   input: {
     height: LAYOUT.sizes.inputHeight,
-    paddingRight: 40,
+    paddingRight: 44,
+    backgroundColor: "transparent",
+    borderWidth: 0,
   },
   eyeButton: {
     position: "absolute",

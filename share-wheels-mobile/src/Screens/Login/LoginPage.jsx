@@ -32,7 +32,7 @@ const LoginPage = ({ navigation, triggerAuth }) => {
         password,
       });
 
-      if (res?.token) {
+      if (res?.success !== false && res?.token) {
         await AsyncStorage.setItem("token", res.token);
         await AsyncStorage.setItem("user", JSON.stringify(res.user));
         if (res.user?.name) {
@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#334155",
+    color: AUTH_COLORS.text,
     marginBottom: 6,
   },
   error: {
@@ -113,12 +113,11 @@ const styles = StyleSheet.create({
   },
   footer: {
     fontSize: 15,
-    color: AUTH_COLORS.textMuted,
-    marginTop: 24,
+    color: AUTH_COLORS.textMutedOnDark,
     textAlign: "center",
   },
   link: {
-    color: AUTH_COLORS.primary,
+    color: AUTH_COLORS.link,
     fontWeight: "700",
   },
 });

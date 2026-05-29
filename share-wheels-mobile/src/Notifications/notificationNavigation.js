@@ -10,6 +10,14 @@ const RIDE_TYPES = new Set([
   "courier_request",
   "courier_joined",
   "courier_assigned",
+  "ride_cancelled",
+  "ride_postponed",
+  "ride_started",
+  "ride_completed",
+  "ride_expired",
+  "boarding_otp_issued",
+  "boarding_otp_updated",
+  "boarding_otp_verified",
 ]);
 
 /**
@@ -70,7 +78,6 @@ export async function handleNotificationOpen(navigation, remoteMessage) {
     if (ride) {
       navigation.navigate("UpcomingDetailsPage", {
         rideData: ride,
-        refreshRides: () => {},
       });
       return;
     }

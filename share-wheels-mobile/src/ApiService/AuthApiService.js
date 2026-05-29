@@ -1,99 +1,65 @@
-import { baseUrl, endPoints } from "../Config";
+import { baseUrl, endPoints, getApiConnectionHint } from "../Config";
 import { parseApiResponse } from "../Utils/parseApiResponse";
+import { getApiErrorMessage, apiFail } from "../Utils/apiErrors";
 import { appendImageFile } from "../Utils/imageUpload";
 
-export const signupApi = async (data) => {
-  try {
-    const res = await fetch(baseUrl + endPoints.signup, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    return await res.json();
-  } catch (e) {
-    console.log("Signup error", e);
-  }
-};
+async function authRequest(path, { method = "POST", body, token } = {}) {
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
 
-export const loginApi = async (data) => {
+  let response;
   try {
-    const res = await fetch(baseUrl + endPoints.login, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+    response = await fetch(baseUrl + path, {
+      method,
+      headers,
+      body: body != null ? JSON.stringify(body) : undefined,
     });
-    return await res.json();
-  } catch (e) {
-    console.log("Login error", e);
+  } catch {
+    const hint = __DEV__ ? `\n\n${getApiConnectionHint()}` : "";
+    return apiFail(`Could not reach the server at ${baseUrl}.${hint}`);
   }
-};
+
+  let data;
+  try {
+    data = await parseApiResponse(response);
+  } catch (e) {
+    return apiFail(e.message || "Invalid server response");
+  }
+
+  if (!response.ok) {
+    return apiFail(getApiErrorMessage(data, `Request failed (${response.status})`));
+  }
+
+  return { success: true, ...data };
+}
+
+export const signupApi = (data) => authRequest(endPoints.signup, { body: data });
+
+export const loginApi = (data) => authRequest(endPoints.login, { body: data });
+
+export const verifyOtpApi = (data) => authRequest(endPoints.verifyOtp, { body: data });
+
+export const verifyTokenApi = (token) =>
+  authRequest(endPoints.verifyToken, { method: "POST", token });
 
 export const registerFcmTokenApi = async (token, fcmToken) => {
-  const res = await fetch(baseUrl + "/auth/register-fcm-token", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ fcmToken }),
+  const result = await authRequest(endPoints.registerFcmTokenurl, {
+    body: { fcmToken },
+    token,
   });
-  return parseApiResponse(res);
-};
-
-export const verifyOtpApi = async (data) => {
-  try {
-    const res = await fetch(baseUrl + endPoints.verifyOtp, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    return await res.json();
-  } catch (e) {
-    console.log("OTP error", e);
-  }
-};
-
-
-export const verifyTokenApi = async (token) => {
-  try {
-    const res = await fetch(baseUrl + endPoints.verifyToken, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`, // ✅ Bearer token
-      },
-    });
-
-    return await res.json();
-  } catch (e) {
-    console.log("Verify token error", e);
-  }
+  return result;
 };
 
 export const userTermsApi = async (token, isAccepted) => {
-  try {
-    if (!token) throw new Error("Token is missing");
-    if (typeof isAccepted !== "boolean") throw new Error("isAccepted must be true or false");
-
-    const response = await fetch(baseUrl + endPoints.userTermsurl, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ isAccepted }),
-    });
-
-
-    if (response.success == false) {
-      throw new Error(data.message || "Failed to update terms");
-    }
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error("User Terms API Error 👉", error.message);
-    return { success: false, message: error.message };
+  if (!token) return apiFail("Session expired. Please sign in again.");
+  if (typeof isAccepted !== "boolean") {
+    return apiFail("Invalid terms acceptance value");
   }
+  return authRequest(endPoints.userTermsurl, {
+    method: "PUT",
+    body: { isAccepted },
+    token,
+  });
 };
 
 export const editVechileApi = async (token, data, imageFiles = {}) => {
@@ -124,8 +90,12 @@ export const editVechileApi = async (token, data, imageFiles = {}) => {
       body: formData,
     });
 
-    return await parseApiResponse(res);
+    const parsed = await parseApiResponse(res);
+    if (!res.ok) {
+      return apiFail(getApiErrorMessage(parsed, "Failed to update vehicle"));
+    }
+    return { success: true, ...parsed };
   } catch (e) {
-    return { success: false, message: e.message };
+    return apiFail(e.message || "Failed to update vehicle");
   }
 };

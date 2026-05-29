@@ -169,10 +169,9 @@ const DashboardPage = () => {
       navigation.navigate("UpcomingDetailsPage", {
         rideData: ride,
         role: ride.myRole,
-        refreshRides: fetchUpcomingRides,
       });
     },
-    [navigation, fetchUpcomingRides]
+    [navigation]
   );
 
   const expandFilters = () => {

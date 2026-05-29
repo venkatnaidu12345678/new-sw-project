@@ -43,15 +43,14 @@ export function useRideSocket(rideId, { onParticipantsUpdated, onRequestUpdated 
   useEffect(() => {
     if (!rideId) return undefined;
 
-    let unsubParticipants = () => {};
-    let unsubRequest = () => {};
     let active = true;
+    const cleanups = [];
 
     (async () => {
       await joinRideRoom(rideId);
       if (!active) return;
 
-      unsubParticipants = await subscribeSocketEvent(
+      const unsubParticipants = await subscribeSocketEvent(
         "rideParticipantsUpdated",
         (payload) => {
           if (
@@ -62,8 +61,13 @@ export function useRideSocket(rideId, { onParticipantsUpdated, onRequestUpdated 
           }
         }
       );
+      if (!active) {
+        unsubParticipants();
+        return;
+      }
+      cleanups.push(unsubParticipants);
 
-      unsubRequest = await subscribeSocketEvent("rideRequestUpdated", (payload) => {
+      const unsubRequest = await subscribeSocketEvent("rideRequestUpdated", (payload) => {
         if (
           payload?.rideId?.toString() ===
           (rideId?.toString?.() || String(rideId))
@@ -71,12 +75,22 @@ export function useRideSocket(rideId, { onParticipantsUpdated, onRequestUpdated 
           onRequestRef.current?.(payload);
         }
       });
+      if (!active) {
+        unsubRequest();
+        return;
+      }
+      cleanups.push(unsubRequest);
     })();
 
     return () => {
       active = false;
-      unsubParticipants();
-      unsubRequest();
+      cleanups.forEach((fn) => {
+        try {
+          fn();
+        } catch {
+          /* ignore */
+        }
+      });
       leaveRideRoom(rideId);
     };
   }, [rideId]);
@@ -95,21 +109,32 @@ export function useEnrouteSocket({ from, to, date, onRequestRemoved }) {
   useEffect(() => {
     if (!from || !to) return undefined;
 
-    let unsub = () => {};
     let active = true;
+    const cleanups = [];
 
     (async () => {
       await joinEnrouteRoom({ from, to, date });
       if (!active) return;
 
-      unsub = await subscribeSocketEvent("enrouteRequestRemoved", (payload) => {
+      const unsub = await subscribeSocketEvent("enrouteRequestRemoved", (payload) => {
         onRemovedRef.current?.(payload);
       });
+      if (!active) {
+        unsub();
+        return;
+      }
+      cleanups.push(unsub);
     })();
 
     return () => {
       active = false;
-      unsub();
+      cleanups.forEach((fn) => {
+        try {
+          fn();
+        } catch {
+          /* ignore */
+        }
+      });
       leaveEnrouteRoom({ from, to, date });
     };
   }, [from, to, date]);
@@ -126,20 +151,31 @@ export function useMyRequestsSocket(onUpdated) {
   }, [onUpdated]);
 
   useEffect(() => {
-    let unsub = () => {};
     let active = true;
+    const cleanups = [];
 
     (async () => {
       await connectAppSocket();
       if (!active) return;
-      unsub = await subscribeSocketEvent("myRequestsUpdated", (payload) => {
+      const unsub = await subscribeSocketEvent("myRequestsUpdated", (payload) => {
         onUpdatedRef.current?.(payload);
       });
+      if (!active) {
+        unsub();
+        return;
+      }
+      cleanups.push(unsub);
     })();
 
     return () => {
       active = false;
-      unsub();
+      cleanups.forEach((fn) => {
+        try {
+          fn();
+        } catch {
+          /* ignore */
+        }
+      });
     };
   }, []);
 }

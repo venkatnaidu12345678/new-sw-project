@@ -274,26 +274,32 @@ export const useParticipantLocation = ({ enabled, rideId, token }) => {
     };
 
     let intervalId;
+    let cancelled = false;
 
     (async () => {
       const ok = await requestLocationPermission();
-      if (!ok) {
+      if (!ok || cancelled) {
         console.warn("[GPS] permission denied");
         return;
       }
 
       try {
         await connectRideSocket(token);
+        if (cancelled) return;
         joinRideRoom(rideId);
       } catch (e) {
         console.warn("[Socket] tracking connect failed:", e.message);
       }
+
+      if (cancelled) return;
 
       try {
         await pushDriverLocationNow(rideId, token);
       } catch (e) {
         console.warn("[GPS] initial ping:", e.message);
       }
+
+      if (cancelled) return;
 
       watchId.current = Geolocation.watchPosition(pushLocation, onError, WATCH_OPTIONS);
 
@@ -311,6 +317,7 @@ export const useParticipantLocation = ({ enabled, rideId, token }) => {
     })();
 
     return () => {
+      cancelled = true;
       if (intervalId) clearInterval(intervalId);
       if (watchId.current != null) {
         Geolocation.clearWatch(watchId.current);

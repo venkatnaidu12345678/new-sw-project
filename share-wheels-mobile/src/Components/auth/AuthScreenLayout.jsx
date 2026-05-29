@@ -5,10 +5,17 @@ import {
   StyleSheet,
   Image,
   TouchableOpacity,
+  StatusBar,
 } from "react-native";
+import LinearGradient from "react-native-linear-gradient";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import KeyboardAwareScreen from "../ui/KeyboardAwareScreen";
-import ScreenContainer from "../ui/ScreenContainer";
-import { AUTH_COLORS, AUTH_SPACING, AUTH_FONT } from "../../theme/authTheme";
+import {
+  AUTH_COLORS,
+  AUTH_SPACING,
+  AUTH_FONT,
+  AUTH_GRADIENTS,
+} from "../../theme/authTheme";
 import { LAYOUT, scale } from "../../theme/layout";
 import icon from "../../assets/icon.png";
 
@@ -19,46 +26,73 @@ const AuthScreenLayout = ({
   footer,
   showBack,
   onBack,
-}) => (
-  <ScreenContainer backgroundColor={AUTH_COLORS.background} edges={["top", "bottom"]}>
-    <KeyboardAwareScreen
-      scrollable
-      contentContainerStyle={styles.scroll}
-      header={
-        <View style={styles.headerBlock}>
-          {showBack ? (
-            <TouchableOpacity onPress={onBack} style={styles.backBtn} hitSlop={12}>
-              <Text style={styles.backText}>← Back</Text>
-            </TouchableOpacity>
-          ) : null}
+}) => {
+  const insets = useSafeAreaInsets();
 
-          <View style={styles.brandRow}>
-            <Image source={icon} style={styles.logo} resizeMode="contain" />
-            <View>
-              <Text style={styles.brand}>Share Wheels</Text>
-              <Text style={styles.brandTag}>Ride together, save together</Text>
-            </View>
-          </View>
-
-          <Text style={styles.title}>{title}</Text>
-          {!!subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-        </View>
-      }
-      headerStyle={styles.headerWrap}
+  return (
+    <LinearGradient
+      colors={AUTH_GRADIENTS.screen}
+      locations={AUTH_GRADIENTS.screenLocations}
+      style={styles.root}
     >
-      <View style={styles.form}>{children}</View>
-      {footer}
-    </KeyboardAwareScreen>
-  </ScreenContainer>
-);
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      <KeyboardAwareScreen
+        scrollable
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingTop: insets.top + LAYOUT.spacing.sm, paddingBottom: insets.bottom + LAYOUT.spacing.lg },
+        ]}
+        header={
+          <View style={styles.headerBlock}>
+            {showBack ? (
+              <TouchableOpacity onPress={onBack} style={styles.backBtn} hitSlop={12}>
+                <Text style={styles.backText}>← Back</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            <View style={styles.brandRow}>
+              <LinearGradient
+                colors={AUTH_GRADIENTS.hero}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.logoWrap}
+              >
+                <Image source={icon} style={styles.logo} resizeMode="contain" />
+              </LinearGradient>
+              <View style={styles.brandTextCol}>
+                <Text style={styles.brand}>Share Wheels</Text>
+                <Text style={styles.brandTag}>Ride together, save together</Text>
+              </View>
+            </View>
+
+            <Text style={styles.title}>{title}</Text>
+            {!!subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+          </View>
+        }
+        headerStyle={styles.headerWrap}
+      >
+        <LinearGradient
+          colors={AUTH_GRADIENTS.cardBorder}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.cardBorder}
+        >
+          <View style={styles.card}>{children}</View>
+        </LinearGradient>
+        {footer ? <View style={styles.footerWrap}>{footer}</View> : null}
+      </KeyboardAwareScreen>
+    </LinearGradient>
+  );
+};
 
 export default AuthScreenLayout;
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   headerWrap: {
     paddingHorizontal: AUTH_SPACING.screen,
-    paddingTop: LAYOUT.spacing.sm,
-    backgroundColor: AUTH_COLORS.background,
   },
   headerBlock: {
     flexShrink: 0,
@@ -66,47 +100,69 @@ const styles = StyleSheet.create({
   scroll: {
     flexGrow: 1,
     paddingHorizontal: AUTH_SPACING.screen,
-    paddingBottom: LAYOUT.spacing.lg,
   },
   backBtn: { marginBottom: LAYOUT.spacing.sm },
   backText: {
     fontSize: AUTH_FONT.back,
-    color: AUTH_COLORS.primary,
+    color: AUTH_COLORS.link,
     fontWeight: "600",
   },
   brandRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: LAYOUT.spacing.sm,
+    marginTop: LAYOUT.spacing.xs,
     marginBottom: LAYOUT.spacing.lg,
     gap: scale(12),
   },
-  logo: {
-    width: scale(44),
-    height: scale(44),
-    borderRadius: scale(12),
+  logoWrap: {
+    width: scale(52),
+    height: scale(52),
+    borderRadius: scale(14),
+    alignItems: "center",
+    justifyContent: "center",
+    padding: scale(6),
   },
+  logo: {
+    width: scale(40),
+    height: scale(40),
+    borderRadius: scale(10),
+  },
+  brandTextCol: { flex: 1 },
   brand: {
     fontSize: AUTH_FONT.brand,
     fontWeight: "800",
-    color: AUTH_COLORS.text,
+    color: AUTH_COLORS.textOnDark,
   },
   brandTag: {
     fontSize: AUTH_FONT.subtitle,
-    color: AUTH_COLORS.textMuted,
+    color: AUTH_COLORS.textMutedOnDark,
     marginTop: 2,
   },
   title: {
     fontSize: AUTH_FONT.title,
     fontWeight: "800",
-    color: AUTH_COLORS.text,
-    marginBottom: LAYOUT.spacing.sm,
+    color: AUTH_COLORS.textOnDark,
+    marginBottom: LAYOUT.spacing.xs,
   },
   subtitle: {
     fontSize: AUTH_FONT.subtitle,
-    color: AUTH_COLORS.textMuted,
+    color: AUTH_COLORS.textMutedOnDark,
     lineHeight: scale(20),
-    marginBottom: LAYOUT.spacing.lg,
+    marginBottom: LAYOUT.spacing.md,
   },
-  form: { width: "100%" },
+  cardBorder: {
+    borderRadius: LAYOUT.radius.lg + 2,
+    padding: 2,
+    marginTop: LAYOUT.spacing.xs,
+  },
+  card: {
+    backgroundColor: AUTH_COLORS.surfaceGlass,
+    borderRadius: LAYOUT.radius.lg,
+    padding: LAYOUT.spacing.lg,
+    paddingBottom: LAYOUT.spacing.md,
+  },
+  footerWrap: {
+    marginTop: LAYOUT.spacing.lg,
+    paddingHorizontal: LAYOUT.spacing.xs,
+  },
 });

@@ -295,7 +295,7 @@ function getOfflineReply(text) {
   if (text.includes("payment"))
     return "For payment issues, note your ride route and date. Pay the driver as agreed (price × seats).";
   if (text.includes("cancel"))
-    return "Drivers can cancel at least 1 hour before start. Check Upcoming for ride status.";
+    return "Drivers can cancel or postpone at least 2 hours before start (postpone once, up to 2 hours). Check Upcoming for ride status.";
   if (text.includes("driver"))
     return "If the driver isn't responding, check Upcoming or search for another ride on the same route.";
   if (text.includes("courier"))
