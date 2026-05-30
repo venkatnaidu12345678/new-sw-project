@@ -66,7 +66,8 @@ import { DS } from "../theme/designSystem";
 import caricon from "../assets/caricon.png";
 import courier from "../assets/courier.png"
 import { useRoute, useNavigation } from "@react-navigation/native";
-import { convertDate, convertTime } from '../Utils';
+import { convertDate } from '../Utils';
+import { formatDisplayTime } from '../Utils/dateUtils';
 import { formatLocalISODate } from "../Utils/dateUtils";
 import { getRideDisplayFare, getPassengerFare, getCourierFare } from '../Utils/fareUtils'
 import { useFocusEffect } from '@react-navigation/native';
@@ -977,7 +978,9 @@ const UpcomingDetailsPage = ({ route }) => {
             <Text style={styles.label}>
               <Image source={clock} style={styles.icon} /> Start Time
             </Text>
-            <Text style={styles.value}>{convertTime(effectiveRide?.startTime)}</Text>
+            <Text style={styles.value}>
+              {formatDisplayTime(effectiveRide?.startTime) || "—"}
+            </Text>
           </View>
         </View>
 

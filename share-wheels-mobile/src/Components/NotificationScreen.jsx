@@ -16,6 +16,7 @@ import ScreenContainer from "./ui/ScreenContainer";
 import { useNotifications } from "../context/NotificationsContext";
 import { handleNotificationOpen } from "../Notifications/notificationNavigation";
 import { LAYOUT } from "../theme/layout";
+import { formatDisplayTime } from "../Utils/dateUtils";
 
 const HEADER_GRADIENT = ["#2563EB", "#4F46E5", "#7C3AED"];
 
@@ -41,12 +42,13 @@ const getTheme = (type) => {
 
 const formatTime = (dateStr) => {
   try {
-    return new Date(dateStr).toLocaleString([], {
+    const d = new Date(dateStr);
+    const datePart = d.toLocaleDateString("en-IN", {
       month: "short",
       day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
     });
+    const timePart = formatDisplayTime(d);
+    return timePart ? `${datePart}, ${timePart}` : datePart;
   } catch {
     return "";
   }

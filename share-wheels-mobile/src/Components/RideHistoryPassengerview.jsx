@@ -20,6 +20,7 @@ import madhapurIcon from "../assets/madhapuricon.png";
 import kondapurIcon from "../assets/kondapuricon.png";
 import starIcon from "../assets/staricon.png";
 import { getRideDisplayFare } from "../Utils/fareUtils";
+import { formatDisplayTime } from "../Utils/dateUtils";
 
 const RideHistoryPassengerView = ({ ride, loading }) => {
   if (!ride) return null;
@@ -29,13 +30,7 @@ const RideHistoryPassengerView = ({ ride, loading }) => {
     (ride.date ? new Date(ride.date).toLocaleDateString() : "—");
 
   const formattedTime =
-    ride.formattedTime ||
-    (ride.startTime
-      ? new Date(ride.startTime).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-      : "—");
+    ride.formattedTime || formatDisplayTime(ride.startTime) || "—";
 
   const seats =
     ride.requires_seats ||
@@ -56,7 +51,7 @@ const RideHistoryPassengerView = ({ ride, loading }) => {
       ) : (
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 110 }}
+        contentContainerStyle={styles.scrollContent}
       >
         {/* ROUTE */}
         <View style={styles.routeCard}>
@@ -140,16 +135,15 @@ const RideHistoryPassengerView = ({ ride, loading }) => {
         {ride?.vehicle ? (
           <VehicleInfoStrip vehicle={ride.vehicle} />
         ) : null}
+
+        <LinearGradient colors={["#1D4ED8", "#2563EB"]} style={styles.totalCard}>
+          <View>
+            <Text style={styles.totalLabel}>Total Fare</Text>
+            <Text style={styles.totalAmount}>₹{totalFare}</Text>
+          </View>
+        </LinearGradient>
       </ScrollView>
       )}
-
-      {/* TOTAL FARE */}
-      <LinearGradient colors={["#1D4ED8", "#2563EB"]} style={styles.totalCard}>
-        <View>
-          <Text style={styles.totalLabel}>Total Fare</Text>
-          <Text style={styles.totalAmount}>₹{totalFare}</Text>
-        </View>
-      </LinearGradient>
     </View>
   );
 };
@@ -333,13 +327,15 @@ const styles = StyleSheet.create({
     height: 14,
   },
 
+  scrollContent: {
+    paddingBottom: 24,
+    flexGrow: 1,
+  },
   totalCard: {
-    position: "absolute",
-    bottom: 16,
-    left: 16,
-    right: 16,
+    marginTop: 20,
+    marginBottom: 8,
     borderRadius: 18,
-    padding: 28,
+    padding: 18,
     shadowColor: "#1E3A8A",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.18,

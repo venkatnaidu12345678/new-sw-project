@@ -20,6 +20,7 @@ import { validators } from "../Utils.js";
 import { DS } from "../theme/designSystem";
 import { INPUT_COLORS } from "../theme/inputTheme";
 import { CR } from "../theme/createRideTheme";
+import { formatDisplayTime } from "../Utils/dateUtils";
 
 const SectionHeader = ({ icon, iconBg, iconColor, title, subtitle }) => (
   <View style={styles.sectionHeader}>
@@ -89,7 +90,12 @@ const CreateRideComponentOne = forwardRef(
       if (Platform.OS !== "ios") setShowTimePicker(false);
       if (event?.type === "set" && selectedTime) {
         setTouchedTime(true);
-        updateRideData("startTime", selectedTime.toISOString());
+        const h = selectedTime.getHours();
+        const m = selectedTime.getMinutes();
+        updateRideData(
+          "startTime",
+          `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`
+        );
       }
     };
 
@@ -100,10 +106,7 @@ const CreateRideComponentOne = forwardRef(
     const isTimeValid = !timeError;
 
     const timeLabel = rideData.startTime
-      ? new Date(rideData.startTime).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        })
+      ? formatDisplayTime(rideData.startTime) || String(rideData.startTime).trim()
       : "Select start time";
 
     return (
@@ -276,9 +279,17 @@ const CreateRideComponentOne = forwardRef(
 
         {showTimePicker ? (
           <DateTimePicker
-            value={
-              rideData.startTime ? new Date(rideData.startTime) : new Date()
-            }
+            value={(() => {
+              const t = String(rideData.startTime || "").trim();
+              const hhmm = t.match(/^(\d{1,2}):(\d{2})/);
+              if (hhmm) {
+                const d = new Date();
+                d.setHours(parseInt(hhmm[1], 10), parseInt(hhmm[2], 10), 0, 0);
+                return d;
+              }
+              const parsed = new Date(t);
+              return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+            })()}
             mode="time"
             display={Platform.OS === "ios" ? "spinner" : "default"}
             onChange={onTimeChange}
@@ -464,6 +475,8 @@ const styles = StyleSheet.create({
   },
   toggles: {
     gap: DS.spacing.sm,
+    width: "100%",
+    alignSelf: "stretch",
   },
   required: {
     color: "#EF4444",

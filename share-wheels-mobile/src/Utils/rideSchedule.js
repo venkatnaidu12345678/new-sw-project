@@ -1,23 +1,32 @@
-/** Parse scheduled ride start (date + HH:mm or ISO startTime). Matches backend rideScheduleUtils. */
+/** Parse scheduled ride start — mirrors backend rideScheduleUtils. */
+const getUtcCalendarParts = (dateValue) => {
+  if (dateValue == null || dateValue === "") return null;
+  const d = new Date(dateValue);
+  if (Number.isNaN(d.getTime())) return null;
+  return {
+    year: d.getUTCFullYear(),
+    month: d.getUTCMonth(),
+    day: d.getUTCDate(),
+  };
+};
+
+const scheduledStartFromParts = (parts, hours, minutes, seconds = 0, millis = 0) =>
+  new Date(parts.year, parts.month, parts.day, hours, minutes, seconds, millis);
+
 export const parseRideScheduledStart = (ride) => {
-  if (!ride?.date) return null;
+  const parts = getUtcCalendarParts(ride?.date);
+  if (!parts) return null;
 
-  const raw = ride.startTime;
-  const rideDay = new Date(ride.date);
-  if (Number.isNaN(rideDay.getTime())) return null;
-
-  if (!raw) return rideDay;
+  const raw = ride?.startTime;
+  if (raw == null || String(raw).trim() === "") {
+    return scheduledStartFromParts(parts, 0, 0);
+  }
 
   const rawStr = String(raw).trim();
-  const applyTimeOnRideDay = (hours, minutes, seconds = 0, millis = 0) => {
-    const d = new Date(rideDay);
-    d.setHours(hours, minutes, seconds, millis);
-    return d;
-  };
-
   const hhmmMatch = rawStr.match(/^(\d{1,2}):(\d{2})/);
   if (hhmmMatch) {
-    return applyTimeOnRideDay(
+    return scheduledStartFromParts(
+      parts,
       parseInt(hhmmMatch[1], 10),
       parseInt(hhmmMatch[2], 10),
       0,
@@ -28,25 +37,31 @@ export const parseRideScheduledStart = (ride) => {
   if (/T/.test(rawStr) || rawStr.includes("Z")) {
     const iso = new Date(rawStr);
     if (!Number.isNaN(iso.getTime())) {
-      return applyTimeOnRideDay(
-        iso.getHours(),
-        iso.getMinutes(),
-        iso.getSeconds(),
-        iso.getMilliseconds()
-      );
+      const isoDay = getUtcCalendarParts(iso);
+      if (
+        isoDay &&
+        isoDay.year === parts.year &&
+        isoDay.month === parts.month &&
+        isoDay.day === parts.day
+      ) {
+        return iso;
+      }
+      return scheduledStartFromParts(parts, iso.getHours(), iso.getMinutes());
     }
   }
 
   const parsed = new Date(rawStr);
   if (!Number.isNaN(parsed.getTime())) {
-    return applyTimeOnRideDay(
+    return scheduledStartFromParts(
+      parts,
       parsed.getHours(),
       parsed.getMinutes(),
       parsed.getSeconds(),
       parsed.getMilliseconds()
     );
   }
-  return rideDay;
+
+  return scheduledStartFromParts(parts, 0, 0);
 };
 
 export const isRideScheduledTimePassed = (ride) => {
@@ -83,7 +98,6 @@ export const msUntilScheduledStart = (ride) => {
   return start ? start.getTime() - Date.now() : null;
 };
 
-/** Human-readable time until scheduled start (for UI hints). */
 export const formatLeadTimeHint = (ride) => {
   const ms = msUntilScheduledStart(ride);
   if (ms == null) return "";

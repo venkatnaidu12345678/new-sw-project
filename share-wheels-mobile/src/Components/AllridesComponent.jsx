@@ -16,37 +16,13 @@ import { DS } from "../theme/designSystem";
 import { RideListSkeleton } from "./ui/Skeleton";
 import AnimatedLoad from "./ui/AnimatedLoad";
 import AdPlacement from "./ads/AdPlacement";
-import { parseLocalDate } from "../Utils/dateUtils";
+import {
+  formatDisplayDate,
+  formatRideTimeLabel,
+} from "../Utils/dateUtils";
 
 const refId = (ref) =>
   ref?._id?.toString?.() || ref?.toString?.() || "";
-
-const formatDateLabel = (value) => {
-  const d = parseLocalDate(value);
-  if (!d) return "—";
-  return d.toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-  });
-};
-
-const formatTimeLabel = (dateValue, timeValue) => {
-  if (timeValue) {
-    const parsed = new Date(timeValue);
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    }
-    if (typeof timeValue === "string") return timeValue;
-  }
-  if (!dateValue) return "—";
-  const d = new Date(dateValue);
-  return Number.isNaN(d.getTime())
-    ? "—"
-    : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-};
 
 const MetaChip = ({ icon, label }) => (
   <View style={styles.metaChip}>
@@ -128,9 +104,12 @@ const SearchRideCard = ({ item, onPress }) => {
         <View style={styles.metaRow}>
           <MetaChip
             icon="time-outline"
-            label={formatTimeLabel(item?.date, item?.startTime)}
+            label={formatRideTimeLabel(item?.date, item?.startTime)}
           />
-          <MetaChip icon="calendar-outline" label={formatDateLabel(item?.date)} />
+          <MetaChip
+            icon="calendar-outline"
+            label={formatDisplayDate(item?.date, { weekday: false }) || "—"}
+          />
           <MetaChip
             icon="people-outline"
             label={`${seats} seat${seats !== 1 ? "s" : ""}`}

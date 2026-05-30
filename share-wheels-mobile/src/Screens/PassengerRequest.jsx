@@ -1,11 +1,11 @@
-import React, { useState, useRef, useMemo } from "react";
+import React, { useState, useRef } from "react";
 import { Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
 
 import ScreenHeader from "../Components/ui/ScreenHeader";
 import ToggleComponent from "../Components/ToggleComponent";
-import DateAndSeats from "../Components/DateAndSeats";
+import CalenderRange from "../Components/CalenderRange";
 import FixedButton from "../Components/FixedButton";
 import FromToInput from "../Components/FromToInput";
 import KeyboardAwareScreen from "../Components/ui/KeyboardAwareScreen";
@@ -13,6 +13,7 @@ import {
   RequestHero,
   RequestSection,
   RequestPriceInput,
+  RequestSeatsStepper,
 } from "../Components/ui/RequestFormUI";
 
 import { createpassengerrequest } from "../ApiService/ridesApiServices";
@@ -20,42 +21,32 @@ import { validateLocation, validatePrice } from "../Utils";
 import { PASSENGER_THEME as T } from "../theme/requestFormTheme";
 import { DS } from "../theme/designSystem";
 
+const EMPTY_PASSENGER_PAYLOAD = {
+  from: "",
+  to: "",
+  ride_need_date: "",
+  seats_needed: 1,
+  dateStart: "",
+  dateEnd: "",
+  luggage_included: true,
+  amount_will: "",
+};
+
+const goToMyRequestsTab = (navigation, activeTab) => {
+  navigation.navigate("Navigator", {
+    screen: "Request",
+    params: { activeTab },
+  });
+};
+
 const PassengerRequest = () => {
   const navigation = useNavigation();
   const formRef = useRef();
-  const [submitted, setSubmitted] = useState(false);
+  const [formResetKey, setFormResetKey] = useState(0);
 
-  const [payload, setPayload] = useState({
-    from: "",
-    to: "",
-    ride_need_date: "",
-    seats_needed: 1,
-    dateStart: "",
-    dateEnd: "",
-    luggage_included: true,
-    amount_will: "",
-  });
+  const [payload, setPayload] = useState({ ...EMPTY_PASSENGER_PAYLOAD });
 
   const updatePayload = (key, value) => {
-    setPayload((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const scheduleData = useMemo(
-    () => ({
-      ...payload,
-      availableSeats: String(payload.seats_needed || 1),
-    }),
-    [payload]
-  );
-
-  const updateScheduleData = (key, value) => {
-    if (key === "availableSeats") {
-      setPayload((prev) => ({
-        ...prev,
-        seats_needed: Number(value) || 1,
-      }));
-      return;
-    }
     setPayload((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -79,9 +70,7 @@ const PassengerRequest = () => {
   ];
 
   const handleCreateRequest = async () => {
-    setSubmitted(true);
-
-    const isValid = formRef.current?.validate();
+    const isValid = formRef.current?.validate?.();
     if (!isValid) {
       Alert.alert("Check your details", "Please fill in From and To locations.");
       return;
@@ -122,20 +111,26 @@ const PassengerRequest = () => {
 
       const response = await createpassengerrequest(token, finalPayload);
 
+      setPayload({ ...EMPTY_PASSENGER_PAYLOAD });
+      setFormResetKey((k) => k + 1);
+      goToMyRequestsTab(navigation, "Passenger");
+
       Alert.alert(
         "Request posted",
-        response?.message || "Passenger request created successfully.",
-        [
-          {
-            text: "OK",
-            onPress: () => navigation.navigate("Request"),
-          },
-        ]
+        response?.message || "Passenger request created successfully."
       );
     } catch (error) {
       console.log("Passenger Request Error:", error);
       Alert.alert("Error", error?.message || "Failed to create request");
     }
+  };
+
+  const dateAccent = {
+    bg: T.date.bg,
+    border: T.date.border,
+    icon: T.date.icon,
+    label: T.date.icon,
+    surface: T.surface,
   };
 
   return (
@@ -149,7 +144,7 @@ const PassengerRequest = () => {
             backgroundColor={T.pageBg}
             onBack={() => {
               if (navigation.canGoBack()) navigation.goBack();
-              else navigation.navigate("Request");
+              else goToMyRequestsTab(navigation, "Passenger");
             }}
           />
         }
@@ -177,20 +172,33 @@ const PassengerRequest = () => {
           title="Route"
           subtitle="From and To locations"
         >
-          <FromToInput ref={formRef} fields={fields} variant="route" />
+          <FromToInput
+            key={`passenger-route-${formResetKey}`}
+            ref={formRef}
+            fields={fields}
+            variant="route"
+          />
         </RequestSection>
 
         <RequestSection
           theme={T}
           accent={T.sections.schedule}
-          title="When & seats"
-          subtitle="Date range and seats you need"
+          title="Schedule"
+          subtitle="When you need a ride"
         >
-          <DateAndSeats
-            rideData={scheduleData}
-            updateRideData={updateScheduleData}
-            submitted={submitted}
-            embedded
+          <CalenderRange
+            key={`passenger-dates-${formResetKey}`}
+            rideData={payload}
+            updateRideData={updatePayload}
+            startLabel="From date"
+            endLabel="To date"
+            accent={dateAccent}
+          />
+          <RequestSeatsStepper
+            theme={T}
+            label="Seats needed"
+            value={payload.seats_needed}
+            onChange={(n) => updatePayload("seats_needed", n)}
           />
         </RequestSection>
 
@@ -220,6 +228,7 @@ const PassengerRequest = () => {
         >
           <RequestPriceInput
             theme={T}
+            label="Amount per seat (₹)"
             value={payload.amount_will}
             onChangeText={(text) =>
               updatePayload("amount_will", text.replace(/[^0-9]/g, ""))

@@ -99,18 +99,21 @@ const SignupPage = ({ navigation, triggerAuth }) => {
     setLoading(true);
     try {
       const response = await signupApi({
-        name,
+        name: name.trim(),
         email: email.trim().toLowerCase(),
-        mobile: phone,
+        mobile: phone.replace(/\D/g, "").slice(-10),
         gender,
         password,
       });
 
-      if (response?.success !== false && response?.token) {
-        await AsyncStorage.setItem("token", response.token);
-        await AsyncStorage.setItem("user", JSON.stringify(response.user));
-        if (response.user?.name) {
-          await AsyncStorage.setItem("USER_NAME", response.user.name);
+      const token = response?.token || response?.data?.token;
+      const user = response?.user || response?.data?.user;
+
+      if (response?.success !== false && token) {
+        await AsyncStorage.setItem("token", token);
+        await AsyncStorage.setItem("user", JSON.stringify(user || {}));
+        if (user?.name) {
+          await AsyncStorage.setItem("USER_NAME", user.name);
         }
         await syncFcmTokenWithBackend();
         triggerAuth?.();

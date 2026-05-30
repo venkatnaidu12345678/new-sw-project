@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Pressable,
+  Keyboard,
 } from "react-native";
 
 import { validateForm, validateLocation } from "../Utils";
@@ -39,6 +40,7 @@ const FromToInput = forwardRef(({ fields = [], variant }, ref) => {
   const [dropdownState, setDropdownState] = useState({});
   const [errors, setErrors] = useState({});
   const blurTimers = useRef({});
+  const inputRefs = useRef({});
   const selectingRef = useRef(false);
   const { filterLocations } = useLocationSuggestions();
 
@@ -142,6 +144,8 @@ const FromToInput = forwardRef(({ fields = [], variant }, ref) => {
       [key]: { show: false, data: [] },
     }));
     setErrors((prev) => ({ ...prev, [key]: "" }));
+    inputRefs.current[key]?.blur?.();
+    Keyboard.dismiss();
     setTimeout(() => {
       selectingRef.current = false;
     }, 100);
@@ -168,6 +172,9 @@ const FromToInput = forwardRef(({ fields = [], variant }, ref) => {
         </Text>
 
         <TextInput
+          ref={(node) => {
+            if (node) inputRefs.current[field.key] = node;
+          }}
           style={[
             styles.input,
             routeStyle?.input,

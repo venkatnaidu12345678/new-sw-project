@@ -1,3 +1,5 @@
+import { formatDisplayTime } from "./Utils/dateUtils";
+
 /* ---------------- IMAGE UTILS ---------------- */
 
 export const imageToBase64String = (file) => {
@@ -67,17 +69,7 @@ export const convertDate = (isoString) => {
   return formatSingleDate(isoString) === "N/A" ? "" : formatSingleDate(isoString);
 };
 
-export const convertTime = (isoString) => {
-  if (!isoString) return "";
-
-  const date = new Date(isoString);
-
-  return date.toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
-};
+export const convertTime = (isoString) => formatDisplayTime(isoString);
 
 
 /* ---------------- VALIDATORS ---------------- */

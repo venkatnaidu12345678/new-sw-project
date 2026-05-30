@@ -18,6 +18,10 @@ import { syncFcmTokenWithBackend } from "../Notifications/registerToken";
 import {
   registerTokenRefreshHandler,
 } from "../Notifications/FCMService";
+import {
+  connectAppSocket,
+  subscribeSocketEvent,
+} from "../services/appSocket";
 
 const NotificationsContext = createContext(null);
 
@@ -92,6 +96,18 @@ export const NotificationsProvider = ({ children, isAuthenticated }) => {
       syncFcmTokenWithBackend();
     });
 
+    let unsubSocket = () => {};
+    let socketActive = true;
+
+    (async () => {
+      await connectAppSocket();
+      if (!socketActive) return;
+      unsubSocket = await subscribeSocketEvent("notificationReceived", () => {
+        refresh();
+        DeviceEventEmitter.emit(NOTIFICATIONS_REFRESH_EVENT);
+      });
+    })();
+
     const interval = setInterval(refresh, 60000);
     const sub = DeviceEventEmitter.addListener(
       NOTIFICATIONS_REFRESH_EVENT,
@@ -99,7 +115,9 @@ export const NotificationsProvider = ({ children, isAuthenticated }) => {
     );
 
     return () => {
+      socketActive = false;
       unsubRefresh?.();
+      unsubSocket?.();
       clearInterval(interval);
       sub.remove();
     };

@@ -68,16 +68,10 @@ export const LAYOUT = {
   },
 };
 
-/** Space needed above home-indicator + floating tab bar. */
+/** Space needed above docked tab bar (height + safe area). */
 export const getTabBarInset = (bottomInset = 0) => {
-  const navInset = Math.max(bottomInset, Platform.OS === "android" ? 12 : 0);
-  const floatOffset = Platform.OS === "ios" ? 4 : 6;
-  return (
-    LAYOUT.sizes.tabBarHeight +
-    navInset +
-    floatOffset +
-    scale(12)
-  );
+  const navInset = Math.max(bottomInset, Platform.OS === "android" ? 8 : 8);
+  return LAYOUT.sizes.tabBarHeight + navInset;
 };
 
 export const getScrollBottomPadding = (bottomInset = 0, extra = 0) =>

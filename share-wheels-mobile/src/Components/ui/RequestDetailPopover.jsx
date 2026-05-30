@@ -17,6 +17,7 @@ import locationIcon from "../../assets/toicon.png";
 import seatIcon from "../../assets/person.png";
 import carIcon from "../../assets/caricon1.png";
 import { DS } from "../../theme/designSystem";
+import { formatDisplayTime } from "../../Utils/dateUtils";
 
 const MAX_CARD_HEIGHT = Dimensions.get("window").height * 0.78;
 
@@ -40,7 +41,13 @@ const DetailRow = ({ icon, label, value }) => (
   </View>
 );
 
-const RequestDetailPopover = ({ visible, request, loading = false, onClose }) => {
+const RequestDetailPopover = ({
+  visible,
+  request,
+  loading = false,
+  onClose,
+  showRides = false,
+}) => {
   const scale = useRef(new Animated.Value(0.92)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -116,7 +123,18 @@ const RequestDetailPopover = ({ visible, request, loading = false, onClose }) =>
 
                 <View style={styles.detailsBlock}>
                   <DetailRow icon={calendarIcon} label="Date" value={request?.date} />
-                  <DetailRow icon={clockIcon} label="Time" value={request?.time} />
+                  <DetailRow
+                    icon={clockIcon}
+                    label="Time"
+                    value={
+                      request?.time && request.time !== "--"
+                        ? request.time
+                        : formatDisplayTime(
+                            request?.raw?.startTime ||
+                              request?.linkedRide?.startTime
+                          ) || "—"
+                    }
+                  />
                   <DetailRow
                     icon={seatIcon}
                     label={isCourier ? "Parcel" : "Seats"}
@@ -143,6 +161,7 @@ const RequestDetailPopover = ({ visible, request, loading = false, onClose }) =>
                   </View>
                   <Text style={styles.priceText}>{request?.price || "₹0"}</Text>
                 </View>
+
               </ScrollView>
             )}
           </Animated.View>

@@ -7,14 +7,12 @@ import LoginPage from "../Screens/Login/LoginPage";
 import SignupPage from "../Screens/Signup/SignupPage";
 import OtpVerificationPage from "../Screens/OtpVerification/OtpVerificationPage";
 import BottomNavigator from "../Components/BottomNavigator";
-import DashboardPage from "../Screens/DashboardPage";
 import CreateRidePage from "../Screens/CreateRidePage";
 import PassengerRequest from "../Screens/PassengerRequest";
 import CourierRequest from "../Screens/CourierRequest";
 import ChartBoat from "../Screens/ChartBoat";
 import RideDetails from "../Components/RideDetails";
 import RideCreated from "../Components/EnRoute";
-import Request from "../Components/MyRequest";
 import UpcomingDetailsPage from "../Screens/UpcomingDetailsPage";
 import RideChat from "../Screens/RideChat";
 import RideLiveMap from "../Screens/RideLiveMap";
@@ -167,7 +165,6 @@ const AuthNavigator = () => {
         ) : (
           <>
             <Stack.Screen name="Navigator" component={BottomNavigator} />
-            <Stack.Screen name="Dashboard" component={DashboardPage} />
             <Stack.Screen name="CreateRide" component={CreateRidePage} />
             <Stack.Screen name="PassengerRequest" component={PassengerRequest} />
             <Stack.Screen name="CourierRequest" component={CourierRequest} />
@@ -180,7 +177,6 @@ const AuthNavigator = () => {
             <Stack.Screen name="RideHistory" component={RideHistory} />
             <Stack.Screen name="Legal" component={Legal} />
             <Stack.Screen name="NotificationScreen" component={NotificationScreen} />
-            <Stack.Screen name="Request" component={Request} />
           </>
         )}
       </Stack.Navigator>

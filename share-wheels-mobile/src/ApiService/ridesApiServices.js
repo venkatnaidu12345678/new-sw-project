@@ -631,6 +631,23 @@ export const pickPassengerCourier = async (token, payload) => {
   }
 };
 
+/** Normalize GET /rides/my-requests body (flat or nested under `data`). */
+export const normalizeMyRequestsResponse = (result) => {
+  if (!result || typeof result !== "object") {
+    return { passengerRequests: [], courierRequests: [] };
+  }
+  const layer =
+    result.passengerRequests != null || result.courierRequests != null
+      ? result
+      : result.data && typeof result.data === "object"
+        ? result.data
+        : result;
+  return {
+    passengerRequests: layer.passengerRequests || [],
+    courierRequests: layer.courierRequests || [],
+  };
+};
+
 export const getMyRequests = async (token) => {
   try {
     const response = await fetch(
@@ -650,7 +667,7 @@ export const getMyRequests = async (token) => {
       throw new Error(result?.message || "Failed to fetch requests");
     }
 
-    return result;
+    return normalizeMyRequestsResponse(result);
   } catch (err) {
     throw err;
   }

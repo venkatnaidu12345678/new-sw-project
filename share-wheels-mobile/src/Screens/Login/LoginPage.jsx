@@ -32,11 +32,14 @@ const LoginPage = ({ navigation, triggerAuth }) => {
         password,
       });
 
-      if (res?.success !== false && res?.token) {
-        await AsyncStorage.setItem("token", res.token);
-        await AsyncStorage.setItem("user", JSON.stringify(res.user));
-        if (res.user?.name) {
-          await AsyncStorage.setItem("USER_NAME", res.user.name);
+      const token = res?.token || res?.data?.token;
+      const user = res?.user || res?.data?.user;
+
+      if (res?.success !== false && token) {
+        await AsyncStorage.setItem("token", token);
+        await AsyncStorage.setItem("user", JSON.stringify(user || {}));
+        if (user?.name) {
+          await AsyncStorage.setItem("USER_NAME", user.name);
         }
         await syncFcmTokenWithBackend();
         triggerAuth?.();

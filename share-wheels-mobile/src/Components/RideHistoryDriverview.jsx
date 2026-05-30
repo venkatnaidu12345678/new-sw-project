@@ -17,6 +17,7 @@ import {
   getCourierFare,
   getDriverTotalEarnings,
 } from "../Utils/fareUtils";
+import { formatDisplayTime } from "../Utils/dateUtils";
 
 const RideHistoryDriverview = ({ ride, loading }) => {
   const passengers = ride?.passengers || [];
@@ -26,13 +27,7 @@ const RideHistoryDriverview = ({ ride, loading }) => {
     ride?.formattedDate ||
     (ride?.date ? new Date(ride.date).toLocaleDateString() : "—");
   const timeLabel =
-    ride?.formattedTime ||
-    (ride?.startTime
-      ? new Date(ride.startTime).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-      : "—");
+    ride?.formattedTime || formatDisplayTime(ride?.startTime) || "—";
 
   return (
     <View style={styles.container}>
@@ -43,7 +38,7 @@ const RideHistoryDriverview = ({ ride, loading }) => {
       {loading ? (
         <ActivityIndicator style={{ marginTop: 24 }} color="#2563EB" />
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 110 }}>
+        <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.routeCard}>
             <View style={styles.routeItem}>
               <Image source={madhapurIcon} style={styles.routeIcon} />
@@ -117,15 +112,15 @@ const RideHistoryDriverview = ({ ride, loading }) => {
               </View>
             ))
           )}
+
+          <LinearGradient colors={["#1D4ED8", "#2563EB"]} style={styles.totalCard}>
+            <View>
+              <Text style={styles.totalLabel}>Total Earnings</Text>
+              <Text style={styles.totalAmount}>₹{totalEarnings}</Text>
+            </View>
+          </LinearGradient>
         </ScrollView>
       )}
-
-      <LinearGradient colors={["#1D4ED8", "#2563EB"]} style={styles.totalCard}>
-        <View>
-          <Text style={styles.totalLabel}>Total Earning</Text>
-          <Text style={styles.totalAmount}>₹{totalEarnings}</Text>
-        </View>
-      </LinearGradient>
     </View>
   );
 };
@@ -225,11 +220,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#111827",
   },
+  scrollContent: {
+    paddingBottom: 24,
+    flexGrow: 1,
+  },
   totalCard: {
-    position: "absolute",
-    bottom: 16,
-    left: 16,
-    right: 16,
+    marginTop: 20,
+    marginBottom: 8,
     borderRadius: 18,
     padding: 18,
     flexDirection: "row",

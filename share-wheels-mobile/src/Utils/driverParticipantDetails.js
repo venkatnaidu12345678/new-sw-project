@@ -155,11 +155,17 @@ export const buildEnrouteDetail = (item, from, to, date) => {
 export const buildMyRequestDetail = (ride) => {
   const raw = ride?.raw || {};
   const isCourier = ride?.role === "Courier";
+  const base = {
+    ...ride,
+    matchingRides: ride?.matchingRides ?? raw.matchingRides ?? [],
+    linkedRide: ride?.linkedRide ?? raw.linkedRide ?? null,
+    requestKind: ride?.requestKind ?? raw.requestKind,
+  };
 
   if (isCourier) {
     const recv = raw.receiver || {};
     return {
-      ...ride,
+      ...base,
       extraRows: [
         { label: "Courier Type", value: raw.courier_type },
         { label: "Receiver Name", value: recv?.name },
@@ -169,10 +175,16 @@ export const buildMyRequestDetail = (ride) => {
     };
   }
 
+  const kindLabel =
+    raw.requestKind === "ride_join"
+      ? "Pending join on driver ride"
+      : "Open passenger request";
+
   return {
-    ...ride,
+    ...base,
     extraRows: [
-      { label: "Driver", value: raw.driver?.name },
+      { label: "Type", value: kindLabel },
+      { label: "Driver", value: raw.driver?.name || raw.linkedRide?.creator?.name },
       { label: "Luggage", value: raw.luggage },
     ],
   };

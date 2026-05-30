@@ -76,8 +76,12 @@ export async function handleNotificationOpen(navigation, remoteMessage) {
   if (rideId && RIDE_TYPES.has(type)) {
     const ride = await findRideForUser(rideId);
     if (ride) {
-      navigation.navigate("UpcomingDetailsPage", {
-        rideData: ride,
+      navigation.navigate("Navigator", {
+        screen: "Home",
+        params: {
+          screen: "UpcomingDetailsPage",
+          params: { rideData: ride },
+        },
       });
       return;
     }

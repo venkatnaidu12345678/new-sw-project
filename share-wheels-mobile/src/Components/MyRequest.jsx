@@ -6,9 +6,11 @@ import {
   TouchableOpacity,
   FlatList,
   Image,
+  Alert,
 } from "react-native";
 import LinearGradient from "react-native-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 
 /* ICONS */
 import calendarIcon from "../assets/dateIcon.png";
@@ -19,17 +21,22 @@ import carIcon from "../assets/caricon1.png";
 import BackButton from "../Components/BackButton";
 /* COMPONENTS */
 import RequestDetailPopover from "./ui/RequestDetailPopover";
+import RequestRelatedRidesSheet from "./ui/RequestRelatedRidesSheet";
 import { buildMyRequestDetail } from "../Utils/driverParticipantDetails";
+import { formatDisplayTime } from "../Utils/dateUtils";
 
 /* API */
-import { getMyRequests } from "../ApiService/ridesApiServices";
+import {
+  getMyRequests,
+  passengerSendRequestApi,
+  courierSendRequestApi,
+} from "../ApiService/ridesApiServices";
 import { getApiErrorMessage } from "../Utils/apiErrors";
 import { formatRequestDate } from "../Utils";
 import { RideListSkeleton } from "./ui/Skeleton";
 import AnimatedLoad from "./ui/AnimatedLoad";
 import AnimatedTabs from "./ui/AnimatedTabs";
 import FadePanel from "./ui/FadePanel";
-import { useFocusEffect } from "@react-navigation/native";
 import { useMyRequestsSocket } from "../hooks/useAppSocket";
 import ScreenContainer from "./ui/ScreenContainer";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -60,7 +67,23 @@ const resolveRequestDate = (item) => {
   return formatRequestDate(item?.requestedAt || item?.createdAt);
 };
 
+const countRelatedRides = (raw) => {
+  const linked = raw?.linkedRide ? 1 : 0;
+  const matches = (raw?.matchingRides || []).filter(
+    (r) => !raw?.linkedRide || String(r._id) !== String(raw.linkedRide._id)
+  ).length;
+  return linked + matches;
+};
+
+const normalizeRequestTab = (tab, tabOptions) => {
+  if (!tab) return null;
+  const key = String(tab).toLowerCase();
+  return tabOptions.find((t) => t.toLowerCase() === key) || null;
+};
+
 const MyRequest = () => {
+  const navigation = useNavigation();
+  const route = useRoute();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState("Passenger");
   const [rides, setRides] = useState([]);
@@ -69,7 +92,9 @@ const MyRequest = () => {
 
   const [selectedRide, setSelectedRide] = useState(null);
   const [popoverVisible, setPopoverVisible] = useState(false);
+  const [sheetVisible, setSheetVisible] = useState(false);
   const [popoverLoading, setPopoverLoading] = useState(false);
+  const [joiningRideId, setJoiningRideId] = useState(null);
 
   const tabs = ["Passenger", "Courier"];
   const activeIndex = tabs.indexOf(activeTab);
@@ -87,37 +112,49 @@ const MyRequest = () => {
       }
       const res = await getMyRequests(token);
 
-      /* ✅ PASSENGER — only open / unassigned requests */
+      const isOpenCourierRequest = (item) => {
+        const status = String(item?.status || "pending").toLowerCase();
+        return status === "pending" || status === "request_to_driver";
+      };
+
       const passenger = (res?.passengerRequests || [])
         .filter(
           (item) =>
             (!item.status || item.status === "pending") &&
             !item.assignedRide
         )
-        .map((item) => ({
-          id: item.requestId,
-          role: "Passenger",
-          from: item.from,
-          to: item.to,
-          date: resolveRequestDate(item),
-          time: item.startTime || "--",
-          car: item.driver?.name || "—",
-          seats: item.seats || "-",
-          price: `₹${item.amount || 0}`,
-          status: item.status || "pending",
-          raw: item,
-      }));
+        .map((item) => {
+          const isRideJoin = item.requestKind === "ride_join";
+          const driverName =
+            item.driver?.name ||
+            item.linkedRide?.creator?.name ||
+            (isRideJoin ? "Driver ride" : "—");
+          return {
+            id: item.requestId,
+            role: "Passenger",
+            requestKind: item.requestKind || "standalone",
+            from: item.from,
+            to: item.to,
+            date: resolveRequestDate(item),
+            time:
+              formatDisplayTime(
+                item.startTime || item.linkedRide?.startTime
+              ) || "--",
+            car: driverName,
+            seats: item.seats || "-",
+            price: `₹${item.amount || 0}`,
+            status: item.status || "pending",
+            relatedRideCount: countRelatedRides(item),
+            raw: item,
+          };
+        });
 
-      /* ✅ COURIER — hide once a driver has picked the parcel */
       const courier = (res?.courierRequests || [])
-        .filter(
-          (item) =>
-            ["pending", "request_to_driver"].includes(item.status) &&
-            !item.assignedRide
-        )
+        .filter(isOpenCourierRequest)
         .map((item) => ({
-          id: item.requestId,
+          id: String(item.requestId || item._id || item.id || ""),
           role: "Courier",
+          requestKind: "courier",
           from: item.from,
           to: item.to,
           date: resolveRequestDate(item),
@@ -126,8 +163,9 @@ const MyRequest = () => {
           seats: item.parcel || item.what_to_deliver || "-",
           price: `₹${item.amount || 0}`,
           status: item.status || "pending",
+          relatedRideCount: countRelatedRides(item),
           raw: item,
-      }));
+        }));
 
       setRides([...passenger, ...courier]);
     } catch (err) {
@@ -141,8 +179,12 @@ const MyRequest = () => {
 
   useFocusEffect(
     useCallback(() => {
+      const nextTab = normalizeRequestTab(route.params?.activeTab, tabs);
+      if (nextTab) {
+        setActiveTab(nextTab);
+      }
       fetchRequests();
-    }, [fetchRequests])
+    }, [fetchRequests, route.params?.activeTab])
   );
 
   useMyRequestsSocket(fetchRequests);
@@ -151,8 +193,18 @@ const MyRequest = () => {
     (r) => r.role.toLowerCase() === activeTab.toLowerCase()
   );
 
-  const handleRidePress = (ride) => {
-    setSelectedRide(buildMyRequestDetail(ride));
+  const buildSelectedRequest = (ride) =>
+    buildMyRequestDetail({
+      ...ride,
+      matchingRides: ride.raw?.matchingRides || [],
+      linkedRide: ride.raw?.linkedRide || null,
+      requestKind: ride.raw?.requestKind,
+      raw: ride.raw,
+    });
+
+  const openDetails = (ride) => {
+    setSelectedRide(buildSelectedRequest(ride));
+    setSheetVisible(false);
     setPopoverVisible(true);
     setPopoverLoading(true);
     requestAnimationFrame(() => {
@@ -160,17 +212,143 @@ const MyRequest = () => {
     });
   };
 
+  const openRelatedRides = (ride) => {
+    setSelectedRide(buildSelectedRequest(ride));
+    setPopoverVisible(false);
+    setSheetVisible(true);
+  };
+
   const closePopover = () => {
     setPopoverVisible(false);
     setPopoverLoading(false);
+    if (!sheetVisible) {
+      setSelectedRide(null);
+      setJoiningRideId(null);
+    }
+  };
+
+  const closeSheet = () => {
+    setSheetVisible(false);
     setSelectedRide(null);
+    setJoiningRideId(null);
+  };
+
+  const handleViewRide = (ride) => {
+    setPopoverVisible(false);
+    setSheetVisible(false);
+    setSelectedRide(null);
+    navigation.navigate("RideDetails", { ride });
+  };
+
+  const handleJoinPassenger = async (ride, requestItem) => {
+    const token = await AsyncStorage.getItem("token");
+    if (!token) {
+      Alert.alert("Sign in required", "Please log in to request a seat.");
+      return;
+    }
+    const seats = Number(requestItem?.raw?.seats) || 1;
+    setJoiningRideId(ride._id);
+    try {
+      const response = await passengerSendRequestApi(token, {
+        rideId: ride._id,
+        requires_seats: seats,
+      });
+      if (response?.success) {
+        Alert.alert(
+          response.bookingStatus === "confirmed" ? "Booking confirmed" : "Request sent",
+          response.message || "Your seat request was sent to the driver."
+        );
+        await fetchRequests();
+        closeSheet();
+      } else {
+        Alert.alert(
+          "Request failed",
+          getApiErrorMessage(response, "Could not send your booking request.")
+        );
+      }
+    } catch (error) {
+      Alert.alert("Request failed", getApiErrorMessage(error));
+    } finally {
+      setJoiningRideId(null);
+    }
+  };
+
+  const handleJoinCourier = async (ride, requestItem) => {
+    const raw = requestItem?.raw || {};
+    const recv = raw.receiver || {};
+    if (!raw.courier_img) {
+      Alert.alert(
+        "More details needed",
+        "Open the ride to complete courier booking with your parcel photo.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Open ride", onPress: () => handleViewRide(ride) },
+        ]
+      );
+      return;
+    }
+
+    const token = await AsyncStorage.getItem("token");
+    if (!token) {
+      Alert.alert("Sign in required", "Please log in to request courier delivery.");
+      return;
+    }
+
+    const deliveryDate = raw.date?.startDate || raw.date;
+    setJoiningRideId(ride._id);
+    try {
+      const response = await courierSendRequestApi(token, {
+        rideId: ride._id,
+        from: ride.from,
+        to: ride.to,
+        courier_type: raw.courier_type || "parcel",
+        what_to_deliver: raw.what_to_deliver || raw.parcel,
+        courier_img: raw.courier_img,
+        amount_will: raw.amount_will || raw.amount,
+        date: deliveryDate,
+        receiver_name: recv.name,
+        receiver_mobile: recv.mobile,
+        receiver_alternate_mobile: recv.alternate_mobile || recv.alternateMobile,
+        receiver_address: recv.Address || recv.address,
+      });
+      if (response?.success) {
+        Alert.alert(
+          response.bookingStatus === "confirmed" ? "Booking confirmed" : "Request sent",
+          response.message || "Courier request sent to the driver."
+        );
+        await fetchRequests();
+        closeSheet();
+      } else {
+        Alert.alert(
+          "Request failed",
+          getApiErrorMessage(response, "Could not send courier request.")
+        );
+      }
+    } catch (error) {
+      Alert.alert("Request failed", getApiErrorMessage(error));
+    } finally {
+      setJoiningRideId(null);
+    }
+  };
+
+  const handleJoinRide = (ride) => {
+    if (!selectedRide) return;
+    if (selectedRide.requestKind === "ride_join" || ride.passengerRequestPending) {
+      handleViewRide(ride);
+      return;
+    }
+    if (selectedRide.role === "Courier") {
+      handleJoinCourier(ride, selectedRide);
+    } else {
+      handleJoinPassenger(ride, selectedRide);
+    }
   };
 
   const renderRide = ({ item }) => {
     const theme = ROLE_THEME[item.role] || ROLE_THEME.Passenger;
+    const rideCount = item.relatedRideCount || 0;
 
     return (
-    <TouchableOpacity activeOpacity={0.88} onPress={() => handleRidePress(item)}>
       <LinearGradient
         colors={theme.card}
         start={{ x: 0, y: 0 }}
@@ -182,13 +360,24 @@ const MyRequest = () => {
       >
         <View style={styles.topRow}>
           <View style={[styles.roleChip, { backgroundColor: theme.chip }]}>
-            <Text style={styles.roleText}>{item.role}</Text>
+            <Text style={styles.roleText}>
+              {item.requestKind === "ride_join" ? "Ride join" : item.role}
+            </Text>
           </View>
 
-          <View style={[styles.statusChip, { backgroundColor: theme.statusSoft }]}>
-            <Text style={[styles.statusText, { color: theme.statusText }]}>
-              {item.status}
-            </Text>
+          <View style={styles.topRight}>
+            {rideCount > 0 ? (
+              <View style={styles.ridesBadge}>
+                <Text style={styles.ridesBadgeText}>
+                  {rideCount} ride{rideCount !== 1 ? "s" : ""}
+                </Text>
+              </View>
+            ) : null}
+            <View style={[styles.statusChip, { backgroundColor: theme.statusSoft }]}>
+              <Text style={[styles.statusText, { color: theme.statusText }]}>
+                {item.status}
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -232,9 +421,27 @@ const MyRequest = () => {
           <Text style={styles.priceLabel}>Offer</Text>
           <Text style={[styles.price, { color: theme.price }]}>{item.price}</Text>
         </View>
+
+        <View style={styles.cardActions}>
+          <TouchableOpacity
+            style={[styles.cardBtn, styles.cardBtnOutline]}
+            onPress={() => openDetails(item)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.cardBtnOutlineText}>View details</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.cardBtn, styles.cardBtnPrimary]}
+            onPress={() => openRelatedRides(item)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.cardBtnPrimaryText}>
+              {rideCount > 0 ? `Related rides (${rideCount})` : "Related rides"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </LinearGradient>
-    </TouchableOpacity>
-  );
+    );
   };
 
   return (
@@ -285,6 +492,15 @@ const MyRequest = () => {
         request={selectedRide}
         loading={popoverLoading}
         onClose={closePopover}
+      />
+
+      <RequestRelatedRidesSheet
+        visible={sheetVisible}
+        request={selectedRide}
+        joiningRideId={joiningRideId}
+        onClose={closeSheet}
+        onViewRide={handleViewRide}
+        onJoinRide={handleJoinRide}
       />
       </AnimatedLoad>
     </ScreenContainer>
@@ -348,6 +564,26 @@ headerTitle: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 10,
+  },
+
+  topRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 1,
+  },
+
+  ridesBadge: {
+    backgroundColor: "#E0E7FF",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+
+  ridesBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#3730A3",
   },
 
   roleChip: {
@@ -433,6 +669,39 @@ headerTitle: {
     fontSize: 12,
     color: "#64748B",
     fontWeight: "600",
+    flex: 1,
+    marginRight: 8,
+  },
+
+  cardActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+  },
+  cardBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardBtnOutline: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+  },
+  cardBtnOutlineText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#475569",
+  },
+  cardBtnPrimary: {
+    backgroundColor: "#2563EB",
+  },
+  cardBtnPrimaryText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
 
   icon: {

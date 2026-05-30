@@ -72,19 +72,59 @@ export const formatDisplayDate = (value, opts = {}) => {
   }
 };
 
-export const formatDisplayTime = (timeValue) => {
-  if (!timeValue) return "";
-  const parsed = new Date(timeValue);
-  if (!Number.isNaN(parsed.getTime())) {
-    try {
-      return parsed.toLocaleTimeString("en-IN", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch {
-      return `${parsed.getHours()}:${String(parsed.getMinutes()).padStart(2, "0")}`;
+/** Parse HH:mm, ISO datetime, or Date into local hours/minutes. */
+export const parseTimeParts = (timeValue) => {
+  if (timeValue == null || timeValue === "") return null;
+
+  const raw = String(timeValue).trim();
+  const hhmm = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?/);
+  if (hhmm) {
+    const hours = parseInt(hhmm[1], 10);
+    const minutes = parseInt(hhmm[2], 10);
+    if (hours >= 0 && hours < 24 && minutes >= 0 && minutes < 60) {
+      return { hours, minutes };
     }
   }
-  if (typeof timeValue === "string") return timeValue;
-  return "";
+
+  const d = timeValue instanceof Date ? timeValue : new Date(timeValue);
+  if (!Number.isNaN(d.getTime())) {
+    return { hours: d.getHours(), minutes: d.getMinutes() };
+  }
+
+  return null;
+};
+
+/** App-wide 12-hour time label (e.g. 2:30 PM). */
+export const formatDisplayTime = (timeValue) => {
+  const parts = parseTimeParts(timeValue);
+  if (!parts) {
+    if (typeof timeValue === "string" && timeValue.trim()) return timeValue;
+    return "";
+  }
+
+  const d = new Date();
+  d.setHours(parts.hours, parts.minutes, 0, 0);
+
+  try {
+    return d.toLocaleTimeString("en-IN", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    const h = parts.hours % 12 || 12;
+    const ampm = parts.hours >= 12 ? "PM" : "AM";
+    return `${h}:${String(parts.minutes).padStart(2, "0")} ${ampm}`;
+  }
+};
+
+/** Time + optional date for ride cards (12-hour). */
+export const formatRideTimeLabel = (dateValue, timeValue) => {
+  const time = formatDisplayTime(timeValue);
+  if (time) return time;
+  if (dateValue) {
+    const fromDate = parseTimeParts(dateValue);
+    if (fromDate) return formatDisplayTime(dateValue);
+  }
+  return "—";
 };

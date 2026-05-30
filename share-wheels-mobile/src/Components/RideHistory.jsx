@@ -32,6 +32,7 @@ import AdPlacement from "./ads/AdPlacement";
 import { useAds } from "../context/AdsContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LAYOUT, getScrollBottomPadding } from "../theme/layout";
+import { formatDisplayTime } from "../Utils/dateUtils";
 
 const FILTER_TABS = ["All", "Driver", "Passenger", "Courier"];
 
@@ -52,14 +53,7 @@ const toDateLabel = (value) => {
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
 };
 
-const toTimeLabel = (value) => {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (!Number.isNaN(d.getTime())) {
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  }
-  return typeof value === "string" ? value : "—";
-};
+const toTimeLabel = (value) => formatDisplayTime(value) || "—";
 
 const RideHistory = () => {
   const insets = useSafeAreaInsets();

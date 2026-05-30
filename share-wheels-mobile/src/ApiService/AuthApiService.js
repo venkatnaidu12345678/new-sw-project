@@ -27,7 +27,19 @@ async function authRequest(path, { method = "POST", body, token } = {}) {
   }
 
   if (!response.ok) {
-    return apiFail(getApiErrorMessage(data, `Request failed (${response.status})`));
+    return {
+      success: false,
+      ...(data && typeof data === "object" ? data : {}),
+      message: getApiErrorMessage(data, `Request failed (${response.status})`),
+    };
+  }
+
+  if (data && data.success === false) {
+    return {
+      success: false,
+      ...data,
+      message: getApiErrorMessage(data, "Request failed"),
+    };
   }
 
   return { success: true, ...data };

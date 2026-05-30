@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,15 +9,22 @@ import {
 } from "react-native";
 
 import { useNavigation } from "@react-navigation/native";
+import { navigateToRootScreen } from "../Utils/mainTabNavigation";
+
 import rideIcon from "../assets/ride.png";
 import passengerIcon from "../assets/passenger.png";
 import couriericon from "../assets/couriericon.png";
 import { LAYOUT, scale } from "../theme/layout";
-const CreateOptionsCard = () => {
+const CreateOptionsCard = ({ visible: fabEnabled = true }) => {
   const [visible, setVisible] = useState(false);
   const navigation = useNavigation();
+
+  useEffect(() => {
+    if (!fabEnabled) setVisible(false);
+  }, [fabEnabled]);
+
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.host} pointerEvents="box-none">
       {/* Overlay */}
       {visible && (
         <Pressable
@@ -35,7 +42,7 @@ const CreateOptionsCard = () => {
             subtitle="Create a ride as a driver"
             onPress={() => {
               setVisible(false);
-              navigation.navigate("CreateRide");
+              navigateToRootScreen(navigation, "CreateRide");
             }}
           />
           <Option
@@ -45,7 +52,7 @@ const CreateOptionsCard = () => {
             subtitle="Join as a passenger"
             onPress={() => {
               setVisible(false);
-              navigation.navigate("PassengerRequest");
+              navigateToRootScreen(navigation, "PassengerRequest");
             }}
             
           />
@@ -56,16 +63,17 @@ const CreateOptionsCard = () => {
             subtitle="Send a package"
             onPress={() => {
               setVisible(false);
-              navigation.navigate("CourierRequest");
+              navigateToRootScreen(navigation, "CourierRequest");
             }}
           />
         </View>
       )}
       {/* Floating + Button */}
       <TouchableOpacity
-        style={styles.fab}
-        onPress={() => setVisible(!visible)}
+        style={[styles.fab, !fabEnabled && styles.fabDisabled]}
+        onPress={() => fabEnabled && setVisible(!visible)}
         activeOpacity={0.8}
+        disabled={!fabEnabled}
       >
         <Text style={styles.plus}>+</Text>
       </TouchableOpacity>
@@ -96,10 +104,14 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.2)",
   },
 
+  host: {
+    ...StyleSheet.absoluteFillObject,
+  },
+
   card: {
     position: "absolute",
-    bottom: 150,
-    right: 20,
+    bottom: scale(72),
+    right: scale(20),
     width: 280,
     backgroundColor: "#fff",
     borderRadius: 20,
@@ -142,8 +154,8 @@ const styles = StyleSheet.create({
 
   fab: {
     position: "absolute",
-    bottom: 80,
-    right: 20,
+    bottom: 0,
+    right: scale(20),
     width: LAYOUT.sizes.fabSize,
     height: LAYOUT.sizes.fabSize,
     borderRadius: LAYOUT.sizes.fabSize / 2,
@@ -157,5 +169,8 @@ const styles = StyleSheet.create({
     fontSize: scale(28),
     color: "#fff",
     lineHeight: scale(28),
+  },
+  fabDisabled: {
+    opacity: 0,
   },
 });

@@ -20,10 +20,29 @@ const TABS = [
   { key: "disclaimer", label: "Disclaimer", icon: "alert-circle-outline" },
 ];
 
+const stripHtmlToPlain = (html) => {
+  const raw = String(html || "").trim();
+  if (!raw) return "";
+  if (!/<[a-z][\s\S]*>/i.test(raw)) return raw;
+  return raw
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/h[1-6]>/gi, "\n\n")
+    .replace(/<li>/gi, "• ")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+};
+
 const splitParagraphs = (text) => {
-  const raw = String(text || "").trim();
-  if (!raw) return [];
-  return raw.split(/\n\s*\n/g).map((t) => t.trim()).filter(Boolean);
+  const plain = stripHtmlToPlain(text);
+  if (!plain) return [];
+  return plain.split(/\n\s*\n/g).map((t) => t.trim()).filter(Boolean);
 };
 
 export default function LegalPage() {

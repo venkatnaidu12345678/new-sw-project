@@ -120,6 +120,12 @@ const EnRoutePassengers = ({ from, to, date, rideId, onPickSuccess }) => {
         ) {
           return false;
         }
+        if (
+          payload.userId &&
+          row.creatorId?.toString() === String(payload.userId)
+        ) {
+          return false;
+        }
         return true;
       })
     );
@@ -138,7 +144,12 @@ const EnRoutePassengers = ({ from, to, date, rideId, onPickSuccess }) => {
 
       const token = await AsyncStorage.getItem("token");
 
-      const payload = { from: from.trim(), to: to.trim(), date: rideDate };
+      const payload = {
+        from: from.trim(),
+        to: to.trim(),
+        date: rideDate,
+        ...(rideId ? { rideId } : {}),
+      };
 
       const response = await enrouteRequest(token, payload);
 
@@ -155,6 +166,7 @@ const EnRoutePassengers = ({ from, to, date, rideId, onPickSuccess }) => {
             rideId: item.rideId || item.ride_id,
             courierId: item.courierId || item.courier_id,
             passengerId: item.passengerId || item.passenger_id,
+            creatorId: item.creatorId || item.creator?._id,
             name: item.name || "Unknown",
             profile: item.profile || null,
             gender: item.gender || "",

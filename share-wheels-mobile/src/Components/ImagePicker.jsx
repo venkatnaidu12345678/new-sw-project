@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -12,12 +12,20 @@ import {
   launchCamera,
 } from "react-native-image-picker";
 
-const ImagePicker = ({ onChange, type = "all" }) => {
-  const [images, setImages] = useState({
-    profile: null,
-    license: null,
-    courier: null,
-  });
+const EMPTY_IMAGES = { profile: null, license: null, courier: null };
+
+const ImagePicker = ({ onChange, type = "all", resetKey = 0 }) => {
+  const [images, setImages] = useState(EMPTY_IMAGES);
+
+  const didMount = useRef(false);
+  useEffect(() => {
+    if (!didMount.current) {
+      didMount.current = true;
+      return;
+    }
+    setImages(EMPTY_IMAGES);
+    onChange?.(null);
+  }, [resetKey]);
 
   // 🔥 OPEN OPTIONS (Camera / Gallery)
   const openPickerOptions = (key) => {

@@ -39,6 +39,7 @@ import VehicleInfoStrip from "./VehicleInfoStrip";
 import KeyboardAwareScreen from "./ui/KeyboardAwareScreen";
 import ScreenContainer from "./ui/ScreenContainer";
 import ScreenHeader from "./ui/ScreenHeader";
+import { formatDisplayTime } from "../Utils/dateUtils";
 import { LAYOUT } from "../theme/layout";
 import { profileData } from "../Navigation/AuthNavigator";
 
@@ -124,14 +125,9 @@ const RideDetails = ({ navigation, route }) => {
     ? rideDate.toDateString()
     : "Date not available";
 
-  const formattedRideTime = rideDate
-    ? rideDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    : "N/A";
+  const formattedRideTime = formatDisplayTime(ride?.startTime || rideDate) || "N/A";
 
-  const formattedTime = time.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const formattedTime = formatDisplayTime(time) || "N/A";
 
   /* 🔹 TOGGLE */
   const togglePassenger = () => {
@@ -222,7 +218,7 @@ const RideDetails = ({ navigation, route }) => {
           [
             {
               text: "OK",
-              onPress: () => navigation.navigate("Dashboard"),
+              onPress: () => navigation.navigate("Navigator", { screen: "Home" }),
             },
           ],
           { cancelable: false }
@@ -307,7 +303,7 @@ const RideDetails = ({ navigation, route }) => {
           {
             text: "OK",
             onPress: () => {
-              navigation.navigate("Dashboard"); // ✅ SAME NAVIGATION
+              navigation.navigate("Navigator", { screen: "Home" });
             },
           },
         ],

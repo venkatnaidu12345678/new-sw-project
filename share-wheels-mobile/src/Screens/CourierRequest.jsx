@@ -19,16 +19,10 @@ import {
 } from "../Components/ui/RequestFormUI";
 
 import { courierRequest } from "../ApiService/ridesApiServices";
+import { getApiErrorMessage } from "../Utils/apiErrors";
 import { validateLocation, validatePrice } from "../Utils";
 import { COURIER_THEME as T } from "../theme/requestFormTheme";
 import { DS } from "../theme/designSystem";
-
-const TIME_SLOTS = [
-  { label: "Select time slot", value: "" },
-  { label: "Morning", value: "morning" },
-  { label: "Afternoon", value: "afternoon" },
-  { label: "Evening", value: "evening" },
-];
 
 const COURIER_TYPES = [
   { label: "Select courier type", value: "" },
@@ -37,25 +31,34 @@ const COURIER_TYPES = [
   { label: "Package", value: "package" },
 ];
 
+const EMPTY_COURIER_PAYLOAD = {
+  from: "",
+  to: "",
+  courier_type: "",
+  what_to_deliver: "",
+  courier_img: null,
+  amount_will: "",
+  dateStart: "",
+  dateEnd: "",
+  receiver_name: "",
+  receiver_mobile: "",
+  receiver_alternate_mobile: "",
+  receiver_address: "",
+};
+
+const goToMyRequestsTab = (navigation, activeTab) => {
+  navigation.navigate("Navigator", {
+    screen: "Request",
+    params: { activeTab },
+  });
+};
+
 const CourierRequest = () => {
   const navigation = useNavigation();
   const fromToRef = useRef();
+  const [formResetKey, setFormResetKey] = useState(0);
 
-  const [payload, setPayload] = useState({
-    from: "",
-    to: "",
-    courier_type: "",
-    what_to_deliver: "",
-    courier_img: null,
-    amount_will: "",
-    dateStart: "",
-    dateEnd: "",
-    timeSlot: "",
-    receiver_name: "",
-    receiver_mobile: "",
-    receiver_alternate_mobile: "",
-    receiver_address: "",
-  });
+  const [payload, setPayload] = useState({ ...EMPTY_COURIER_PAYLOAD });
 
   const updatePayload = (key, value) => {
     setPayload((prev) => ({ ...prev, [key]: value }));
@@ -97,13 +100,18 @@ const CourierRequest = () => {
       return;
     }
 
-    if (!payload.timeSlot) {
-      Alert.alert("Validation", "Please select a time slot.");
+    if (!payload.courier_type) {
+      Alert.alert("Validation", "Please select courier type.");
       return;
     }
 
-    if (!payload.courier_type) {
-      Alert.alert("Validation", "Please select courier type.");
+    if (!payload.what_to_deliver?.trim()) {
+      Alert.alert("Validation", "Please describe what you are sending.");
+      return;
+    }
+
+    if (!payload.receiver_address?.trim()) {
+      Alert.alert("Validation", "Receiver delivery address is required.");
       return;
     }
 
@@ -125,47 +133,41 @@ const CourierRequest = () => {
         return;
       }
 
+      const receiverMobile = payload.receiver_mobile.trim();
       const finalPayload = {
-        ...payload,
+        from: payload.from.trim(),
+        to: payload.to.trim(),
+        courier_type: payload.courier_type,
+        what_to_deliver: payload.what_to_deliver.trim(),
+        courier_img: payload.courier_img,
         amount_will: Number(payload.amount_will),
         date: {
           startDate: payload.dateStart,
           endDate: payload.dateEnd,
         },
+        receiver_name: payload.receiver_name.trim(),
+        receiver_mobile: receiverMobile,
+        receiver_alternate_mobile:
+          payload.receiver_alternate_mobile?.trim() || receiverMobile,
+        receiver_address: payload.receiver_address.trim(),
       };
 
       const response = await courierRequest(token, finalPayload);
 
+      setPayload({ ...EMPTY_COURIER_PAYLOAD });
+      setFormResetKey((k) => k + 1);
+      goToMyRequestsTab(navigation, "Courier");
+
       Alert.alert(
         "Request posted",
-        response?.message || "Courier request created successfully.",
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              setPayload({
-                from: "",
-                to: "",
-                courier_type: "",
-                what_to_deliver: "",
-                courier_img: null,
-                amount_will: "",
-                dateStart: "",
-                dateEnd: "",
-                timeSlot: "",
-                receiver_name: "",
-                receiver_mobile: "",
-                receiver_alternate_mobile: "",
-                receiver_address: "",
-              });
-              navigation.navigate("Request", { activeTab: "courier" });
-            },
-          },
-        ]
+        response?.message || "Courier request created successfully."
       );
     } catch (error) {
       console.log("Courier Request Error:", error);
-      Alert.alert("Error", "Failed to create request");
+      Alert.alert(
+        "Error",
+        getApiErrorMessage(error, "Failed to create courier request")
+      );
     }
   };
 
@@ -194,7 +196,7 @@ const CourierRequest = () => {
             backgroundColor={T.pageBg}
             onBack={() => {
               if (navigation.canGoBack()) navigation.goBack();
-              else navigation.navigate("Request");
+              else goToMyRequestsTab(navigation, "Courier");
             }}
           />
         }
@@ -222,7 +224,12 @@ const CourierRequest = () => {
           title="Route"
           subtitle="From and To for pickup & delivery"
         >
-          <FromToInput ref={fromToRef} fields={fields} variant="route" />
+          <FromToInput
+            key={`courier-route-${formResetKey}`}
+            ref={fromToRef}
+            fields={fields}
+            variant="route"
+          />
         </RequestSection>
 
         <RequestSection
@@ -232,21 +239,12 @@ const CourierRequest = () => {
           subtitle="When the parcel should be delivered"
         >
           <CalenderRange
+            key={`courier-dates-${formResetKey}`}
             rideData={payload}
             updateRideData={updatePayload}
             startLabel="From date"
             endLabel="To date"
             accent={dateAccent}
-          />
-
-          <StyledPicker
-            theme={T}
-            accent={pickerAccent}
-            label="Time slot"
-            icon="time-outline"
-            selectedValue={payload.timeSlot}
-            onValueChange={(v) => updatePayload("timeSlot", v)}
-            items={TIME_SLOTS}
           />
         </RequestSection>
 
@@ -267,7 +265,9 @@ const CourierRequest = () => {
           />
 
           <ImagePicker
+            key={`courier-img-${formResetKey}`}
             type="courier"
+            resetKey={formResetKey}
             onChange={(img) => updatePayload("courier_img", img)}
           />
 

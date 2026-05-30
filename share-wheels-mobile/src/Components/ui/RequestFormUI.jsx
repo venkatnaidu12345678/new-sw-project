@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TextInput,
   Platform,
+  TouchableOpacity,
 } from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
 import LinearGradient from "react-native-linear-gradient";
@@ -183,6 +184,85 @@ export const StyledPicker = ({
   </StyledField>
 );
 
+/** Seats stepper — matches CalenderRange card layout (theme.date accent). */
+export const RequestSeatsStepper = ({
+  theme,
+  label = "Seats needed",
+  value = 1,
+  onChange,
+  min = 1,
+  max = 8,
+}) => {
+  const accent = theme.date;
+  const cardStyle = {
+    backgroundColor: accent.bg,
+    borderColor: accent.border,
+  };
+  const controlStyle = {
+    backgroundColor: theme.surface || "#FFFFFF",
+    borderColor: accent.border,
+  };
+  const iconColor = accent.icon;
+  const labelColor = accent.icon;
+
+  const seats = Math.max(min, Math.min(max, Number(value) || min));
+
+  const decrease = () => {
+    if (seats > min) onChange(seats - 1);
+  };
+
+  const increase = () => {
+    if (seats < max) onChange(seats + 1);
+  };
+
+  return (
+    <View style={seatsStyles.container}>
+      <View style={[seatsStyles.inputCard, cardStyle]}>
+        <View style={seatsStyles.labelRow}>
+          <Icon name="people-outline" size={16} color={iconColor} />
+          <Text style={[seatsStyles.label, { color: labelColor }]}>{label}</Text>
+        </View>
+
+        <View style={[seatsStyles.control, controlStyle]}>
+          <TouchableOpacity
+            onPress={decrease}
+            disabled={seats <= min}
+            style={seatsStyles.stepBtn}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                seatsStyles.stepBtnText,
+                seats <= min && seatsStyles.stepBtnDisabled,
+              ]}
+            >
+              −
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={seatsStyles.count}>{seats}</Text>
+
+          <TouchableOpacity
+            onPress={increase}
+            disabled={seats >= max}
+            style={seatsStyles.stepBtn}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                seatsStyles.stepBtnText,
+                seats >= max && seatsStyles.stepBtnDisabled,
+              ]}
+            >
+              +
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+};
+
 export const RequestPriceInput = ({
   label = "Offered amount (₹)",
   value,
@@ -213,6 +293,58 @@ export const RequestPriceInput = ({
     </View>
   </StyledField>
 );
+
+const seatsStyles = StyleSheet.create({
+  container: {
+    width: "100%",
+    marginTop: 12,
+  },
+  inputCard: {
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    padding: 12,
+  },
+  labelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 6,
+    gap: 6,
+  },
+  label: { fontSize: 13, fontWeight: "700", flex: 1 },
+  control: {
+    minHeight: 48,
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 8,
+  },
+  stepBtn: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepBtnText: {
+    fontSize: 24,
+    fontWeight: "600",
+    color: "#334155",
+  },
+  stepBtnDisabled: {
+    color: "#CBD5E1",
+  },
+  count: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#0F172A",
+    minWidth: 32,
+    textAlign: "center",
+  },
+});
 
 const styles = StyleSheet.create({
   hero: {
