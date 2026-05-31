@@ -27,7 +27,24 @@ export const getActiveMainTabName = (navState) => {
 };
 
 export const shouldShowCreateFab = (navState) => {
+  if (!navState?.routes?.length) {
+    return true;
+  }
+
+  const index = navState.index ?? 0;
+  const activeRoute = navState.routes[index];
+
+  // Root stack pushed a full-screen flow (CreateRide, RideDetails, etc.)
+  if (activeRoute?.name && activeRoute.name !== "Navigator") {
+    return false;
+  }
+
   const tab = getActiveMainTabName(navState);
+  if (tab == null) {
+    // Navigator is active but nested tab state is not hydrated yet (initial mount)
+    return true;
+  }
+
   return CREATE_FAB_TAB_NAMES.includes(tab);
 };
 

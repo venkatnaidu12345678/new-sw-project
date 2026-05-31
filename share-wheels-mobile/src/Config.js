@@ -2,10 +2,10 @@ import { Platform } from "react-native";
 import Env from "react-native-config";
 import { DEV_API_URL } from "./devConfig";
 
-const REMOTE_URL =
-  Env.PRODUCTION_URL || "https://share-wheels-backend-m3wp.onrender.com";
-
 const trimUrl = (url) => (url ? String(url).trim().replace(/\/$/, "") : "");
+
+const PRODUCTION_URL =
+  trimUrl(Env.PRODUCTION_URL) || "https://new-sw-project.onrender.com";
 
 /** Android emulator → host machine. iOS simulator → localhost. */
 const getPlatformDefaultLocalUrl = () => {
@@ -39,7 +39,7 @@ const resolveLocalBaseUrl = () => {
   return getPlatformDefaultLocalUrl();
 };
 
-export const baseUrl = useLocalBackend ? resolveLocalBaseUrl() : trimUrl(REMOTE_URL);
+export const baseUrl = useLocalBackend ? resolveLocalBaseUrl() : PRODUCTION_URL;
 
 export const getApiConnectionHint = () => {
   if (!useLocalBackend) {
@@ -93,6 +93,8 @@ export const endPoints = {
   userTermsurl: "/auth/user/terms",
   pickPassengerCourierurl: "/courier/driver/pick-courier-passenger",
   getMyRequestsurl: "/rides/my-requests",
+  getMyPassengerRequestsurl: "/rides/my-passenger-requests",
+  getMyCourierRequestsurl: "/rides/my-courier-requests",
   uploadImageurl: "/auth/upload-image",
   AddVechileurl: "/auth/add-vehicle",
   editVechileurl: "/auth/edit-vehicle",

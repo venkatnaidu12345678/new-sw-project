@@ -21,6 +21,7 @@ import { DS } from "../theme/designSystem";
 import { INPUT_COLORS } from "../theme/inputTheme";
 import { CR } from "../theme/createRideTheme";
 import { formatDisplayTime } from "../Utils/dateUtils";
+import { assertScheduledStartInFuture } from "../Utils/rideSchedule";
 
 const SectionHeader = ({ icon, iconBg, iconColor, title, subtitle }) => (
   <View style={styles.sectionHeader}>
@@ -99,9 +100,21 @@ const CreateRideComponentOne = forwardRef(
       }
     };
 
+    const futureScheduleError =
+      rideData.date && rideData.startTime
+        ? (() => {
+            const check = assertScheduledStartInFuture(
+              rideData.date,
+              rideData.startTime
+            );
+            return check.ok ? "" : check.message;
+          })()
+        : "";
+
     const timeError =
       submitted || touchedTime
-        ? validators.required(rideData.startTime, "Start time")
+        ? validators.required(rideData.startTime, "Start time") ||
+          futureScheduleError
         : "";
     const isTimeValid = !timeError;
 

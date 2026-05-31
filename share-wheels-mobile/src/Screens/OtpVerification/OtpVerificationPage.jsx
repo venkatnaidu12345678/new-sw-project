@@ -15,6 +15,7 @@ import { AUTH_COLORS, AUTH_GRADIENTS } from "../../theme/authTheme";
 import { verifyOtpApi } from "../../ApiService/AuthApiService";
 import { getDeviceToken } from "../../Notifications/FCMService";
 import { syncFcmTokenWithBackend } from "../../Notifications/registerToken";
+import { requestLocationPermissionOnLogin } from "../../Utils/locationPermissions";
 import { getApiErrorMessage } from "../../Utils/apiErrors";
 import { LAYOUT, scale } from "../../theme/layout";
 
@@ -106,6 +107,7 @@ const OtpVerificationPage = ({ navigation, route, triggerAuth }) => {
           await AsyncStorage.setItem("USER_NAME", res.user.name);
         }
         await syncFcmTokenWithBackend();
+        requestLocationPermissionOnLogin().catch(() => {});
         triggerAuth?.();
       } else {
         setError(getApiErrorMessage(res, "Invalid OTP. Please try again."));

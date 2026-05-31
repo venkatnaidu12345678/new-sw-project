@@ -1,7 +1,7 @@
 import React from "react";
 import { View, StyleSheet, Image, Platform } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { useNavigationState } from "@react-navigation/native";
+import { useIsFocused, useNavigationState } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/Ionicons";
 
@@ -26,11 +26,16 @@ export default function BottomNavigator() {
       : Math.max(insets.bottom, 8);
   const tabHeight = LAYOUT.sizes.tabBarHeight + bottomPad;
 
-  const showCreateFab = useNavigationState((state) => shouldShowCreateFab(state));
+  const isNavigatorFocused = useIsFocused();
+  const showCreateFabOnTab = useNavigationState((state) =>
+    shouldShowCreateFab(state)
+  );
+  const showCreateFab = isNavigatorFocused && showCreateFabOnTab;
 
   return (
     <View style={styles.shell}>
       <Tab.Navigator
+        initialRouteName="Home"
         detachInactiveScreens={false}
         screenOptions={({ route }) => ({
           headerShown: false,

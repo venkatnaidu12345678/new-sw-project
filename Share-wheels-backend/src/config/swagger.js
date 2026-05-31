@@ -179,6 +179,8 @@ const swaggerSpec = swaggerJsdoc({
         },
       },
       "/rides/my-requests": { get: { tags: ["Rides"], summary: "My ride/courier requests", security: [{ bearerAuth: [] }], responses: { 200: { description: "OK" } } } },
+      "/rides/my-passenger-requests": { get: { tags: ["Rides"], summary: "My open passenger requests", security: [{ bearerAuth: [] }], responses: { 200: { description: "OK" } } } },
+      "/rides/my-courier-requests": { get: { tags: ["Rides"], summary: "My open courier requests", security: [{ bearerAuth: [] }], responses: { 200: { description: "OK" } } } },
 
       "/passenger-rides/create-passenger-request": { post: { tags: ["Passenger Rides"], summary: "Create passenger request", security: [{ bearerAuth: [] }], requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/PassengerCreateRequest" } } } }, responses: { 200: { description: "OK" } } } },
       "/passenger-rides/open": { get: { tags: ["Passenger Rides"], summary: "Get open passenger requests", security: [{ bearerAuth: [] }], responses: { 200: { description: "OK" } } } },

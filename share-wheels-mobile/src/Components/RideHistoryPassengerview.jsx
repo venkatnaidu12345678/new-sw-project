@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   Image,
-  ScrollView,
   ActivityIndicator,
 } from "react-native";
 import LinearGradient from "react-native-linear-gradient";
@@ -18,7 +17,6 @@ import UserAvatar from "./ui/UserAvatar";
 import VehicleInfoStrip from "./VehicleInfoStrip";
 import madhapurIcon from "../assets/madhapuricon.png";
 import kondapurIcon from "../assets/kondapuricon.png";
-import starIcon from "../assets/staricon.png";
 import { getRideDisplayFare } from "../Utils/fareUtils";
 import { formatDisplayTime } from "../Utils/dateUtils";
 
@@ -43,16 +41,21 @@ const RideHistoryPassengerView = ({ ride, loading }) => {
     <View style={styles.container}>
       {/* HEADER */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Ride Details</Text>
+        <View>
+          <Text style={styles.headerTitle}>Ride Details</Text>
+          <Text style={styles.headerSub}>Passenger</Text>
+        </View>
+        {ride?.status ? (
+          <View style={styles.rolePill}>
+            <Text style={styles.rolePillText}>{ride.status}</Text>
+          </View>
+        ) : null}
       </View>
 
       {loading ? (
         <ActivityIndicator style={{ marginTop: 24 }} color="#2563EB" />
       ) : (
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
+      <View style={styles.scrollContent}>
         {/* ROUTE */}
         <View style={styles.routeCard}>
           <View style={styles.routeItem}>
@@ -125,11 +128,6 @@ const RideHistoryPassengerView = ({ ride, loading }) => {
               <Text style={styles.driverMeta}>{ride.creator.mobile}</Text>
             ) : null}
           </View>
-
-          <View style={styles.driverRating}>
-            <Text style={styles.ratingValue}>4.5</Text>
-            <Image source={starIcon} style={styles.star} />
-          </View>
         </View>
 
         {ride?.vehicle ? (
@@ -142,7 +140,7 @@ const RideHistoryPassengerView = ({ ride, loading }) => {
             <Text style={styles.totalAmount}>₹{totalFare}</Text>
           </View>
         </LinearGradient>
-      </ScrollView>
+      </View>
       )}
     </View>
   );
@@ -164,21 +162,46 @@ export default RideHistoryPassengerView;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 16,
-    marginBottom: 86,
+    paddingHorizontal: 4,
+    paddingBottom: 8,
   },
 
   header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingVertical: 12,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+    marginBottom: 12,
   },
 
   headerTitle: {
-    fontSize: 16,
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+
+  headerSub: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
+    fontWeight: "600",
+  },
+
+  rolePill: {
+    backgroundColor: "#DCFCE7",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+
+  rolePillText: {
+    fontSize: 11,
     fontWeight: "700",
-    color: "#111827",
+    color: "#166534",
+    textTransform: "capitalize",
   },
 
   routeCard: {
@@ -304,27 +327,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#475569",
     marginTop: 4,
-  },
-
-  driverRating: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-
-  ratingValue: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#111827",
-    marginRight: 4,
-  },
-
-  star: {
-    width: 14,
-    height: 14,
   },
 
   scrollContent: {

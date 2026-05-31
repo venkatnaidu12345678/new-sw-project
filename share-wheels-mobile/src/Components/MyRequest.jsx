@@ -27,7 +27,8 @@ import { formatDisplayTime } from "../Utils/dateUtils";
 
 /* API */
 import {
-  getMyRequests,
+  getMyPassengerRequests,
+  getMyCourierRequests,
   passengerSendRequestApi,
   courierSendRequestApi,
 } from "../ApiService/ridesApiServices";
@@ -81,12 +82,54 @@ const normalizeRequestTab = (tab, tabOptions) => {
   return tabOptions.find((t) => t.toLowerCase() === key) || null;
 };
 
+const mapPassengerRequest = (item) => {
+  const isRideJoin = item.requestKind === "ride_join";
+  const driverName =
+    item.driver?.name ||
+    item.linkedRide?.creator?.name ||
+    (isRideJoin ? "Driver ride" : "—");
+
+  return {
+    id: item.requestId,
+    role: "Passenger",
+    requestKind: item.requestKind || "standalone",
+    from: item.from,
+    to: item.to,
+    date: resolveRequestDate(item),
+    time:
+      formatDisplayTime(item.startTime || item.linkedRide?.startTime) || "--",
+    car: driverName,
+    seats: item.seats || "-",
+    price: `₹${item.amount || 0}`,
+    status: item.status || "pending",
+    relatedRideCount: countRelatedRides(item),
+    raw: item,
+  };
+};
+
+const mapCourierRequest = (item) => ({
+  id: String(item.requestId || item._id || item.id || ""),
+  role: "Courier",
+  requestKind: "courier",
+  from: item.from,
+  to: item.to,
+  date: resolveRequestDate(item),
+  time: item.timeSlot || "--",
+  car: item.courierNumber || item.receiver?.name || "Courier",
+  seats: item.parcel || item.what_to_deliver || "-",
+  price: `₹${item.amount || 0}`,
+  status: item.status || "pending",
+  relatedRideCount: countRelatedRides(item),
+  raw: item,
+});
+
 const MyRequest = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState("Passenger");
-  const [rides, setRides] = useState([]);
+  const [passengerRides, setPassengerRides] = useState([]);
+  const [courierRides, setCourierRides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
 
@@ -99,7 +142,7 @@ const MyRequest = () => {
   const tabs = ["Passenger", "Courier"];
   const activeIndex = tabs.indexOf(activeTab);
 
-  const fetchRequests = useCallback(async () => {
+  const fetchPassengerRequests = useCallback(async () => {
     try {
       setLoading(true);
       setFetchError("");
@@ -107,91 +150,86 @@ const MyRequest = () => {
       const token = await AsyncStorage.getItem("token");
       if (!token) {
         setFetchError("Please sign in again.");
-        setRides([]);
+        setPassengerRides([]);
         return;
       }
-      const res = await getMyRequests(token);
 
-      const isOpenCourierRequest = (item) => {
-        const status = String(item?.status || "pending").toLowerCase();
-        return status === "pending" || status === "request_to_driver";
-      };
-
-      const passenger = (res?.passengerRequests || [])
-        .filter(
-          (item) =>
-            (!item.status || item.status === "pending") &&
-            !item.assignedRide
-        )
-        .map((item) => {
-          const isRideJoin = item.requestKind === "ride_join";
-          const driverName =
-            item.driver?.name ||
-            item.linkedRide?.creator?.name ||
-            (isRideJoin ? "Driver ride" : "—");
-          return {
-            id: item.requestId,
-            role: "Passenger",
-            requestKind: item.requestKind || "standalone",
-            from: item.from,
-            to: item.to,
-            date: resolveRequestDate(item),
-            time:
-              formatDisplayTime(
-                item.startTime || item.linkedRide?.startTime
-              ) || "--",
-            car: driverName,
-            seats: item.seats || "-",
-            price: `₹${item.amount || 0}`,
-            status: item.status || "pending",
-            relatedRideCount: countRelatedRides(item),
-            raw: item,
-          };
-        });
-
-      const courier = (res?.courierRequests || [])
-        .filter(isOpenCourierRequest)
-        .map((item) => ({
-          id: String(item.requestId || item._id || item.id || ""),
-          role: "Courier",
-          requestKind: "courier",
-          from: item.from,
-          to: item.to,
-          date: resolveRequestDate(item),
-          time: item.timeSlot || "--",
-          car: item.courierNumber || item.receiver?.name || "Courier",
-          seats: item.parcel || item.what_to_deliver || "-",
-          price: `₹${item.amount || 0}`,
-          status: item.status || "pending",
-          relatedRideCount: countRelatedRides(item),
-          raw: item,
-        }));
-
-      setRides([...passenger, ...courier]);
+      const res = await getMyPassengerRequests(token);
+      setPassengerRides((res?.passengerRequests || []).map(mapPassengerRequest));
     } catch (err) {
-      console.log("❌ FETCH ERROR:", err.message);
-      setFetchError(getApiErrorMessage(err, "Could not load your requests."));
-      setRides([]);
+      console.log("❌ PASSENGER REQUESTS ERROR:", err.message);
+      setFetchError(getApiErrorMessage(err, "Could not load passenger requests."));
+      setPassengerRides([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
+  const fetchCourierRequests = useCallback(async () => {
+    try {
+      setLoading(true);
+      setFetchError("");
+
+      const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        setFetchError("Please sign in again.");
+        setCourierRides([]);
+        return;
+      }
+
+      const res = await getMyCourierRequests(token);
+      setCourierRides((res?.courierRequests || []).map(mapCourierRequest));
+    } catch (err) {
+      console.log("❌ COURIER REQUESTS ERROR:", err.message);
+      setFetchError(getApiErrorMessage(err, "Could not load courier requests."));
+      setCourierRides([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchActiveTabRequests = useCallback(() => {
+    if (activeTab === "Courier") {
+      return fetchCourierRequests();
+    }
+    return fetchPassengerRequests();
+  }, [activeTab, fetchCourierRequests, fetchPassengerRequests]);
+
   useFocusEffect(
     useCallback(() => {
       const nextTab = normalizeRequestTab(route.params?.activeTab, tabs);
+      const tabToLoad = nextTab || activeTab;
+
       if (nextTab) {
         setActiveTab(nextTab);
       }
-      fetchRequests();
-    }, [fetchRequests, route.params?.activeTab])
+
+      if (tabToLoad === "Courier") {
+        fetchCourierRequests();
+      } else {
+        fetchPassengerRequests();
+      }
+    }, [
+      route.params?.activeTab,
+      activeTab,
+      fetchCourierRequests,
+      fetchPassengerRequests,
+    ])
   );
 
-  useMyRequestsSocket(fetchRequests);
+  useMyRequestsSocket(fetchActiveTabRequests);
 
-  const filteredRides = rides.filter(
-    (r) => r.role.toLowerCase() === activeTab.toLowerCase()
-  );
+  const handleTabChange = (index) => {
+    const nextTab = tabs[index];
+    setActiveTab(nextTab);
+    if (nextTab === "Courier") {
+      fetchCourierRequests();
+    } else {
+      fetchPassengerRequests();
+    }
+  };
+
+  const filteredRides = activeTab === "Courier" ? courierRides : passengerRides;
 
   const buildSelectedRequest = (ride) =>
     buildMyRequestDetail({
@@ -258,7 +296,7 @@ const MyRequest = () => {
           response.bookingStatus === "confirmed" ? "Booking confirmed" : "Request sent",
           response.message || "Your seat request was sent to the driver."
         );
-        await fetchRequests();
+        await fetchActiveTabRequests();
         closeSheet();
       } else {
         Alert.alert(
@@ -316,7 +354,7 @@ const MyRequest = () => {
           response.bookingStatus === "confirmed" ? "Booking confirmed" : "Request sent",
           response.message || "Courier request sent to the driver."
         );
-        await fetchRequests();
+        await fetchActiveTabRequests();
         closeSheet();
       } else {
         Alert.alert(
@@ -467,7 +505,7 @@ const MyRequest = () => {
       <AnimatedTabs
         tabs={tabs}
         activeIndex={activeIndex}
-        onChange={(index) => setActiveTab(tabs[index])}
+        onChange={handleTabChange}
       />
 
       <FadePanel activeKey={activeTab}>

@@ -1,7 +1,7 @@
 import React from "react";
 import { View, Image, StyleSheet } from "react-native";
 import { getProfileImageUri } from "../../Utils/profileImage";
-import defaultAvatar from "../../assets/profile.png";
+import defaultAvatar from "../../assets/profile.jpg";
 
 /**
  * Shows Cloudinary profile photo or default avatar.

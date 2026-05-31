@@ -25,4 +25,8 @@ module.exports = {
   historyRides: async (req, res) => handle(res, () => rideService.listRidesByPhase(req.user, true)),
   rideDetails: async (req, res) => handle(res, () => rideService.getRideDetails(req.params.rideId, req.user._id)),
   myRequests: async (req, res) => handle(res, () => rideService.getMyRequests(req.user)),
+  myPassengerRequests: async (req, res) =>
+    handle(res, () => rideService.getMyPassengerRequests(req.user)),
+  myCourierRequests: async (req, res) =>
+    handle(res, () => rideService.getMyCourierRequests(req.user)),
 };

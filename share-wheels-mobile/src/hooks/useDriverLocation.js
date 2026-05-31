@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import { Alert, Platform, PermissionsAndroid, NativeModules } from "react-native";
 import { updateRideLocation } from "../ApiService/chatApiServices";
 import {
   connectRideSocket,
@@ -8,8 +7,13 @@ import {
   emitLocationViaSocket,
   releaseRideSocket,
 } from "../services/rideSocket";
+import {
+  hasLocationPermission,
+  requestLocationPermissionForDriverStart,
+} from "../Utils/locationPermissions";
 
 import Geolocation from "@react-native-community/geolocation";
+import { NativeModules } from "react-native";
 
 const isGeolocationLinked =
   !!Geolocation &&
@@ -18,7 +22,7 @@ const isGeolocationLinked =
 
 if (Geolocation?.setRNConfiguration) {
   Geolocation.setRNConfiguration({
-    skipPermissionRequests: false,
+    skipPermissionRequests: true,
     authorizationLevel: "whenInUse",
     locationProvider: "auto",
   });
@@ -27,7 +31,6 @@ if (Geolocation?.setRNConfiguration) {
 const REBUILD_HINT =
   "Location native module is missing. Run: cd share-wheels-mobile && npm install && npx react-native run-android";
 
-/** Fast network/cached fix first; high-accuracy GPS last (avoids indoor timeouts). */
 const LOCATION_ATTEMPTS = [
   { enableHighAccuracy: false, timeout: 15000, maximumAge: 120000 },
   { enableHighAccuracy: false, timeout: 25000, maximumAge: 60000 },
@@ -41,81 +44,6 @@ const WATCH_OPTIONS = {
   fastestInterval: 8000,
   timeout: 20000,
   maximumAge: 60000,
-};
-
-let locationConsentGranted = false;
-
-const askTrackingConsent = () =>
-  new Promise((resolve) => {
-    if (locationConsentGranted) {
-      resolve(true);
-      return;
-    }
-    Alert.alert(
-      "Allow live location tracking",
-      "Share Wheels needs your location during rides so drivers, passengers, and couriers can track each other live.",
-      [
-        { text: "Not now", style: "cancel", onPress: () => resolve(false) },
-        {
-          text: "Allow",
-          onPress: () => {
-            locationConsentGranted = true;
-            resolve(true);
-          },
-        },
-      ],
-      { cancelable: true, onDismiss: () => resolve(false) }
-    );
-  });
-
-const hasLocationPermission = async () => {
-  if (Platform.OS === "ios") {
-    try {
-      const status = await Geolocation.requestAuthorization("whenInUse");
-      return status === "granted";
-    } catch {
-      return false;
-    }
-  }
-  if (Platform.OS !== "android") return true;
-  try {
-    const fine = await PermissionsAndroid.check(
-      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
-    );
-    if (fine) return true;
-    return PermissionsAndroid.check(
-      PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION
-    );
-  } catch {
-    return false;
-  }
-};
-
-const requestLocationPermission = async () => {
-  const consent = await askTrackingConsent();
-  if (!consent) return false;
-
-  if (Platform.OS === "ios") {
-    try {
-      const status = await Geolocation.requestAuthorization("whenInUse");
-      return status === "granted";
-    } catch {
-      return false;
-    }
-  }
-  if (Platform.OS !== "android") return true;
-
-  if (await hasLocationPermission()) return true;
-
-  const fine = await PermissionsAndroid.request(
-    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
-  );
-  if (fine === PermissionsAndroid.RESULTS.GRANTED) return true;
-
-  const coarse = await PermissionsAndroid.request(
-    PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION
-  );
-  return coarse === PermissionsAndroid.RESULTS.GRANTED;
 };
 
 const mapGpsError = (err) => {
@@ -163,17 +91,7 @@ const getCurrentPositionAsync = (options) =>
     );
   });
 
-/** Tries cached/network location first, then high-accuracy GPS. */
-export const acquireLocationForRide = async () => {
-  assertGeolocationReady();
-
-  const permitted = await requestLocationPermission();
-  if (!permitted) {
-    throw new Error(
-      "Location permission is required to start a ride. Allow location access when prompted, or enable it in Settings."
-    );
-  }
-
+const acquireGpsFix = async () => {
   let lastError = null;
   for (const options of LOCATION_ATTEMPTS) {
     try {
@@ -189,8 +107,21 @@ export const acquireLocationForRide = async () => {
       }
     }
   }
-
   throw new Error(mapGpsError(lastError));
+};
+
+/** Driver start ride — prompts for permission only if not granted at login. */
+export const acquireLocationForRide = async () => {
+  assertGeolocationReady();
+
+  const permitted = await requestLocationPermissionForDriverStart();
+  if (!permitted) {
+    throw new Error(
+      "Location permission is required to start a ride. Allow location access when prompted, or enable it in Settings."
+    );
+  }
+
+  return acquireGpsFix();
 };
 
 const sendCoords = async (token, rideId, latitude, longitude) => {
@@ -207,18 +138,16 @@ const sendCoords = async (token, rideId, latitude, longitude) => {
   return data;
 };
 
-/**
- * Must pass before Start Ride — permission + working location fix.
- */
 export const ensureLocationReadyForRide = () => acquireLocationForRide();
 
 /**
  * Send location to server. Pass coords if already acquired (avoids second GPS wait).
+ * Does not prompt — requires permission already granted.
  */
 export const pushDriverLocationNow = async (rideId, token, coords) => {
   assertGeolocationReady();
 
-  const ok = await requestLocationPermission();
+  const ok = await hasLocationPermission();
   if (!ok) throw new Error("Location permission denied");
 
   if (
@@ -229,12 +158,12 @@ export const pushDriverLocationNow = async (rideId, token, coords) => {
     return sendCoords(token, rideId, coords.latitude, coords.longitude);
   }
 
-  const acquired = await acquireLocationForRide();
+  const acquired = await acquireGpsFix();
   return sendCoords(token, rideId, acquired.latitude, acquired.longitude);
 };
 
 /**
- * Sends participant GPS to backend while ride is started (driver, passenger, courier).
+ * Sends participant GPS while ride is started. Never prompts — uses permission from login or driver request.
  */
 export const useParticipantLocation = ({ enabled, rideId, token }) => {
   const watchId = useRef(null);
@@ -277,9 +206,11 @@ export const useParticipantLocation = ({ enabled, rideId, token }) => {
     let cancelled = false;
 
     (async () => {
-      const ok = await requestLocationPermission();
+      const ok = await hasLocationPermission();
       if (!ok || cancelled) {
-        console.warn("[GPS] permission denied");
+        if (__DEV__) {
+          console.warn("[GPS] tracking skipped — location not granted");
+        }
         return;
       }
 

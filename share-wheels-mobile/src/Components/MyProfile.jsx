@@ -26,7 +26,7 @@ import LegalIcon from "../assets/legal.png";
 
 
 import { useNavigation } from "@react-navigation/native";
-import profilepageicon from "../assets/profilepageicon.png";
+import profilepageicon from "../assets/profilepageicon.jpg";
 import { profileData } from "../Navigation/AuthNavigator";
 import KeyboardAwareScreen from "./ui/KeyboardAwareScreen";
 import ScreenContainer from "./ui/ScreenContainer";

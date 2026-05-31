@@ -44,6 +44,7 @@ export default function Ads() {
   const [meta, setMeta] = useState({ types: [], placements: [] });
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -68,11 +69,6 @@ export default function Ads() {
   useEffect(() => {
     load();
   }, [filterPlacement]);
-
-  const onCreate = () => {
-    resetForm();
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
 
   const shownAds = ads.filter((ad) => {
     const q = search.trim().toLowerCase();
@@ -100,6 +96,12 @@ export default function Ads() {
     }
   };
 
+  const openCreate = () => {
+    setEditingId(null);
+    setForm(emptyForm);
+    setModalOpen(true);
+  };
+
   const startEdit = (ad) => {
     setEditingId(ad._id);
     setForm({
@@ -116,10 +118,11 @@ export default function Ads() {
       startsAt: ad.startsAt ? ad.startsAt.slice(0, 16) : "",
       endsAt: ad.endsAt ? ad.endsAt.slice(0, 16) : "",
     });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setModalOpen(true);
   };
 
-  const resetForm = () => {
+  const closeModal = () => {
+    setModalOpen(false);
     setEditingId(null);
     setForm(emptyForm);
   };
@@ -150,7 +153,7 @@ export default function Ads() {
       } else {
         await createAd(payload);
       }
-      resetForm();
+      closeModal();
       load();
     } catch (err) {
       setError(err.message);
@@ -172,7 +175,7 @@ export default function Ads() {
     if (!confirm("Delete this ad?")) return;
     try {
       await deleteAd(id);
-      if (editingId === id) resetForm();
+      if (editingId === id) closeModal();
       load();
     } catch (err) {
       alert(err.message);
@@ -183,112 +186,18 @@ export default function Ads() {
     <div>
       <PageHeader
         title="Ads Manager"
-        subtitle="Create and manage high-quality banner, native, and video ads."
-      />
+        subtitle="Banner, native, and video placements for the mobile app"
+      >
+        <button type="button" className="btn btn-primary" onClick={openCreate}>
+          Create ad
+        </button>
+      </PageHeader>
 
-      {error ? <div className="alert alert-error">{error}</div> : null}
+      {error && !modalOpen ? <div className="alert alert-error">{error}</div> : null}
 
-      <div className="ads-layout">
-        <form onSubmit={handleSubmit} className="card card-padded">
-          <h2 className="card-header">{editingId ? "Edit ad" : "Create new ad"}</h2>
-
-          <div className="form-grid">
-            <div className="form-field">
-              <label>Type</label>
-              <select value={form.type} onChange={(e) => setField("type", e.target.value)}>
-                {(meta.types || ["banner", "video", "native"]).map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="form-field">
-              <label>Placement</label>
-              <select
-                value={form.placement}
-                onChange={(e) => setField("placement", e.target.value)}
-              >
-                {(meta.placements || Object.keys(PLACEMENT_LABELS)).map((p) => (
-                  <option key={p} value={p}>
-                    {PLACEMENT_LABELS[p] || p}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="form-field">
-            <label>Media URL</label>
-            <input
-              value={form.mediaUrl}
-              onChange={(e) => setField("mediaUrl", e.target.value)}
-              placeholder="https://..."
-            />
-            <div className="upload-btns">
-              <label className="upload-label">
-                {uploading ? "Uploading..." : "Upload image"}
-                <input
-                  type="file"
-                  accept="image/*"
-                  hidden
-                  onChange={(e) => handleUpload(e, "image")}
-                />
-              </label>
-              {form.type === "video" ? (
-                <label className="upload-label">
-                  Upload video
-                  <input
-                    type="file"
-                    accept="video/*"
-                    hidden
-                    onChange={(e) => handleUpload(e, "video")}
-                  />
-                </label>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="form-actions">
-            <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? "Saving..." : editingId ? "Update ad" : "Create ad"}
-            </button>
-            {editingId ? (
-              <button type="button" className="btn btn-secondary" onClick={resetForm}>
-                Cancel
-              </button>
-            ) : null}
-          </div>
-        </form>
-
-        <aside className="card card-padded ad-preview-panel">
-          <h3 className="card-header" style={{ marginBottom: 12 }}>
-            Live preview
-          </h3>
-          <div className="ad-preview-box">
-            {form.mediaUrl ? (
-              form.type === "video" ? (
-                <video
-                  src={form.mediaUrl}
-                  poster={form.posterUrl || undefined}
-                  muted
-                  autoPlay
-                  loop
-                  playsInline
-                />
-              ) : (
-                <img src={form.mediaUrl} alt="Ad preview" />
-              )
-            ) : (
-              <div className="ad-preview-placeholder">Fill ad form to preview here.</div>
-            )}
-          </div>
-        </aside>
-      </div>
-
-      <div className="toolbar">
+      <div className="toolbar" style={{ marginBottom: 20 }}>
         <input
-          placeholder="Search by title/type/placement�"
+          placeholder="Search title, type, placement…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{ maxWidth: 360 }}
@@ -304,9 +213,6 @@ export default function Ads() {
             </option>
           ))}
         </select>
-        <button type="button" className="btn btn-secondary" onClick={onCreate}>
-          Create
-        </button>
         <button type="button" className="btn btn-secondary" onClick={load}>
           Refresh
         </button>
@@ -314,49 +220,268 @@ export default function Ads() {
 
       {loading ? (
         <Loading message="Loading ads..." />
-      ) : shownAds.length === 0 ? (
-        <div className="empty-state card card-padded">No ads match your filters.</div>
       ) : (
-        <div className="ads-grid">
-          {shownAds.map((ad) => (
-            <article key={ad._id} className="ad-card">
-              <div className="ad-card-thumb">
-                {ad.type === "video" ? (
-                  <video src={ad.mediaUrl} muted />
-                ) : (
-                  <img src={ad.mediaUrl} alt={ad.title || "Ad"} />
-                )}
-              </div>
-              <div className="ad-card-body">
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-                  <span className={`badge badge-type-${ad.type}`}>{ad.type}</span>
-                  <span className={`badge ${ad.isActive ? "badge-active" : "badge-inactive"}`}>
-                    {ad.isActive ? "Active" : "Paused"}
-                  </span>
-                </div>
-                <div className="ad-card-title">{ad.title || "Untitled ad"}</div>
-                <div className="ad-card-meta">
-                  {PLACEMENT_LABELS[ad.placement] || ad.placement}
-                </div>
-                <div className="ad-card-stats">
-                  {ad.impressions || 0} views � {ad.clicks || 0} clicks
-                </div>
-                <div className="ad-card-actions">
-                  <button className="btn btn-secondary btn-sm" onClick={() => startEdit(ad)}>
-                    Edit
-                  </button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => toggleActive(ad)}>
-                    {ad.isActive ? "Pause" : "Activate"}
-                  </button>
-                  <button className="btn btn-danger btn-sm" onClick={() => handleDelete(ad._id)}>
-                    Delete
-                  </button>
-                </div>
-              </div>
-            </article>
-          ))}
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Preview</th>
+                <th>Title</th>
+                <th>Type</th>
+                <th>Placement</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Views / Clicks</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shownAds.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="empty-state">
+                    No ads match your filters.
+                  </td>
+                </tr>
+              ) : (
+                shownAds.map((ad) => (
+                  <tr key={ad._id}>
+                    <td>
+                      {ad.mediaUrl ? (
+                        ad.type === "video" ? (
+                          <video
+                            src={ad.mediaUrl}
+                            className="ad-thumb-cell"
+                            muted
+                          />
+                        ) : (
+                          <img
+                            src={ad.mediaUrl}
+                            alt=""
+                            className="ad-thumb-cell"
+                          />
+                        )
+                      ) : (
+                        <span className="cell-muted">—</span>
+                      )}
+                    </td>
+                    <td>
+                      <strong>{ad.title || "Untitled"}</strong>
+                      {ad.description ? (
+                        <div className="cell-muted">{ad.description}</div>
+                      ) : null}
+                    </td>
+                    <td>
+                      <span className={`badge badge-type-${ad.type}`}>
+                        {ad.type}
+                      </span>
+                    </td>
+                    <td>{PLACEMENT_LABELS[ad.placement] || ad.placement}</td>
+                    <td>{ad.priority ?? 0}</td>
+                    <td>
+                      <span
+                        className={`badge ${ad.isActive ? "badge-active" : "badge-inactive"}`}
+                      >
+                        {ad.isActive ? "Active" : "Paused"}
+                      </span>
+                    </td>
+                    <td>
+                      {ad.impressions || 0} / {ad.clicks || 0}
+                    </td>
+                    <td>
+                      <div className="table-actions">
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => startEdit(ad)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => toggleActive(ad)}
+                        >
+                          {ad.isActive ? "Pause" : "Activate"}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-danger btn-sm"
+                          onClick={() => handleDelete(ad._id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       )}
+
+      {modalOpen ? (
+        <div className="modal-backdrop" onClick={closeModal} role="presentation">
+          <div
+            className="modal-card modal-card-lg"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="modal-header-row">
+              <h2 className="modal-title">
+                {editingId ? "Edit ad" : "Create new ad"}
+              </h2>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={closeModal}
+              >
+                ✕
+              </button>
+            </div>
+
+            {error ? <div className="alert alert-error">{error}</div> : null}
+
+            <form onSubmit={handleSubmit}>
+              <div className="form-grid">
+                <div className="form-field">
+                  <label>Type</label>
+                  <select
+                    value={form.type}
+                    onChange={(e) => setField("type", e.target.value)}
+                  >
+                    {(meta.types || ["banner", "video", "native"]).map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-field">
+                  <label>Placement</label>
+                  <select
+                    value={form.placement}
+                    onChange={(e) => setField("placement", e.target.value)}
+                  >
+                    {(meta.placements || Object.keys(PLACEMENT_LABELS)).map(
+                      (p) => (
+                        <option key={p} value={p}>
+                          {PLACEMENT_LABELS[p] || p}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-field">
+                <label>Title</label>
+                <input
+                  value={form.title}
+                  onChange={(e) => setField("title", e.target.value)}
+                  placeholder="Ad title"
+                />
+              </div>
+
+              <div className="form-field">
+                <label>Description</label>
+                <input
+                  value={form.description}
+                  onChange={(e) => setField("description", e.target.value)}
+                  placeholder="Short description"
+                />
+              </div>
+
+              <div className="form-field">
+                <label>Media URL *</label>
+                <input
+                  value={form.mediaUrl}
+                  onChange={(e) => setField("mediaUrl", e.target.value)}
+                  placeholder="https://..."
+                />
+                <div className="upload-btns">
+                  <label className="upload-label">
+                    {uploading ? "Uploading..." : "Upload image"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      hidden
+                      onChange={(e) => handleUpload(e, "image")}
+                    />
+                  </label>
+                  {form.type === "video" ? (
+                    <label className="upload-label">
+                      Upload video
+                      <input
+                        type="file"
+                        accept="video/*"
+                        hidden
+                        onChange={(e) => handleUpload(e, "video")}
+                      />
+                    </label>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="form-grid">
+                <div className="form-field">
+                  <label>Priority</label>
+                  <input
+                    type="number"
+                    value={form.priority}
+                    onChange={(e) => setField("priority", e.target.value)}
+                  />
+                </div>
+                <div className="form-field">
+                  <label className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={form.isActive}
+                      onChange={(e) => setField("isActive", e.target.checked)}
+                    />
+                    Active
+                  </label>
+                </div>
+              </div>
+
+              {form.mediaUrl ? (
+                <div className="ad-preview-box" style={{ marginBottom: 16 }}>
+                  {form.type === "video" ? (
+                    <video
+                      src={form.mediaUrl}
+                      poster={form.posterUrl || undefined}
+                      muted
+                      autoPlay
+                      loop
+                      playsInline
+                    />
+                  ) : (
+                    <img src={form.mediaUrl} alt="Preview" />
+                  )}
+                </div>
+              ) : null}
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={closeModal}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={saving}
+                >
+                  {saving ? "Saving..." : editingId ? "Update ad" : "Create ad"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

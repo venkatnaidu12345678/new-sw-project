@@ -18,7 +18,7 @@ import ScreenContainer from "../Components/ui/ScreenContainer";
 import UserAvatar from "../Components/ui/UserAvatar";
 import { getRideChatMessages, sendRideChatMessage } from "../ApiService/chatApiServices";
 import { profileData } from "../Navigation/AuthNavigator";
-import { useParticipantLocation } from "../hooks/useDriverLocation";
+import { setActiveRideTracking } from "../Utils/activeRideTracking";
 import { INPUT_COLORS } from "../theme/inputTheme";
 import { LAYOUT } from "../theme/layout";
 import { getProfileImageUri, profileFromUrl } from "../Utils/profileImage";
@@ -96,11 +96,11 @@ const RideChat = () => {
     }
   }, [peerId, navigation]);
 
-  useParticipantLocation({
-    enabled: isRideStarted && !!token && !!rideId,
-    rideId,
-    token,
-  });
+  useEffect(() => {
+    if (isRideStarted && rideId) {
+      setActiveRideTracking(rideId);
+    }
+  }, [isRideStarted, rideId]);
 
   const loadMessages = useCallback(async () => {
     if (!token || !rideId || !peerId) return;

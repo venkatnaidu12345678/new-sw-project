@@ -12,6 +12,7 @@ const {
   emitEnrouteRequestRemoved,
 } = require("../utils/socketEmit");
 const { escapeRegex } = require("../utils/rideDateQueryUtils");
+const { expirePendingRideIfStale } = require("./rideExpiryService");
 
 const parseCourierCalendarDate = (value) => {
   if (value == null || value === "") return null;
@@ -160,8 +161,19 @@ const requestCourier = async (user, body) => {
   ) {
     return { status: 400, body: { success: false, message: "All courier fields are required" } };
   }
-  const ride = await Ride.findById(rideId);
+  let ride = await Ride.findById(rideId);
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
+  const stale = await expirePendingRideIfStale(ride);
+  ride = stale.ride || ride;
+  if (ride.status === "expired") {
+    return {
+      status: 400,
+      body: { success: false, message: "This ride has expired and is no longer accepting courier requests" },
+    };
+  }
+  if (ride.status !== "pending") {
+    return { status: 400, body: { success: false, message: "Ride is not open for new courier requests" } };
+  }
   if (ride.creator.toString() === user._id.toString()) {
     return { status: 400, body: { success: false, message: "Cannot request own ride" } };
   }

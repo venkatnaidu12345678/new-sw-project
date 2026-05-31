@@ -1,6 +1,17 @@
 /** Normalize ride id for comparisons */
-export const normalizeRideId = (id) =>
-  id == null ? "" : id?.toString?.() || String(id);
+export const normalizeRideId = (id) => {
+  if (id == null) return "";
+  if (typeof id === "object") {
+    return (
+      id._id?.toString?.() ||
+      id.id?.toString?.() ||
+      id.userId?._id?.toString?.() ||
+      id.userId?.toString?.() ||
+      ""
+    );
+  }
+  return id?.toString?.() || String(id);
+};
 
 const normalizeRole = (value) => {
   const role = (value || "").toString().toLowerCase();
@@ -15,6 +26,9 @@ const toLocationPoint = (loc) => {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   return { ...loc, lat, lng, latitude: lat, longitude: lng };
 };
+
+const participantKey = (p) =>
+  normalizeRideId(p?.userId || p?.participantId || p?.id);
 
 const extractRideId = (payload) =>
   payload?.rideId ||
@@ -54,13 +68,17 @@ export const mergeTrackingFromSocket = (prev, payload) => {
     ? payload.participantLocations
         .map((p) => {
           const point = toLocationPoint(p);
-          if (!point) return null;
-          const userId = p?.userId || p?.participantId || p?.id;
+          const userId = participantKey(p);
+          if (!userId) return null;
+          const role = normalizeRole(p?.role);
           return {
             ...p,
-            ...point,
-            role: normalizeRole(p?.role),
+            ...(point || {}),
+            role,
             userId,
+            name: p?.name || payload?.name,
+            lat: point?.lat ?? p?.lat,
+            lng: point?.lng ?? p?.lng,
           };
         })
         .filter(Boolean)
@@ -70,37 +88,43 @@ export const mergeTrackingFromSocket = (prev, payload) => {
   if (incomingParticipants.length > 0) {
     const byId = new Map();
     prevParticipants.forEach((p) => {
-      const key = normalizeRideId(p?.userId || p?.participantId || p?.id);
+      const key = participantKey(p);
       if (key) byId.set(key, p);
     });
     incomingParticipants.forEach((p) => {
-      const key = normalizeRideId(p?.userId || p?.participantId || p?.id);
+      const key = participantKey(p);
       if (!key) return;
-      byId.set(key, { ...(byId.get(key) || {}), ...p });
+      const prevEntry = byId.get(key) || {};
+      const merged = { ...prevEntry, ...p };
+      if (!toLocationPoint(merged) && toLocationPoint(prevEntry)) {
+        merged.lat = prevEntry.lat;
+        merged.lng = prevEntry.lng;
+      }
+      byId.set(key, merged);
     });
     mergedParticipants = Array.from(byId.values());
   }
 
-  if (eventLocation && eventRole !== "driver") {
-    const actorId = normalizeRideId(
-      payload?.userId || payload?.participantId || payload?.id
+  const actorId = normalizeRideId(
+    payload?.userId || payload?.participantId || payload?.id
+  );
+
+  if (eventLocation && actorId) {
+    const idx = mergedParticipants.findIndex(
+      (p) => participantKey(p) === actorId
     );
-    if (actorId) {
-      const idx = mergedParticipants.findIndex(
-        (p) => normalizeRideId(p?.userId || p?.participantId || p?.id) === actorId
-      );
-      const nextActor = {
-        ...(idx >= 0 ? mergedParticipants[idx] : {}),
-        userId: actorId,
-        role: eventRole,
-        ...eventLocation,
-      };
-      if (idx >= 0) {
-        mergedParticipants = [...mergedParticipants];
-        mergedParticipants[idx] = nextActor;
-      } else {
-        mergedParticipants = [...mergedParticipants, nextActor];
-      }
+    const nextActor = {
+      ...(idx >= 0 ? mergedParticipants[idx] : {}),
+      userId: actorId,
+      role: eventRole,
+      name: payload?.name || (idx >= 0 ? mergedParticipants[idx]?.name : null),
+      ...eventLocation,
+    };
+    if (idx >= 0) {
+      mergedParticipants = [...mergedParticipants];
+      mergedParticipants[idx] = nextActor;
+    } else {
+      mergedParticipants = [...mergedParticipants, nextActor];
     }
   }
 

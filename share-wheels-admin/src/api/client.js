@@ -52,6 +52,14 @@ export const getUsers = (params = {}) => {
   const q = new URLSearchParams(params).toString();
   return api(`/admin/users?${q}`);
 };
+
+export const backfillUserPasswords = (defaultPassword) =>
+  api("/admin/users/backfill-passwords", {
+    method: "POST",
+    body: JSON.stringify(
+      defaultPassword ? { defaultPassword } : {}
+    ),
+  });
 export const getRides = (params = {}) => {
   const q = new URLSearchParams(params).toString();
   return api(`/admin/rides?${q}`);
@@ -74,6 +82,15 @@ export const updateUserVerification = (id, isVerified) =>
     method: "PATCH",
     body: JSON.stringify({ isVerified }),
   });
+
+export const createUser = (body) =>
+  api("/admin/users", { method: "POST", body: JSON.stringify(body) });
+
+export const updateUser = (id, body) =>
+  api(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+
+export const deleteUser = (id) =>
+  api(`/admin/users/${id}`, { method: "DELETE" });
 
 export const getActiveTracking = () => api("/admin/tracking/active");
 export const getTrackingDetail = (id) => api(`/admin/tracking/${id}`);

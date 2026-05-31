@@ -47,6 +47,30 @@ const roleCardTheme = {
   Courier: { card: ["#FFF7ED", "#FFFBEB", "#FFFFFF"], border: "#FDBA74" },
 };
 
+const sliderThemes = {
+  Driver: {
+    gradient: ["#EFF6FF", "#F8FAFC", "#FFFFFF"],
+    borderColor: "#93C5FD",
+    handleColor: "#60A5FA",
+    closeColor: "#1E3A8A",
+    backdropOpacity: 0.45,
+  },
+  Passenger: {
+    gradient: ["#ECFDF5", "#F8FAFC", "#FFFFFF"],
+    borderColor: "#86EFAC",
+    handleColor: "#4ADE80",
+    closeColor: "#166534",
+    backdropOpacity: 0.45,
+  },
+  Courier: {
+    gradient: ["#FFF7ED", "#FFFBEB", "#FFFFFF"],
+    borderColor: "#FDBA74",
+    handleColor: "#FB923C",
+    closeColor: "#9A3412",
+    backdropOpacity: 0.45,
+  },
+};
+
 const toDateLabel = (value) => {
   if (!value) return "—";
   const d = new Date(value);
@@ -296,14 +320,10 @@ const RideHistory = () => {
       <BottomSlider
         visible={isSliderVisible}
         onClose={() => setSliderVisible(false)}
-        scrollable={false}
-        theme={{
-          gradient: ["#EFF6FF", "#F8FAFC", "#FFFFFF"],
-          borderColor: "#93C5FD",
-          handleColor: "#60A5FA",
-          closeColor: "#1E3A8A",
-          backdropOpacity: 0.45,
-        }}
+        scrollable
+        theme={
+          sliderThemes[selectedRide?.role] || sliderThemes.Driver
+        }
       >
         {renderSliderContent()}
       </BottomSlider>

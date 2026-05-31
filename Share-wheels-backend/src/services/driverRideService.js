@@ -22,7 +22,7 @@ const {
   canStartOutsideSchedule,
   isRidePastStartGracePeriod,
 } = require("../utils/rideScheduleUtils");
-const { expireRide } = require("./rideExpiryService");
+const { expireRide, expirePendingRideIfStale } = require("./rideExpiryService");
 const {
   escapeRegex,
   getRideDayBounds,
@@ -38,8 +38,16 @@ const getBookedSeats = (ride) =>
 
 const acceptPassengerRequest = async (user, { rideId, passenger_userId }) => {
   if (!rideId || !passenger_userId) return { status: 400, body: { message: "rideId & passenger_userId required" } };
-  const ride = await Ride.findById(rideId);
+  let ride = await Ride.findById(rideId);
   if (!ride) return { status: 404, body: { message: "Ride not found" } };
+  const stale = await expirePendingRideIfStale(ride);
+  ride = stale.ride || ride;
+  if (ride.status === "expired") {
+    return { status: 400, body: { message: "This ride has expired" } };
+  }
+  if (ride.status !== "pending") {
+    return { status: 400, body: { message: "Ride is not open for new bookings" } };
+  }
   if (ride.creator.toString() !== user._id.toString()) return { status: 403, body: { message: "Only ride creator can accept requests" } };
   const reqObj = ride.passenger_requested_ride.find((item) => item.userId.toString() === passenger_userId.toString());
   if (!reqObj) return { status: 404, body: { message: "Passenger request not found" } };
@@ -159,9 +167,13 @@ const startRide = async (user, { rideId }) => {
   const userId = new mongoose.Types.ObjectId(user._id);
   const activeRide = await Ride.findOne({ creator: userId, status: "started" });
   if (activeRide) return { status: 400, body: { success: false, message: "You already have an active ride. Complete it before starting another." } };
-  const ride = await Ride.findById(rideId);
+  let ride = await Ride.findById(rideId);
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
   if (ride.creator.toString() !== userId.toString()) return { status: 403, body: { success: false, message: "Only ride creator can start the ride" } };
+
+  const stale = await expirePendingRideIfStale(ride);
+  ride = stale.ride || ride;
+
   if (ride.status !== "pending") {
     return {
       status: 400,

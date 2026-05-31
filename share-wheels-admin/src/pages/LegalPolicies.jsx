@@ -5,11 +5,12 @@ import {
 } from "../api/client";
 import PageHeader from "../components/ui/PageHeader";
 import Loading from "../components/ui/Loading";
+import RichTextEditor, { htmlToPlainText } from "../components/RichTextEditor";
 
-const POLICY_LABELS = [
-  { key: "terms", title: "Terms of Service" },
-  { key: "privacy", title: "Privacy Policy" },
-  { key: "disclaimer", title: "Disclaimer" },
+const POLICY_ROWS = [
+  { key: "terms", title: "Terms of Service", description: "Shown when users accept terms" },
+  { key: "privacy", title: "Privacy Policy", description: "Data collection and usage" },
+  { key: "disclaimer", title: "Disclaimer", description: "Liability and service limits" },
 ];
 
 export default function LegalPolicies() {
@@ -28,6 +29,10 @@ export default function LegalPolicies() {
     privacy: null,
     disclaimer: null,
   });
+
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingKey, setEditingKey] = useState(null);
+  const [draftContent, setDraftContent] = useState("");
 
   const load = () => {
     setLoading(true);
@@ -54,13 +59,28 @@ export default function LegalPolicies() {
     load();
   }, []);
 
-  const handleSave = async () => {
+  const openEditor = (key) => {
+    setEditingKey(key);
+    setDraftContent(policies[key] || "");
+    setEditorOpen(true);
+  };
+
+  const closeEditor = () => {
+    setEditorOpen(false);
+    setEditingKey(null);
+    setDraftContent("");
+  };
+
+  const saveDraft = async () => {
+    if (!editingKey) return;
     setSaving(true);
     setError("");
     try {
-      await updateLegalPolicies(policies);
+      const payload = { ...policies, [editingKey]: draftContent };
+      await updateLegalPolicies(payload);
       await load();
-      alert("Legal policies saved successfully.");
+      closeEditor();
+      alert("Policy saved successfully.");
     } catch (e) {
       setError(e.message);
     } finally {
@@ -68,49 +88,135 @@ export default function LegalPolicies() {
     }
   };
 
+  const saveAll = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      await updateLegalPolicies(policies);
+      await load();
+      alert("All legal policies saved successfully.");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const editingMeta = POLICY_ROWS.find((r) => r.key === editingKey);
+
   if (loading) return <Loading message="Loading legal policies..." />;
 
   return (
     <div>
       <PageHeader
         title="Legal Policies"
-        subtitle="Admin-editable Terms / Privacy / Disclaimer text (shown in the mobile app)"
-      />
+        subtitle="Rich-text terms, privacy, and disclaimer shown in the mobile app"
+      >
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={saveAll}
+          disabled={saving}
+        >
+          {saving ? "Saving…" : "Save all"}
+        </button>
+      </PageHeader>
 
       {error ? <div className="alert alert-error">{error}</div> : null}
 
-      <div className="card card-padded" style={{ marginBottom: 20 }}>
-        {POLICY_LABELS.map((p) => (
-          <div key={p.key} className="form-field" style={{ marginBottom: 18 }}>
-            <label>{p.title}</label>
-            <textarea
-              value={policies[p.key] || ""}
-              onChange={(e) =>
-                setPolicies((prev) => ({ ...prev, [p.key]: e.target.value }))
-              }
-              rows={10}
-              placeholder={`Enter ${p.title} here...`}
-            />
-            {updatedAt[p.key] ? (
-              <div style={{ fontSize: 12, color: "#64748B", marginTop: 6 }}>
-                Last updated: {new Date(updatedAt[p.key]).toLocaleString()}
-              </div>
-            ) : null}
-          </div>
-        ))}
-
-        <div className="form-actions">
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleSave}
-            disabled={saving}
-          >
-            {saving ? "Saving..." : "Save all"}
-          </button>
-        </div>
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Policy</th>
+              <th>Description</th>
+              <th>Preview</th>
+              <th>Last updated</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {POLICY_ROWS.map((row) => {
+              const plain = htmlToPlainText(policies[row.key]);
+              const preview =
+                plain.length > 120 ? `${plain.slice(0, 120)}…` : plain || "—";
+              return (
+                <tr key={row.key}>
+                  <td>
+                    <strong>{row.title}</strong>
+                    <div className="cell-muted">{row.key}</div>
+                  </td>
+                  <td className="cell-muted">{row.description}</td>
+                  <td style={{ maxWidth: 280 }}>{preview}</td>
+                  <td>
+                    {updatedAt[row.key]
+                      ? new Date(updatedAt[row.key]).toLocaleString()
+                      : "—"}
+                  </td>
+                  <td>
+                    <div className="table-actions">
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        onClick={() => openEditor(row.key)}
+                      >
+                        Edit content
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
+
+      {editorOpen && editingMeta ? (
+        <div className="modal-backdrop" onClick={closeEditor} role="presentation">
+          <div
+            className="modal-card modal-card-lg"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="modal-header-row">
+              <div>
+                <h2 className="modal-title">{editingMeta.title}</h2>
+                <p className="modal-subtitle">{editingMeta.description}</p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={closeEditor}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <RichTextEditor
+              value={draftContent}
+              onChange={setDraftContent}
+              placeholder={`Write ${editingMeta.title}…`}
+              minHeight={320}
+            />
+
+            <div className="modal-actions" style={{ marginTop: 20 }}>
+              <button type="button" className="btn btn-secondary" onClick={closeEditor}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={saveDraft}
+                disabled={saving}
+              >
+                {saving ? "Saving…" : "Save policy"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
-

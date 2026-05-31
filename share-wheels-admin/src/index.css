@@ -502,10 +502,105 @@ table.data-table {
   border-bottom: none;
 }
 
+.password-cell {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  background: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 4px;
+  word-break: break-all;
+}
+
 .table-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modal-card {
+  background: var(--sw-surface);
+  border-radius: var(--sw-radius-lg);
+  box-shadow: var(--sw-shadow-md);
+  width: 100%;
+  max-width: 440px;
+  padding: 24px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-card-lg {
+  max-width: 720px;
+}
+
+.modal-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.modal-subtitle {
+  font-size: 13px;
+  color: var(--sw-text-muted);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.cell-muted {
+  font-size: 12px;
+  color: var(--sw-text-muted);
+  margin-top: 2px;
+}
+
+.modal-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+.modal-form label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sw-text-muted);
+  margin-bottom: 14px;
+}
+
+.modal-form label input,
+.modal-form label select {
+  margin-top: 6px;
+}
+
+.checkbox-row {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500 !important;
+  color: var(--sw-text) !important;
+}
+
+.checkbox-row input {
+  width: auto;
+  margin: 0;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
 }
 
 /* ─── Badges ─── */
@@ -731,6 +826,34 @@ table.data-table {
   border-radius: 6px;
   object-fit: cover;
   background: #e2e8f0;
+  display: block;
+}
+
+/* ─── Rich text editor (Legal) ─── */
+.rte-wrap .ql-toolbar {
+  border-radius: 10px 10px 0 0;
+  border-color: var(--sw-border-strong);
+  background: #f8fafc;
+  font-family: var(--sw-font);
+}
+
+.rte-wrap .ql-container {
+  border-radius: 0 0 10px 10px;
+  border-color: var(--sw-border-strong);
+  font-family: var(--sw-font);
+  font-size: 15px;
+  min-height: var(--rte-min-height, 280px);
+}
+
+.rte-wrap .ql-editor {
+  min-height: var(--rte-min-height, 280px);
+  line-height: 1.6;
+  color: var(--sw-text);
+}
+
+.rte-wrap .ql-editor.ql-blank::before {
+  color: var(--sw-text-muted);
+  font-style: normal;
 }
 
 /* ─── Login ─── */

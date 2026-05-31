@@ -6,6 +6,7 @@ import {
   Image,
   TouchableOpacity,
   StatusBar,
+  Platform,
 } from "react-native";
 import LinearGradient from "react-native-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -36,40 +37,49 @@ const AuthScreenLayout = ({
       style={styles.root}
     >
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+
+      <View
+        style={[
+          styles.brandHeader,
+          {
+            paddingTop: insets.top + LAYOUT.spacing.md,
+            paddingHorizontal: AUTH_SPACING.screen,
+          },
+        ]}
+      >
+        {showBack ? (
+          <TouchableOpacity onPress={onBack} style={styles.backBtn} hitSlop={12}>
+            <Text style={styles.backText}>← Back</Text>
+          </TouchableOpacity>
+        ) : null}
+
+        <View style={styles.brandRow}>
+          <LinearGradient
+            colors={AUTH_GRADIENTS.hero}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.logoWrap}
+          >
+            <Image source={icon} style={styles.logo} resizeMode="contain" />
+          </LinearGradient>
+          <View style={styles.brandTextCol}>
+            <Text style={styles.brand}>Share Wheels</Text>
+            <Text style={styles.brandTag}>Ride together, save together</Text>
+          </View>
+        </View>
+
+        <Text style={styles.title}>{title}</Text>
+        {!!subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      </View>
+
       <KeyboardAwareScreen
         scrollable
+        style={styles.formArea}
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: insets.top + LAYOUT.spacing.sm, paddingBottom: insets.bottom + LAYOUT.spacing.lg },
+          { paddingBottom: insets.bottom + LAYOUT.spacing.lg },
         ]}
-        header={
-          <View style={styles.headerBlock}>
-            {showBack ? (
-              <TouchableOpacity onPress={onBack} style={styles.backBtn} hitSlop={12}>
-                <Text style={styles.backText}>← Back</Text>
-              </TouchableOpacity>
-            ) : null}
-
-            <View style={styles.brandRow}>
-              <LinearGradient
-                colors={AUTH_GRADIENTS.hero}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.logoWrap}
-              >
-                <Image source={icon} style={styles.logo} resizeMode="contain" />
-              </LinearGradient>
-              <View style={styles.brandTextCol}>
-                <Text style={styles.brand}>Share Wheels</Text>
-                <Text style={styles.brandTag}>Ride together, save together</Text>
-              </View>
-            </View>
-
-            <Text style={styles.title}>{title}</Text>
-            {!!subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-          </View>
-        }
-        headerStyle={styles.headerWrap}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
       >
         <LinearGradient
           colors={AUTH_GRADIENTS.cardBorder}
@@ -91,15 +101,16 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
   },
-  headerWrap: {
-    paddingHorizontal: AUTH_SPACING.screen,
-  },
-  headerBlock: {
+  brandHeader: {
     flexShrink: 0,
+  },
+  formArea: {
+    flex: 1,
   },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: AUTH_SPACING.screen,
+    paddingTop: LAYOUT.spacing.sm,
   },
   backBtn: { marginBottom: LAYOUT.spacing.sm },
   backText: {
@@ -110,7 +121,6 @@ const styles = StyleSheet.create({
   brandRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: LAYOUT.spacing.xs,
     marginBottom: LAYOUT.spacing.lg,
     gap: scale(12),
   },
@@ -127,7 +137,10 @@ const styles = StyleSheet.create({
     height: scale(40),
     borderRadius: scale(10),
   },
-  brandTextCol: { flex: 1 },
+  brandTextCol: {
+    flex: 1,
+    justifyContent: "center",
+  },
   brand: {
     fontSize: AUTH_FONT.brand,
     fontWeight: "800",
@@ -153,7 +166,6 @@ const styles = StyleSheet.create({
   cardBorder: {
     borderRadius: LAYOUT.radius.lg + 2,
     padding: 2,
-    marginTop: LAYOUT.spacing.xs,
   },
   card: {
     backgroundColor: AUTH_COLORS.surfaceGlass,

@@ -1,6 +1,12 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+
+// Release APK uses .env.production (production URL). Debug uses local .env.
+project.ext.envConfigFiles = [
+    debug: ".env",
+    release: ".env.production",
+]
 apply from: project(':react-native-config').projectDir.getPath() + "/dotenv.gradle"
 
 /**
@@ -86,6 +92,7 @@ android {
         versionCode 1
         versionName "1.0"
         manifestPlaceholders = [usesCleartextTraffic: "true"]
+        resValue "string", "GOOGLE_MAPS_API_KEY", (project.env.get("GOOGLE_MAPS_API_KEY") ?: "")
     }
   signingConfigs {
     debug {
@@ -112,6 +119,12 @@ android {
     shrinkResources false
     proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
 }
+    }
+
+    packaging {
+        jniLibs {
+            pickFirsts += ["**/libworklets.so"]
+        }
     }
 }
 

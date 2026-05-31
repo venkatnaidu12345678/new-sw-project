@@ -31,6 +31,12 @@ const displayValue = (value) => {
   return String(value);
 };
 
+const hasValue = (value) => {
+  if (value == null || value === "") return false;
+  const s = String(value).trim();
+  return s.length > 0 && s !== "—" && s !== "--" && s !== "-";
+};
+
 const DetailRow = ({ icon, label, value }) => (
   <View style={styles.detailRow}>
     <Image source={icon} style={styles.detailIcon} />
@@ -76,7 +82,42 @@ const RequestDetailPopover = ({
 
   const theme = roleTheme[request?.role] || roleTheme.Passenger;
   const isCourier = request?.role === "Courier";
-  const extraRows = request?.extraRows || [];
+  const extraRows = (request?.extraRows || []).filter((row) => hasValue(row?.value));
+
+  const timeValue =
+    request?.time && request.time !== "--"
+      ? request.time
+      : formatDisplayTime(
+          request?.raw?.startTime || request?.linkedRide?.startTime
+        );
+
+  const detailRows = [
+    hasValue(request?.date) && {
+      icon: calendarIcon,
+      label: "Date",
+      value: request.date,
+    },
+    hasValue(timeValue) && {
+      icon: clockIcon,
+      label: "Time",
+      value: timeValue,
+    },
+    hasValue(request?.seats) && {
+      icon: seatIcon,
+      label: isCourier ? "Parcel" : "Seats",
+      value: request.seats,
+    },
+    hasValue(request?.car) && {
+      icon: carIcon,
+      label: isCourier ? "Courier / Receiver" : "Driver",
+      value: request.car,
+    },
+  ].filter(Boolean);
+
+  const showRoute = hasValue(request?.from) || hasValue(request?.to);
+  const showPrice =
+    hasValue(request?.price) &&
+    String(request.price).replace(/[^\d.]/g, "") !== "0";
 
   return (
     <Modal
@@ -114,52 +155,50 @@ const RequestDetailPopover = ({
                 bounces
                 keyboardShouldPersistTaps="handled"
               >
-                <View style={styles.routeBlock}>
-                  <Image source={locationIcon} style={styles.routeIcon} />
-                  <Text style={styles.routeText}>
-                    {request?.from || "—"} → {request?.to || "—"}
-                  </Text>
-                </View>
-
-                <View style={styles.detailsBlock}>
-                  <DetailRow icon={calendarIcon} label="Date" value={request?.date} />
-                  <DetailRow
-                    icon={clockIcon}
-                    label="Time"
-                    value={
-                      request?.time && request.time !== "--"
-                        ? request.time
-                        : formatDisplayTime(
-                            request?.raw?.startTime ||
-                              request?.linkedRide?.startTime
-                          ) || "—"
-                    }
-                  />
-                  <DetailRow
-                    icon={seatIcon}
-                    label={isCourier ? "Parcel" : "Seats"}
-                    value={request?.seats}
-                  />
-                  <DetailRow
-                    icon={carIcon}
-                    label={isCourier ? "Courier / Receiver" : "Driver"}
-                    value={request?.car}
-                  />
-                  {extraRows.map((row, index) => (
-                    <View key={`${row.label}-${index}`} style={styles.extraRow}>
-                      <Text style={styles.detailLabel}>{row.label}</Text>
-                      <Text style={styles.detailValue}>{displayValue(row.value)}</Text>
-                    </View>
-                  ))}
-                </View>
-
-                <View style={styles.footerRow}>
-                  <View style={[styles.statusPill, { backgroundColor: theme.chip }]}>
-                    <Text style={[styles.statusText, { color: theme.text }]}>
-                      {request?.status || "pending"}
+                {showRoute ? (
+                  <View style={styles.routeBlock}>
+                    <Image source={locationIcon} style={styles.routeIcon} />
+                    <Text style={styles.routeText}>
+                      {[request?.from, request?.to].filter(hasValue).join(" → ") ||
+                        "—"}
                     </Text>
                   </View>
-                  <Text style={styles.priceText}>{request?.price || "₹0"}</Text>
+                ) : null}
+
+                {detailRows.length > 0 || extraRows.length > 0 ? (
+                  <View style={styles.detailsBlock}>
+                    {detailRows.map((row) => (
+                      <DetailRow
+                        key={row.label}
+                        icon={row.icon}
+                        label={row.label}
+                        value={row.value}
+                      />
+                    ))}
+                    {extraRows.map((row, index) => (
+                      <View key={`${row.label}-${index}`} style={styles.extraRow}>
+                        <Text style={styles.detailLabel}>{row.label}</Text>
+                        <Text style={styles.detailValue}>
+                          {displayValue(row.value)}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                <View style={styles.footerRow}>
+                  {hasValue(request?.status) ? (
+                    <View style={[styles.statusPill, { backgroundColor: theme.chip }]}>
+                      <Text style={[styles.statusText, { color: theme.text }]}>
+                        {request.status}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View />
+                  )}
+                  {showPrice ? (
+                    <Text style={styles.priceText}>{request.price}</Text>
+                  ) : null}
                 </View>
 
               </ScrollView>

@@ -1,6 +1,6 @@
 const { expireStalePendingRides } = require("../services/rideExpiryService");
 
-const INTERVAL_MS = 10 * 60 * 1000;
+const INTERVAL_MS = 5 * 60 * 1000;
 
 let timer = null;
 
@@ -15,7 +15,7 @@ const startRideExpiryJob = () => {
 
   run();
   timer = setInterval(run, INTERVAL_MS);
-  console.log("Ride expiry job started (every 10 minutes)");
+  console.log("Ride expiry job started (every 5 minutes)");
 };
 
 module.exports = { startRideExpiryJob };

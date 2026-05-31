@@ -108,3 +108,16 @@ export const formatLeadTimeHint = (ride) => {
   if (h > 0) return `${h}h ${m}m until start`;
   return `${m}m until start`;
 };
+
+/** Reject create/postpone when scheduled start is not strictly in the future. */
+export const assertScheduledStartInFuture = (date, startTime, minLeadMs = 0) => {
+  const start = parseRideScheduledStart({ date, startTime });
+  if (!start || Number.isNaN(start.getTime())) {
+    return { ok: false, message: "Invalid date or departure time" };
+  }
+  const msUntilStart = start.getTime() - Date.now();
+  if (msUntilStart < minLeadMs) {
+    return { ok: false, message: "Departure time must be in the future" };
+  }
+  return { ok: true, scheduledStart: start, msUntilStart };
+};

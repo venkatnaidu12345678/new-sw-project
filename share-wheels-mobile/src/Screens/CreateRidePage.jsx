@@ -12,6 +12,7 @@ import FixedButton from "../Components/FixedButton";
 import { createRideApi, userProfile } from "../ApiService/ridesApiServices";
 import { profileData } from "../Navigation/AuthNavigator";
 import { validatePrice, validateSeats } from "../Utils";
+import { assertScheduledStartInFuture } from "../Utils/rideSchedule";
 import { DS } from "../theme/designSystem";
 import { CR } from "../theme/createRideTheme";
 
@@ -78,6 +79,8 @@ const CreateRidePage = () => {
     if (seatsErr) return seatsErr;
     const priceErr = validatePrice(rideData.ride_amount);
     if (priceErr) return priceErr;
+    const futureErr = assertScheduledStartInFuture(rideData.date, rideData.startTime);
+    if (!futureErr.ok) return futureErr.message;
     return null;
   };
 

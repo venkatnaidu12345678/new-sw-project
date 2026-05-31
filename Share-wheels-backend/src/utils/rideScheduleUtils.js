@@ -197,6 +197,30 @@ const isRidePastStartGracePeriod = (ride, graceMs = RIDE_START_GRACE_MS) => {
   return start.getTime() + graceMs <= Date.now();
 };
 
+/** Reject create/postpone when scheduled start is not strictly in the future. */
+const assertScheduledStartInFuture = (rideOrDate, startTime, minLeadMs = 0) => {
+  const ride =
+    rideOrDate && typeof rideOrDate === "object" && "date" in rideOrDate
+      ? rideOrDate
+      : { date: rideOrDate, startTime };
+
+  const scheduledStart = parseRideScheduledStart(ride);
+  if (!scheduledStart || Number.isNaN(scheduledStart.getTime())) {
+    return { ok: false, message: "Invalid ride date or start time" };
+  }
+
+  const msUntilStart = scheduledStart.getTime() - Date.now();
+  if (msUntilStart < minLeadMs) {
+    return {
+      ok: false,
+      message: "Scheduled ride time must be in the future",
+      scheduledStart,
+    };
+  }
+
+  return { ok: true, scheduledStart, msUntilStart };
+};
+
 module.exports = {
   parseRideScheduledStart,
   isRideScheduledTimePassed,
@@ -208,6 +232,7 @@ module.exports = {
   formatStartTimeHHmm,
   normalizeStartTimeForStorage,
   assertDriverActionLeadTime,
+  assertScheduledStartInFuture,
   parsePostponedStartTime,
   applyScheduledStartToRide,
   getRideStartGraceDeadline,

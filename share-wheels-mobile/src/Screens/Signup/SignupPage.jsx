@@ -7,6 +7,7 @@ import AuthTextInput from "../../Components/AuthTextInput";
 import AuthScreenLayout from "../../Components/auth/AuthScreenLayout";
 import { signupApi } from "../../ApiService/AuthApiService";
 import { syncFcmTokenWithBackend } from "../../Notifications/registerToken";
+import { requestLocationPermissionOnLogin } from "../../Utils/locationPermissions";
 import {
   validateName,
   validatePhone,
@@ -116,6 +117,7 @@ const SignupPage = ({ navigation, triggerAuth }) => {
           await AsyncStorage.setItem("USER_NAME", user.name);
         }
         await syncFcmTokenWithBackend();
+        requestLocationPermissionOnLogin().catch(() => {});
         triggerAuth?.();
       } else {
         setErrors((prev) => ({

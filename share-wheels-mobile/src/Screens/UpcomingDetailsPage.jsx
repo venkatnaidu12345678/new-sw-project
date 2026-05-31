@@ -73,7 +73,6 @@ import { getRideDisplayFare, getPassengerFare, getCourierFare } from '../Utils/f
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator } from "react-native";
 import {
-  useParticipantLocation,
   pushDriverLocationNow,
   ensureLocationReadyForRide,
 } from "../hooks/useDriverLocation";
@@ -91,6 +90,10 @@ import {
 import { getApiErrorMessage } from "../Utils/apiErrors";
 import { openPhoneCall } from "../Utils/phoneCall";
 import { useRideSocket } from "../hooks/useAppSocket";
+import {
+  connectRideSocket,
+  requestParticipantLocationAccess,
+} from "../services/rideSocket";
 
 const UpcomingDetailsPage = ({ route }) => {
   const navigation = useNavigation();
@@ -374,13 +377,7 @@ const UpcomingDetailsPage = ({ route }) => {
     myBoarding &&
     (normalizedRideStatus === "pending" || normalizedRideStatus === "started");
 
-  useParticipantLocation({
-    enabled: isRideStarted && !!driverToken && !!rideIdStr,
-    rideId: rideIdStr,
-    token: driverToken,
-  });
-
-  // Background GPS for driver, passengers, and couriers while ride is active
+  // Background GPS via DriverLocationTracker (setActiveRideTracking below)
   useEffect(() => {
     if (
       normalizedRideStatus === "completed" ||
@@ -421,6 +418,28 @@ const UpcomingDetailsPage = ({ route }) => {
 
   const openLiveMap = () => {
     navigation.navigate("RideLiveMap", rideNavParams());
+  };
+
+  const handleRequestParticipantLocation = async (participant) => {
+    const targetUserId =
+      participant?.userId?._id?.toString?.() ||
+      participant?.userId?.toString?.();
+    if (!targetUserId || !rideIdStr) return;
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) return;
+      await connectRideSocket(token);
+      await requestParticipantLocationAccess(rideIdStr, targetUserId);
+      Alert.alert(
+        "Request sent",
+        "The participant will be asked to enable location for this ride."
+      );
+    } catch (err) {
+      Alert.alert(
+        "Could not send request",
+        getApiErrorMessage(err, "Try again in a moment.")
+      );
+    }
   };
 
   const handleAcceptPassenger = useCallback(async (passengerId) => {
@@ -1044,6 +1063,11 @@ const UpcomingDetailsPage = ({ route }) => {
                       setSelectedPassenger(item);
                       setActiveSlider("removePassenger");
                     }}
+                    onRequestLocation={
+                      isRideStarted
+                        ? () => handleRequestParticipantLocation(item)
+                        : undefined
+                    }
                     onPress={() => openParticipantDetails(item, "passenger")}
                   />
                 ))}
@@ -1096,6 +1120,11 @@ const UpcomingDetailsPage = ({ route }) => {
                       openDirectChat({ userId: item.userId, role: "courier" })
                     }
                     onRemove={() => handleRemoveCourier(item._id)}
+                    onRequestLocation={
+                      isRideStarted
+                        ? () => handleRequestParticipantLocation(item)
+                        : undefined
+                    }
                     onPress={() => openParticipantDetails(item, "courier")}
                   />
                 ))}

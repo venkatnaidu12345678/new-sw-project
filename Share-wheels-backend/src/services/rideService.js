@@ -12,6 +12,7 @@ const {
   isRideScheduledTimeFuture,
   parseRideScheduledStart,
   assertDriverActionLeadTime,
+  assertScheduledStartInFuture,
   parsePostponedStartTime,
   applyScheduledStartToRide,
   MAX_POSTPONE_DURATION_MS,
@@ -28,7 +29,7 @@ const {
   emitRideRequestUpdated,
 } = require("../utils/socketEmit");
 const { toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
-const { expireStalePendingRides } = require("./rideExpiryService");
+const { expireStalePendingRides, expirePendingRideIfStale } = require("./rideExpiryService");
 const { normalizeStartTimeForStorage } = require("../utils/rideScheduleUtils");
 
 const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -64,6 +65,7 @@ const getRidesData = async ({ rideIds }) => {
   if (!rideIds || !Array.isArray(rideIds)) {
     return { status: 400, body: { status: false, message: "rideIds must be an array" } };
   }
+  await expireStalePendingRides();
   const rides = await Ride.find({ _id: { $in: rideIds } })
     .populate("creator", "name mobile profile_img")
     .populate("users_request_Couriers.userId", "name mobile profile_img")
@@ -93,6 +95,13 @@ const createRide = async (user, payload) => {
   }
 
   const normalizedStartTime = normalizeStartTimeForStorage(rideDate, startTime);
+  const scheduleCheck = assertScheduledStartInFuture(
+    { date: rideDate, startTime: normalizedStartTime },
+    null
+  );
+  if (!scheduleCheck.ok) {
+    return { status: 400, body: { error: scheduleCheck.message } };
+  }
 
   const ride = await Ride.create({
     creator: user._id,
@@ -118,6 +127,8 @@ const createRide = async (user, payload) => {
 };
 
 const getRides = async (query, authUser) => {
+  await expireStalePendingRides();
+
   let { from, to, date } = query;
   if (!from || !to || !date) {
     return { status: 400, body: { message: "from, to and date are required" } };
@@ -242,6 +253,12 @@ const postponeRide = async (user, { rideId, newStartTime, reason }) => {
     return {
       status: 400,
       body: { status: false, message: "Postponement cannot exceed 2 hours" },
+    };
+  }
+  if (newStart.getTime() <= Date.now()) {
+    return {
+      status: 400,
+      body: { status: false, message: "New start time must be in the future" },
     };
   }
 
@@ -376,8 +393,26 @@ const sendPassengerRequest = async (user, { rideId, requires_seats }) => {
       body: { success: false, message: "rideId and requires_seats (min 1) are required" },
     };
   }
-  const ride = await Ride.findById(rideId);
+  let ride = await Ride.findById(rideId);
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
+
+  const stale = await expirePendingRideIfStale(ride);
+  ride = stale.ride || ride;
+  if (ride.status === "expired") {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message: "This ride has expired and is no longer accepting bookings",
+      },
+    };
+  }
+  if (ride.status !== "pending") {
+    return {
+      status: 400,
+      body: { success: false, message: "Ride is not open for new bookings" },
+    };
+  }
 
   if (ride.creator.toString() === userId.toString()) {
     return {
@@ -655,7 +690,7 @@ const sanitizeParticipant = (entry, viewerId) => {
 
 const getRideDetails = async (rideId, viewerId) => {
   if (!mongoose.Types.ObjectId.isValid(rideId)) return { status: 400, body: { success: false, message: "Invalid Ride ID" } };
-  const ride = await Ride.findById(rideId)
+  let ride = await Ride.findById(rideId)
     .select(
       "passengers all_deliveries passenger_requested_ride users_request_Couriers status creator vehicle from to date startTime ride_amount availableSeats CanCarryCourier QuickReserve postponeCount postponeReason postponedAt originalScheduledStart cancel_reason"
     )
@@ -665,6 +700,9 @@ const getRideDetails = async (rideId, viewerId) => {
     .populate("passenger_requested_ride.userId", USER_FIELDS)
     .populate("users_request_Couriers.userId", USER_FIELDS);
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
+
+  const stale = await expirePendingRideIfStale(ride);
+  ride = stale.ride || ride;
 
   const passengers = (ride.passengers || []).map((p) => sanitizeParticipant(p, viewerId));
   const all_deliveries = (ride.all_deliveries || []).map((c) => sanitizeParticipant(c, viewerId));
@@ -826,6 +864,8 @@ const findMatchingRidesForRequest = async ({
   courierOnly = false,
   excludeRideId = null,
 }) => {
+  await expireStalePendingRides();
+
   if (!from?.trim() || !to?.trim()) return [];
   const range = calendarRangeFromRequestDates(date, dateEnd);
   if (!range) return [];
@@ -859,7 +899,10 @@ const fetchLinkedRide = async (rideId, userId) => {
   return serializeMatchingRide(ride, userId);
 };
 
-const getMyRequests = async (user) => {
+const routeKey = (from, to) =>
+  `${String(from || "").trim().toLowerCase()}|${String(to || "").trim().toLowerCase()}`;
+
+const buildMyPassengerRequests = async (user) => {
   const userId = new mongoose.Types.ObjectId(user._id);
 
   const passengerData = await PassengerRide.find({
@@ -867,6 +910,7 @@ const getMyRequests = async (user) => {
     status: "pending",
     $or: [{ assigned_to: { $exists: false } }, { "assigned_to.rideId": null }],
   }).lean();
+
   const standalonePassengerRequests = passengerData.map((p) => ({
     requestId: p._id,
     passengerRideId: p._id,
@@ -894,18 +938,15 @@ const getMyRequests = async (user) => {
     .select("from to")
     .lean();
 
-  const passengerRequestsBase = standalonePassengerRequests.filter((p) => {
-    const fromKey = String(p.from || "").trim().toLowerCase();
-    const toKey = String(p.to || "").trim().toLowerCase();
-    const hasJoinOnRoute = activeJoinOnRoute.some(
-      (r) =>
-        String(r.from || "").trim().toLowerCase() === fromKey &&
-        String(r.to || "").trim().toLowerCase() === toKey
-    );
-    return !hasJoinOnRoute;
-  });
+  const joinedRoutes = new Set(
+    activeJoinOnRoute.map((r) => routeKey(r.from, r.to))
+  );
 
-  const passengerRequests = await Promise.all(
+  const passengerRequestsBase = standalonePassengerRequests.filter(
+    (p) => !joinedRoutes.has(routeKey(p.from, p.to))
+  );
+
+  return Promise.all(
     passengerRequestsBase.map(async (req) => {
       const matchingRides = await findMatchingRidesForRequest({
         from: req.from,
@@ -917,11 +958,34 @@ const getMyRequests = async (user) => {
       return { ...req, linkedRide: null, matchingRides };
     })
   );
+};
+
+const buildMyCourierRequests = async (user) => {
+  const userId = new mongoose.Types.ObjectId(user._id);
 
   const courierRequestsData = await Courier.find({
-    creator: { $in: [userId, user._id] },
+    creator: userId,
     courier_status: { $in: ["pending", "request_to_driver"] },
+    $or: [
+      { driver_assigned_courier: { $exists: false } },
+      { "driver_assigned_courier.rideId": null },
+    ],
   }).lean();
+
+  const activeCourierOnRoute = await Ride.find({
+    status: { $in: ["pending", "started"] },
+    $or: [
+      { "users_request_Couriers.userId": userId },
+      { "all_deliveries.userId": userId },
+    ],
+  })
+    .select("from to")
+    .lean();
+
+  const pickedRoutes = new Set(
+    activeCourierOnRoute.map((r) => routeKey(r.from, r.to))
+  );
+
   const courierRequestsBase = courierRequestsData
     .map((c) => ({
       requestId: c._id,
@@ -941,9 +1005,10 @@ const getMyRequests = async (user) => {
       assignedRide: c.driver_assigned_courier?.rideId || null,
       requestedAt: c.createdAt,
       type: "courier",
-    }));
+    }))
+    .filter((c) => !pickedRoutes.has(routeKey(c.from, c.to)));
 
-  const courierRequests = await Promise.all(
+  return Promise.all(
     courierRequestsBase.map(async (c) => {
       const matchingRides = await findMatchingRidesForRequest({
         from: c.from,
@@ -953,13 +1018,44 @@ const getMyRequests = async (user) => {
         userId,
         courierOnly: true,
       });
-      const linkedRideId = c.driver_assigned_courier?.rideId || null;
+      const linkedRideId = c.assignedRide || null;
       const linkedRide = linkedRideId
         ? await fetchLinkedRide(linkedRideId, userId)
         : null;
       return { ...c, linkedRide, matchingRides };
     })
   );
+};
+
+const getMyPassengerRequests = async (user) => {
+  const passengerRequests = await buildMyPassengerRequests(user);
+  return {
+    status: 200,
+    body: {
+      success: true,
+      passengerRequests,
+      total: passengerRequests.length,
+    },
+  };
+};
+
+const getMyCourierRequests = async (user) => {
+  const courierRequests = await buildMyCourierRequests(user);
+  return {
+    status: 200,
+    body: {
+      success: true,
+      courierRequests,
+      total: courierRequests.length,
+    },
+  };
+};
+
+const getMyRequests = async (user) => {
+  const [passengerRequests, courierRequests] = await Promise.all([
+    buildMyPassengerRequests(user),
+    buildMyCourierRequests(user),
+  ]);
 
   return {
     status: 200,
@@ -982,4 +1078,6 @@ module.exports = {
   listRidesByPhase,
   getRideDetails,
   getMyRequests,
+  getMyPassengerRequests,
+  getMyCourierRequests,
 };

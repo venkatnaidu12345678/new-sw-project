@@ -653,7 +653,7 @@ export const getMyRequests = async (token) => {
     const response = await fetch(
       `${baseUrl}${endPoints.getMyRequestsurl}`,
       {
-        method: "GET", // ✅ FIXED
+        method: "GET",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -668,6 +668,76 @@ export const getMyRequests = async (token) => {
     }
 
     return normalizeMyRequestsResponse(result);
+  } catch (err) {
+    throw err;
+  }
+};
+
+export const getMyPassengerRequests = async (token) => {
+  try {
+    const response = await fetch(
+      `${baseUrl}${endPoints.getMyPassengerRequestsurl}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok || result?.success === false) {
+      throw new Error(result?.message || "Failed to fetch passenger requests");
+    }
+
+    const layer =
+      result.passengerRequests != null
+        ? result
+        : result.data && typeof result.data === "object"
+          ? result.data
+          : result;
+
+    return {
+      passengerRequests: layer.passengerRequests || [],
+      total: layer.total ?? (layer.passengerRequests || []).length,
+    };
+  } catch (err) {
+    throw err;
+  }
+};
+
+export const getMyCourierRequests = async (token) => {
+  try {
+    const response = await fetch(
+      `${baseUrl}${endPoints.getMyCourierRequestsurl}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok || result?.success === false) {
+      throw new Error(result?.message || "Failed to fetch courier requests");
+    }
+
+    const layer =
+      result.courierRequests != null
+        ? result
+        : result.data && typeof result.data === "object"
+          ? result.data
+          : result;
+
+    return {
+      courierRequests: layer.courierRequests || [],
+      total: layer.total ?? (layer.courierRequests || []).length,
+    };
   } catch (err) {
     throw err;
   }

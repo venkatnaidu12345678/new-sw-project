@@ -85,8 +85,28 @@ const expireStalePendingRides = async () => {
   return expiredCount;
 };
 
+/** Expire one pending ride if past the 6h grace window; returns updated status. */
+const expirePendingRideIfStale = async (rideInput) => {
+  if (!rideInput) return { expired: false, ride: null };
+  const ride =
+    rideInput?.save && typeof rideInput.save === "function"
+      ? rideInput
+      : await Ride.findById(rideInput?._id || rideInput);
+  if (!ride || ride.status !== "pending") {
+    return { expired: false, ride };
+  }
+  if (!isRidePastStartGracePeriod(ride)) {
+    return { expired: false, ride };
+  }
+  const didExpire = await expireRide(ride);
+  if (!didExpire) return { expired: false, ride };
+  const refreshed = await Ride.findById(ride._id);
+  return { expired: true, ride: refreshed };
+};
+
 module.exports = {
   expireRide,
   expireStalePendingRides,
+  expirePendingRideIfStale,
   EXPIRE_REASON,
 };

@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   Image,
-  ScrollView,
   ActivityIndicator,
 } from "react-native";
 import LinearGradient from "react-native-linear-gradient";
@@ -32,13 +31,21 @@ const RideHistoryDriverview = ({ ride, loading }) => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Ride Details</Text>
+        <View>
+          <Text style={styles.headerTitle}>Ride Details</Text>
+          <Text style={styles.headerSub}>Driver</Text>
+        </View>
+        {ride?.status ? (
+          <View style={styles.rolePill}>
+            <Text style={styles.rolePillText}>{ride.status}</Text>
+          </View>
+        ) : null}
       </View>
 
       {loading ? (
         <ActivityIndicator style={{ marginTop: 24 }} color="#2563EB" />
       ) : (
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.scrollContent}>
           <View style={styles.routeCard}>
             <View style={styles.routeItem}>
               <Image source={madhapurIcon} style={styles.routeIcon} />
@@ -119,7 +126,7 @@ const RideHistoryDriverview = ({ ride, loading }) => {
               <Text style={styles.totalAmount}>₹{totalEarnings}</Text>
             </View>
           </LinearGradient>
-        </ScrollView>
+        </View>
       )}
     </View>
   );
@@ -130,22 +137,41 @@ export default RideHistoryDriverview;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 16,
-    marginBottom: 86,
+    paddingHorizontal: 4,
+    paddingBottom: 8,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 12,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+    marginBottom: 12,
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  headerSub: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
+    fontWeight: "600",
+  },
+  rolePill: {
+    backgroundColor: "#DBEAFE",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  rolePillText: {
+    fontSize: 11,
     fontWeight: "700",
-    color: "#111827",
+    color: "#1D4ED8",
+    textTransform: "capitalize",
   },
   routeCard: {
     backgroundColor: "#FFFFFF",

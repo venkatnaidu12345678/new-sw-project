@@ -13,6 +13,8 @@
     "android:device": "npm run adb:reverse && react-native run-android",
     "android:clean": "cd android && gradlew.bat clean && cd ..",
     "android:rebuild": "npm run android:clean && react-native run-android",
+    "android:release": "node scripts/build-android-release.js",
+    "android:release:bundle": "node scripts/build-android-release.js --bundle",
     "test": "jest"
   },
   "dependencies": {
@@ -38,6 +40,7 @@
     "react-native-gesture-handler": "^2.30.0",
     "react-native-image-picker": "^8.2.1",
     "react-native-linear-gradient": "^2.8.3",
+    "react-native-maps": "^1.27.2",
     "react-native-pager-view": "^8.0.0",
     "react-native-reanimated": "^4.2.2",
     "react-native-safe-area-context": "^5.6.2",

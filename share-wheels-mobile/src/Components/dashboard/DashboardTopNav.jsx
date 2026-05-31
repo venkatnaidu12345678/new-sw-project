@@ -1,6 +1,7 @@
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, Pressable } from "react-native";
 import LinearGradient from "react-native-linear-gradient";
+import { useNavigation } from "@react-navigation/native";
 import UserAvatar from "../ui/UserAvatar";
 import NotificationIcon from "../NotificationIcon";
 import { LAYOUT } from "../../theme/layout";
@@ -8,7 +9,15 @@ import { LAYOUT } from "../../theme/layout";
 const GRADIENT = ["#2563EB", "#4F46E5", "#7C3AED"];
 
 const DashboardTopNav = ({ user }) => {
+  const navigation = useNavigation();
   const displayName = user?.name?.trim()?.split(" ")?.[0] || "there";
+
+  const goToProfile = () => {
+    const tabNav = navigation.getParent();
+    if (tabNav?.navigate) {
+      tabNav.navigate("Profile");
+    }
+  };
 
   return (
     <LinearGradient
@@ -18,13 +27,13 @@ const DashboardTopNav = ({ user }) => {
       style={styles.gradient}
     >
       <View style={styles.inner}>
-        <View style={styles.left}>
+        <Pressable style={styles.left} onPress={goToProfile} accessibilityRole="button">
           <UserAvatar user={user} size={44} borderColor="rgba(255,255,255,0.85)" />
           <View style={styles.textCol}>
             <Text style={styles.greeting}>Hello, {displayName}</Text>
             <Text style={styles.sub}>Where are you headed?</Text>
           </View>
-        </View>
+        </Pressable>
         <NotificationIcon variant="dashboard" />
       </View>
     </LinearGradient>

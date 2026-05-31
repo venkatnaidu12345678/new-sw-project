@@ -14,6 +14,8 @@ router.get("/upcoming-rides", authMiddleware, rideController.upcomingRides);
 router.get("/history-rides", authMiddleware, rideController.historyRides);
 router.get("/ride-details/:rideId", authMiddleware, rideController.rideDetails);
 router.get("/my-requests", authMiddleware, rideController.myRequests);
+router.get("/my-passenger-requests", authMiddleware, rideController.myPassengerRequests);
+router.get("/my-courier-requests", authMiddleware, rideController.myCourierRequests);
 
 router.use("/:rideId/chat", rideChatRoutes);
 

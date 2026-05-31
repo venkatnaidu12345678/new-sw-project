@@ -14,7 +14,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import UserAvatar from "./ui/UserAvatar";
 import { getProfileImageUri } from "../Utils/profileImage";
-import defaultAvatar from "../assets/profile.png";
+import defaultAvatar from "../assets/profile.jpg";
 import { LAYOUT } from "../theme/layout";
 
 const HeaderImage = (props) => {

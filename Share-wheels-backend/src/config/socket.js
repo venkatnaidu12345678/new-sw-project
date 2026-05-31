@@ -90,6 +90,32 @@ const createServerWithSocket = (app) => {
       }
     });
 
+    socket.on("requestParticipantLocation", async (payload, ack) => {
+      try {
+        if (socket.userType !== "user") {
+          if (typeof ack === "function") {
+            ack({ success: false, message: "Unauthorized" });
+          }
+          return;
+        }
+        const rideTrackingService = require("../services/rideTrackingService");
+        const result = await rideTrackingService.requestParticipantLocationAccess(
+          socket.user,
+          payload
+        );
+        if (typeof ack === "function") {
+          ack(result.body || { success: result.status === 200 });
+        }
+      } catch (err) {
+        if (typeof ack === "function") {
+          ack({
+            success: false,
+            message: err.message || "Could not request location",
+          });
+        }
+      }
+    });
+
     socket.on("disconnect", () => {
       console.log("Socket disconnected", socket.id);
     });

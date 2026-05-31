@@ -1,6 +1,7 @@
-import React from "react";
-import { View, Text, StyleSheet, Image } from "react-native";
+import React, { useState } from "react";
+import { View, Text, StyleSheet, Image, Pressable } from "react-native";
 import RemoteImage from "./ui/RemoteImage";
+import ImagePreviewModal from "./ui/ImagePreviewModal";
 import caricon from "../assets/caricon.png";
 import { LAYOUT } from "../theme/layout";
 
@@ -13,9 +14,11 @@ export const formatVehicleLabel = (vehicle) => {
 };
 
 /**
- * Vehicle summary with optional photo — for passengers/couriers viewing driver vehicle.
+ * Vehicle summary with optional photo — tap image for full-screen preview.
  */
 const VehicleInfoStrip = ({ vehicle, compact = false }) => {
+  const [previewOpen, setPreviewOpen] = useState(false);
+
   if (!vehicle) return null;
 
   const label = formatVehicleLabel(vehicle);
@@ -24,31 +27,46 @@ const VehicleInfoStrip = ({ vehicle, compact = false }) => {
 
   if (!label && !plate && !imageUri) return null;
 
-  return (
-    <View style={[styles.wrap, compact && styles.wrapCompact]}>
-      {imageUri ? (
-        <RemoteImage
-          source={imageUri}
-          style={[styles.image, compact && styles.imageCompact]}
-          resizeMode="cover"
-        />
-      ) : (
-        <View style={[styles.imagePlaceholder, compact && styles.imageCompact]}>
-          <Image source={caricon} style={styles.placeholderIcon} />
-        </View>
-      )}
-      <View style={styles.textCol}>
-        <Text style={styles.title}>Vehicle</Text>
-        {label ? (
-          <Text style={styles.label} numberOfLines={2}>
-            {label}
-          </Text>
-        ) : null}
-        {plate ? (
-          <Text style={styles.plate}>Reg: {plate}</Text>
-        ) : null}
-      </View>
+  const imageBlock = imageUri ? (
+    <Pressable
+      onPress={() => setPreviewOpen(true)}
+      accessibilityRole="imagebutton"
+      accessibilityLabel="View vehicle photo full screen"
+    >
+      <RemoteImage
+        source={imageUri}
+        style={[styles.image, compact && styles.imageCompact]}
+        resizeMode="cover"
+      />
+    </Pressable>
+  ) : (
+    <View style={[styles.imagePlaceholder, compact && styles.imageCompact]}>
+      <Image source={caricon} style={styles.placeholderIcon} />
     </View>
+  );
+
+  return (
+    <>
+      <View style={[styles.wrap, compact && styles.wrapCompact]}>
+        {imageBlock}
+        <View style={styles.textCol}>
+          <Text style={styles.title}>Vehicle</Text>
+          {label ? (
+            <Text style={styles.label} numberOfLines={2}>
+              {label}
+            </Text>
+          ) : null}
+          {plate ? <Text style={styles.plate}>Reg: {plate}</Text> : null}
+        </View>
+      </View>
+
+      <ImagePreviewModal
+        visible={previewOpen}
+        uri={imageUri}
+        title={label || plate || "Vehicle"}
+        onClose={() => setPreviewOpen(false)}
+      />
+    </>
   );
 };
 

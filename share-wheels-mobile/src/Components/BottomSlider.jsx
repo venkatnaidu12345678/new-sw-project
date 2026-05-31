@@ -167,7 +167,11 @@ const BottomSlider = ({
           style={styles.sliderSurface}
         >
           {scrollable ? (
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+              contentContainerStyle={styles.scrollContent}
+            >
               {children}
             </ScrollView>
           ) : (
@@ -221,5 +225,8 @@ const styles = StyleSheet.create({
     height: 5,
     backgroundColor: "#D0D0D0",
     borderRadius: 3,
+  },
+  scrollContent: {
+    paddingBottom: 24,
   },
 });

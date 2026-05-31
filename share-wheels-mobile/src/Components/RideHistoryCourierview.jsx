@@ -4,14 +4,11 @@ import {
   Text,
   StyleSheet,
   Image,
-  ScrollView,
   ActivityIndicator,
 } from "react-native";
 import LinearGradient from "react-native-linear-gradient";
 
 /* ICONS */
-import seat from "../assets/seatIcon.png";
-import car from "../assets/car.png";
 import dateIcon from "../assets/dateIcon.png";
 import clock from "../assets/clock2.png";
 import UserAvatar from "./ui/UserAvatar";
@@ -19,26 +16,36 @@ import VehicleInfoStrip from "./VehicleInfoStrip";
 import CourierParcelPreview from "./CourierParcelPreview";
 import madhapurIcon from "../assets/madhapuricon.png";
 import kondapurIcon from "../assets/kondapuricon.png";
-import starIcon from "../assets/staricon.png";
 import { getCourierFare } from "../Utils/fareUtils";
+import { formatDisplayTime } from "../Utils/dateUtils";
 
 const RideHistoryCourierview = ({ ride, loading }) => {
   if (!ride) return null;
 
+  const formattedDate =
+    ride.formattedDate ||
+    (ride.date ? new Date(ride.date).toLocaleDateString() : null);
+  const formattedTime =
+    ride.formattedTime || formatDisplayTime(ride.startTime) || null;
+
   return (
     <View style={styles.container}>
-      {/* HEADER */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Ride Details</Text>
+        <View>
+          <Text style={styles.headerTitle}>Ride Details</Text>
+          <Text style={styles.headerSub}>Courier</Text>
+        </View>
+        {ride?.status ? (
+          <View style={styles.rolePill}>
+            <Text style={styles.rolePillText}>{ride.status}</Text>
+          </View>
+        ) : null}
       </View>
 
       {loading ? (
         <ActivityIndicator style={{ marginTop: 24 }} color="#2563EB" />
       ) : (
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
+      <View style={styles.scrollContent}>
         {/* ROUTE */}
         <View style={styles.routeCard}>
           <View style={styles.routeItem}>
@@ -60,10 +67,26 @@ const RideHistoryCourierview = ({ ride, loading }) => {
           </View>
         </View>
 
-        
-        
-
-         
+        {(formattedDate || formattedTime) && (
+          <View style={styles.infoGrid}>
+            {formattedDate ? (
+              <InfoCard
+                icon={dateIcon}
+                label="Date"
+                value={formattedDate}
+                bg="#ECFEFF"
+              />
+            ) : null}
+            {formattedTime ? (
+              <InfoCard
+                icon={clock}
+                label="Start Time"
+                value={formattedTime}
+                bg="#EFF6FF"
+              />
+            ) : null}
+          </View>
+        )}
 
         {ride?.activeData || ride?.courierSnapshot ? (
           <>
@@ -85,17 +108,10 @@ const RideHistoryCourierview = ({ ride, loading }) => {
             <Text style={styles.driverName}>
               {ride?.creator?.name?.trim() || "Driver"}
             </Text>
-            <Text style={styles.driverRole}>
-              {ride?.creator?.gender || "Driver"}
-            </Text>
+            <Text style={styles.driverRole}>Driver</Text>
             {ride?.creator?.mobile ? (
               <Text style={styles.driverMeta}>{ride.creator.mobile}</Text>
             ) : null}
-          </View>
-
-          <View style={styles.driverRating}>
-            <Text style={styles.ratingValue}>4.5</Text>
-            <Image source={starIcon} style={styles.star} />
           </View>
         </View>
 
@@ -109,7 +125,7 @@ const RideHistoryCourierview = ({ ride, loading }) => {
             <Text style={styles.totalAmount}>₹{getCourierFare(ride)}</Text>
           </View>
         </LinearGradient>
-      </ScrollView>
+      </View>
       )}
     </View>
   );
@@ -132,23 +148,46 @@ export default RideHistoryCourierview;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 16,
-    marginBottom: 86,
+    paddingHorizontal: 4,
+    paddingBottom: 8,
   },
 
   header: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
     paddingVertical: 12,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+    marginBottom: 12,
   },
 
   headerTitle: {
-    fontSize: 16,
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+
+  headerSub: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
+    fontWeight: "600",
+  },
+
+  rolePill: {
+    backgroundColor: "#FFEDD5",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+
+  rolePillText: {
+    fontSize: 11,
     fontWeight: "700",
-    color: "#111827",
+    color: "#C2410C",
+    textTransform: "capitalize",
   },
 
   routeCard: {
@@ -270,27 +309,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#6B7280",
     marginTop: 2,
-  },
-
-  driverRating: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-
-  ratingValue: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#111827",
-    marginRight: 4,
-  },
-
-  star: {
-    width: 14,
-    height: 14,
   },
 
   scrollContent: {

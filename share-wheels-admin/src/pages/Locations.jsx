@@ -18,6 +18,7 @@ export default function Locations() {
   const [newName, setNewName] = useState("");
   const [bulkText, setBulkText] = useState("");
   const [search, setSearch] = useState("");
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -96,7 +97,7 @@ export default function Locations() {
     try {
       const res = await bulkUpsertLocations(names);
       setBulkText("");
-      setError("");
+      setBulkModalOpen(false);
       alert(res.message || "Locations imported.");
       load();
     } catch (err) {
@@ -124,116 +125,151 @@ export default function Locations() {
     <div>
       <PageHeader
         title="Locations"
-        subtitle="Manage from/to city suggestions shown in the mobile app"
-      />
+        subtitle="From/to city suggestions in the mobile app"
+      >
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => setBulkModalOpen(true)}
+        >
+          Bulk import
+        </button>
+        <button
+          type="button"
+          className="btn btn-danger"
+          onClick={handleClearAll}
+          disabled={saving}
+        >
+          Clear all
+        </button>
+      </PageHeader>
 
       {error ? <div className="alert alert-error">{error}</div> : null}
 
-      <div className="card card-padded" style={{ marginBottom: 24 }}>
-        <h2 className="card-header">Add location</h2>
-        <form onSubmit={handleAdd} className="toolbar" style={{ marginTop: 12 }}>
-          <input
-            placeholder="City name"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            style={{ maxWidth: 320 }}
-          />
-          <button type="submit" className="btn btn-primary" disabled={saving}>
-            Add
-          </button>
-        </form>
-      </div>
-
-      <div className="card card-padded" style={{ marginBottom: 24 }}>
-        <h2 className="card-header">Bulk add / update</h2>
-        <p className="page-subtitle" style={{ marginBottom: 12 }}>
-          Paste one city per line. New cities are added. If a city already exists,
-          only that entry is updated (reactivated). Other locations stay unchanged.
-        </p>
-        <textarea
-          rows={8}
-          placeholder={"Hyderabad\nVijayawada\nVisakhapatnam"}
-          value={bulkText}
-          onChange={(e) => setBulkText(e.target.value)}
-          style={{ width: "100%", marginBottom: 12 }}
+      <form onSubmit={handleAdd} className="toolbar" style={{ marginBottom: 20 }}>
+        <input
+          placeholder="Add city name…"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          style={{ maxWidth: 320 }}
         />
-        <div className="toolbar">
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleBulkImport}
-            disabled={saving}
-          >
-            Import locations
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={handleClearAll}
-            disabled={saving}
-          >
-            Clear all
-          </button>
-        </div>
-      </div>
+        <button type="submit" className="btn btn-primary" disabled={saving}>
+          Add location
+        </button>
+        <input
+          placeholder="Search locations…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ maxWidth: 240 }}
+        />
+        <button type="button" className="btn btn-secondary" onClick={load}>
+          Refresh
+        </button>
+      </form>
 
-      <div className="card card-padded">
-        <div className="toolbar" style={{ marginBottom: 16 }}>
-          <h2 className="card-header" style={{ margin: 0 }}>
-            Location list ({locations.length})
-          </h2>
-          <input
-            placeholder="Search..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{ maxWidth: 240 }}
-          />
-        </div>
-
-        {loading ? (
-          <Loading message="Loading locations..." />
-        ) : shown.length === 0 ? (
-          <p className="page-subtitle">No locations yet. Add cities above.</p>
-        ) : (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
+      {loading ? (
+        <Loading message="Loading locations..." />
+      ) : (
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shown.length === 0 ? (
                 <tr>
-                  <th>Name</th>
-                  <th>Status</th>
-                  <th>Actions</th>
+                  <td colSpan={4} className="empty-state">
+                    No locations yet. Add a city above.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {shown.map((loc) => (
+              ) : (
+                shown.map((loc, index) => (
                   <tr key={loc._id}>
+                    <td className="cell-muted">{index + 1}</td>
                     <td>{loc.name}</td>
-                    <td>{loc.isActive ? "Active" : "Hidden"}</td>
-                    <td className="table-actions">
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => handleToggle(loc)}
-                        disabled={saving}
+                    <td>
+                      <span
+                        className={`badge ${loc.isActive ? "badge-active" : "badge-inactive"}`}
                       >
-                        {loc.isActive ? "Hide" : "Show"}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-danger btn-sm"
-                        onClick={() => handleDelete(loc._id)}
-                        disabled={saving}
-                      >
-                        Delete
-                      </button>
+                        {loc.isActive ? "Active" : "Hidden"}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="table-actions">
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleToggle(loc)}
+                          disabled={saving}
+                        >
+                          {loc.isActive ? "Hide" : "Show"}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-danger btn-sm"
+                          onClick={() => handleDelete(loc._id)}
+                          disabled={saving}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {bulkModalOpen ? (
+        <div
+          className="modal-backdrop"
+          onClick={() => setBulkModalOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="modal-card"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <h2 className="modal-title">Bulk import locations</h2>
+            <p className="modal-subtitle">
+              One city per line. Existing names are reactivated; others stay unchanged.
+            </p>
+            <textarea
+              rows={10}
+              placeholder={"Hyderabad\nVijayawada\nVisakhapatnam"}
+              value={bulkText}
+              onChange={(e) => setBulkText(e.target.value)}
+              style={{ width: "100%", marginBottom: 16 }}
+            />
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setBulkModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleBulkImport}
+                disabled={saving}
+              >
+                {saving ? "Importing…" : "Import"}
+              </button>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }

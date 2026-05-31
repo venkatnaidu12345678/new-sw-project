@@ -133,3 +133,26 @@ export const disconnectRideSocket = () => {
   activeRooms.clear();
   locationListeners.clear();
 };
+
+/** Driver asks a passenger/courier to enable location during an active ride. */
+export const requestParticipantLocationAccess = (rideId, targetUserId) =>
+  new Promise((resolve, reject) => {
+    if (!socket?.connected) {
+      reject(new Error("Not connected to ride server"));
+      return;
+    }
+    const rid = rideId?.toString?.() || rideId;
+    const uid = targetUserId?.toString?.() || targetUserId;
+    if (!rid || !uid) {
+      reject(new Error("rideId and targetUserId required"));
+      return;
+    }
+    socket.emit(
+      "requestParticipantLocation",
+      { rideId: rid, targetUserId: uid },
+      (ack) => {
+        if (ack?.success) resolve(ack);
+        else reject(new Error(ack?.message || "Request failed"));
+      }
+    );
+  });
