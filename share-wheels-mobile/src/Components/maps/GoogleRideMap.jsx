@@ -15,7 +15,6 @@ const googleMapsKey = (Config.GOOGLE_MAPS_API_KEY || "").trim();
 
 const MAP_EDGE_PADDING = { top: 56, right: 56, bottom: 80, left: 56 };
 
-/** Defer loading until after RN runtime is ready (avoids early TurboModule errors). */
 const useMapsModule = () => {
   const [maps, setMaps] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -49,7 +48,7 @@ const useMapsModule = () => {
 };
 
 /**
- * Live ride map using Google Maps — auto-focuses on all visible participants.
+ * Live Google Map — always visible; GPS status as a slim banner (not a blocking overlay).
  */
 const GoogleRideMap = ({
   tracking,
@@ -57,15 +56,20 @@ const GoogleRideMap = ({
   style,
   height = 280,
   autoFocus = true,
+  showMyLocation = false,
+  gpsStatusText,
 }) => {
   const mapRef = useRef(null);
   const [mapReady, setMapReady] = useState(false);
   const { maps, loadError } = useMapsModule();
 
-  const { markers, path, loading } = useMemo(
-    () => buildMarkersFromTracking(tracking, myRole),
-    [tracking, myRole]
-  );
+  const { markers, path, hasRemoteMarkers } = useMemo(() => {
+    const built = buildMarkersFromTracking(tracking, myRole);
+    return {
+      ...built,
+      hasRemoteMarkers: built.markers.length > 0,
+    };
+  }, [tracking, myRole]);
 
   const focusCoordinates = useMemo(
     () => getMapFocusCoordinates(markers, path),
@@ -105,23 +109,17 @@ const GoogleRideMap = ({
     return () => clearTimeout(t);
   }, [autoFocus, mapReady, maps, focusKey, fitMapToContent]);
 
-  if (!tracking) {
-    return (
-      <View style={[styles.placeholder, { height }, style]}>
-        <ActivityIndicator color="#2563EB" />
-      </View>
-    );
-  }
+  const statusMessage =
+    gpsStatusText ||
+    (!hasRemoteMarkers
+      ? "Map ready · waiting for ride GPS signals…"
+      : null);
 
   if (loadError) {
     return (
       <View style={[styles.placeholder, { height }, style]}>
-        <Text style={styles.missingKeyTitle}>Maps native module missing</Text>
-        <Text style={styles.missingKeyText}>
-          {loadError}
-          {"\n\n"}
-          Run: npm run android:rebuild
-        </Text>
+        <Text style={styles.missingKeyTitle}>Maps unavailable</Text>
+        <Text style={styles.missingKeyText}>{loadError}</Text>
       </View>
     );
   }
@@ -130,6 +128,7 @@ const GoogleRideMap = ({
     return (
       <View style={[styles.placeholder, { height }, style]}>
         <ActivityIndicator color="#2563EB" />
+        <Text style={styles.placeholderText}>Loading map…</Text>
       </View>
     );
   }
@@ -153,22 +152,32 @@ const GoogleRideMap = ({
 
   return (
     <View style={[styles.wrap, { height }, style]}>
+      {statusMessage ? (
+        <View style={styles.statusBanner} pointerEvents="none">
+          {!hasRemoteMarkers ? (
+            <ActivityIndicator size="small" color="#2563EB" style={styles.statusSpinner} />
+          ) : (
+            <View style={styles.livePulse} />
+          )}
+          <Text style={styles.statusText} numberOfLines={2}>
+            {statusMessage}
+          </Text>
+        </View>
+      ) : null}
+
       <MapView
         ref={mapRef}
         style={styles.map}
         provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
         initialRegion={initialRegion}
         onMapReady={() => setMapReady(true)}
-        showsUserLocation={false}
-        showsMyLocationButton={false}
-        loadingEnabled
+        showsUserLocation={showMyLocation}
+        showsMyLocationButton={showMyLocation}
+        loadingEnabled={false}
+        moveOnMarkerPress={false}
       >
         {path.length > 1 ? (
-          <Polyline
-            coordinates={path}
-            strokeColor="#2563EB"
-            strokeWidth={4}
-          />
+          <Polyline coordinates={path} strokeColor="#2563EB" strokeWidth={4} />
         ) : null}
 
         {markers.map((m) => (
@@ -188,13 +197,6 @@ const GoogleRideMap = ({
           </Marker>
         ))}
       </MapView>
-
-      {loading ? (
-        <View style={styles.overlay}>
-          <ActivityIndicator color="#2563EB" />
-          <Text style={styles.overlayText}>Waiting for GPS…</Text>
-        </View>
-      ) : null}
 
       <View style={styles.legendBar} pointerEvents="none">
         {Object.entries(ROLE_PIN_COLORS).map(([role, color]) => (
@@ -232,6 +234,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 16,
   },
+  placeholderText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#64748B",
+  },
   missingKeyTitle: {
     fontSize: 14,
     fontWeight: "700",
@@ -245,16 +252,36 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 18,
   },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
+  statusBanner: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    right: 8,
+    zIndex: 20,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.55)",
+    backgroundColor: "rgba(255,255,255,0.94)",
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  overlayText: {
-    marginTop: 8,
+  statusSpinner: { marginRight: 8 },
+  livePulse: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#16A34A",
+    marginRight: 8,
+  },
+  statusText: {
+    flex: 1,
     fontSize: 12,
-    color: "#475569",
+    color: "#334155",
+    fontWeight: "600",
   },
   legendBar: {
     position: "absolute",

@@ -1,87 +1,33 @@
-import { useState, useEffect, useCallback } from "react";
-import { getRideTracking } from "../ApiService/chatApiServices";
-import {
-  connectRideSocket,
-  joinRideRoom,
-  leaveRideRoom,
-  subscribeLocationUpdates,
-} from "../services/rideSocket";
-import { mergeTrackingFromSocket, normalizeRideId } from "../Utils/trackingMerge";
-
-const extractRideId = (payload) =>
-  payload?.rideId ||
-  payload?.rideID ||
-  payload?.ride?._id ||
-  payload?.ride?.id ||
-  payload?.ride;
+import { useLiveRideMap } from "./useLiveRideMap";
 
 /**
- * Live ride map data: initial HTTP load + real-time socket `locationUpdate`.
- * Works for driver, passenger, and courier (all roles on the ride room).
+ * @deprecated Prefer useLiveRideMap. Kept for screens that still import useRideTracking.
  */
 export const useRideTracking = ({
   rideId,
   token,
   enabled,
-  /** Poll HTTP tracking as backup for socket (ms). 0 = off. */
   refreshIntervalMs = 0,
+  myRole,
+  myUserId,
+  myName,
 }) => {
-  const [tracking, setTracking] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const rid = normalizeRideId(rideId);
+  const { tracking, ready, permission } = useLiveRideMap({
+    rideId,
+    token,
+    enabled,
+    myRole,
+    myUserId,
+    myName,
+  });
 
-  const loadTracking = useCallback(async () => {
-    if (!token || !rid) return;
-    try {
-      const res = await getRideTracking(token, rid);
-      setTracking(res);
-    } catch (e) {
-      if (__DEV__) console.warn("[tracking] load:", e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [token, rid]);
-
-  useEffect(() => {
-    if (!token || !rid) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    loadTracking();
-  }, [token, rid, loadTracking]);
-
-  useEffect(() => {
-    if (!enabled || !token || !rid) return undefined;
-
-    let unsub = () => {};
-
-    (async () => {
-      try {
-        await connectRideSocket(token);
-        joinRideRoom(rid);
-        unsub = subscribeLocationUpdates((payload) => {
-          if (normalizeRideId(extractRideId(payload)) !== rid) return;
-          setTracking((prev) => mergeTrackingFromSocket(prev, payload));
-        });
-      } catch (e) {
-        console.warn("[tracking] socket:", e.message);
-      }
-    })();
-
-    return () => {
-      unsub();
-      leaveRideRoom(rid);
-    };
-  }, [enabled, token, rid]);
-
-  useEffect(() => {
-    if (!enabled || !token || !rid || !refreshIntervalMs) return undefined;
-    const interval = setInterval(() => {
-      loadTracking();
-    }, refreshIntervalMs);
-    return () => clearInterval(interval);
-  }, [enabled, token, rid, refreshIntervalMs, loadTracking]);
-
-  return { tracking, loading, refresh: loadTracking };
+  return {
+    tracking,
+    loading: enabled && !ready,
+    refresh: () => {},
+    permission,
+    refreshIntervalMs,
+  };
 };
+
+export { useLiveRideMap };

@@ -20,7 +20,6 @@ const ParticipantCard = ({
   onCall,
   onMessage,
   onRemove,
-  onRequestLocation,
   onPress,
 }) => {
   const accent = role === "courier" ? "#F97316" : "#16A34A";
@@ -60,14 +59,6 @@ const ParticipantCard = ({
         <TouchableOpacity style={styles.actionBtn} onPress={onMessage}>
           <Text style={styles.actionText}>Chat</Text>
         </TouchableOpacity>
-        {onRequestLocation ? (
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.locationBtn]}
-            onPress={onRequestLocation}
-          >
-            <Text style={styles.locationText}>Location</Text>
-          </TouchableOpacity>
-        ) : null}
         <TouchableOpacity style={[styles.actionBtn, styles.removeBtn]} onPress={onRemove}>
           <Text style={styles.removeText}>Remove</Text>
         </TouchableOpacity>
@@ -151,15 +142,6 @@ const styles = StyleSheet.create({
   },
   verifyText: {
     color: "#166534",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  locationBtn: {
-    backgroundColor: "#F0FDF4",
-    borderColor: "#86EFAC",
-  },
-  locationText: {
-    color: "#15803D",
     fontSize: 12,
     fontWeight: "600",
   },

@@ -8,6 +8,7 @@ import {
   getInitialNotification,
   onTokenRefresh,
   requestPermission,
+  hasPermission,
   registerDeviceForRemoteMessages,
   isDeviceRegisteredForRemoteMessages,
 } from "./firebaseMessaging";
@@ -15,7 +16,33 @@ import { displayForegroundNotification } from "./displayLocalNotification";
 
 const messaging = () => getFCMMessaging();
 
+export async function hasNotificationPermission() {
+  const msg = messaging();
+  if (Platform.OS === "ios") {
+    try {
+      const authStatus = await hasPermission(msg);
+      return (
+        authStatus === AuthorizationStatus.AUTHORIZED ||
+        authStatus === AuthorizationStatus.PROVISIONAL
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  if (Platform.OS === "android" && Platform.Version >= 33) {
+    const { PermissionsAndroid } = require("react-native");
+    return PermissionsAndroid.check(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+    );
+  }
+
+  return true;
+}
+
 export async function requestUserPermission() {
+  if (await hasNotificationPermission()) return true;
+
   const msg = messaging();
 
   if (Platform.OS === "ios") {

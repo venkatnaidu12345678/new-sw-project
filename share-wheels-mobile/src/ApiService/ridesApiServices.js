@@ -261,29 +261,24 @@ export const verifyBoardingParticipant = async (token, rideId, payload) => {
 };
 
 export const startride = async (token, rideData) => {
-  try {
-    const response = await fetch(`${baseUrl}${endPoints.startrideurl}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(rideData),
-    });
+  const rideId =
+    rideData?.rideId?.toString?.() ||
+    rideData?.rideId ||
+    rideData?._id?.toString?.() ||
+    rideData?._id;
 
-    const data = await response.json();
+  const data = await apiRequest(`${baseUrl}${endPoints.startrideurl}`, {
+    token,
+    method: "PATCH",
+    body: { rideId },
+    timeoutMs: 15000,
+  });
 
-    console.log("Start Ride Status:", response.status);
+  if (__DEV__) {
     console.log("Start Ride Response:", data);
-
-    if (!response.ok) {
-      throw new Error(data?.message || "Failed to start ride");
-    }
-
-    return data;
-  } catch (error) {
-    throw error;
   }
+
+  return data;
 };
 export const courierRequest = async (token, rideData) => {
   try {
@@ -575,33 +570,12 @@ export const updateRideSeats = async (token, { rideId, totalSeats }) => {
 };
 
 export const rideDetails = async (token, rideId) => {
-  try {
-    const response = await fetch(
-      `${baseUrl}${endPoints.rideDetailsurl}/${rideId}`, // ✅ safe
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    const result = await response.json();
-
-    console.log("Ride Details Status:", response.status);
-    console.log("Ride Details Data:", result);
-
-    if (!response.ok || result?.success === false) {
-      throw new Error(result?.message || "Failed to fetch ride details");
-    }
-
-    return result;
-
-  } catch (err) {
-    console.log("FULL ERROR 👉", err);
-    throw err; // ✅ must
-  }
+  const id = rideId?.toString?.() || rideId;
+  return apiRequest(`${baseUrl}${endPoints.rideDetailsurl}/${id}`, {
+    token,
+    method: "GET",
+    timeoutMs: 15000,
+  });
 };
 export const pickPassengerCourier = async (token, payload) => {
   try {

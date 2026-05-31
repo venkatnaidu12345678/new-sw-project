@@ -72,10 +72,8 @@ import { formatLocalISODate } from "../Utils/dateUtils";
 import { getRideDisplayFare, getPassengerFare, getCourierFare } from '../Utils/fareUtils'
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator } from "react-native";
-import {
-  pushDriverLocationNow,
-  ensureLocationReadyForRide,
-} from "../hooks/useDriverLocation";
+import { pushDriverLocationNow } from "../hooks/useDriverLocation";
+import { hasLocationPermission } from "../Utils/locationPermissions";
 import {
   setActiveRideTracking,
   clearActiveRideTracking,
@@ -90,10 +88,6 @@ import {
 import { getApiErrorMessage } from "../Utils/apiErrors";
 import { openPhoneCall } from "../Utils/phoneCall";
 import { useRideSocket } from "../hooks/useAppSocket";
-import {
-  connectRideSocket,
-  requestParticipantLocationAccess,
-} from "../services/rideSocket";
 
 const UpcomingDetailsPage = ({ route }) => {
   const navigation = useNavigation();
@@ -216,33 +210,41 @@ const UpcomingDetailsPage = ({ route }) => {
     }
   }, []);
 
-  const fetchRideDetails = useCallback(async () => {
-    const token = await AsyncStorage.getItem("token");
-    const rideId = rideData?._id;
-    if (!token || !rideId) return;
+  const fetchRideDetails = useCallback(
+    async ({ showLoading = false } = {}) => {
+      const token = await AsyncStorage.getItem("token");
+      const rideId = rideIdStr || rideData?._id;
+      if (!token || !rideId) return;
 
-    try {
-      if (isMountedRef.current) setDetailsLoading(true);
-      const res = await rideDetails(token, rideId);
-      if (!isMountedRef.current) return;
-      if (res?.success === true) {
-        applyRideDetails(res.data);
+      try {
+        if (showLoading && isMountedRef.current) setDetailsLoading(true);
+        const res = await rideDetails(token, rideId);
+        if (!isMountedRef.current) return;
+        if (res?.success === true) {
+          applyRideDetails(res.data);
+        }
+      } catch (err) {
+        console.log("Ride details error:", err.message);
+      } finally {
+        if (showLoading && isMountedRef.current) setDetailsLoading(false);
       }
-    } catch (err) {
-      console.log("Ride details error:", err.message);
-    } finally {
-      if (isMountedRef.current) setDetailsLoading(false);
-    }
-  }, [rideData?._id, applyRideDetails]);
+    },
+    [rideIdStr, rideData?._id, applyRideDetails]
+  );
+
+  const refreshRideDetailsQuiet = useCallback(
+    () => fetchRideDetails({ showLoading: false }),
+    [fetchRideDetails]
+  );
 
   useRideSocket(rideIdStr, {
-    onParticipantsUpdated: fetchRideDetails,
-    onRequestUpdated: fetchRideDetails,
+    onParticipantsUpdated: refreshRideDetailsQuiet,
+    onRequestUpdated: refreshRideDetailsQuiet,
   });
 
   useFocusEffect(
     useCallback(() => {
-      fetchRideDetails();
+      fetchRideDetails({ showLoading: true });
     }, [fetchRideDetails])
   );
 
@@ -420,28 +422,6 @@ const UpcomingDetailsPage = ({ route }) => {
     navigation.navigate("RideLiveMap", rideNavParams());
   };
 
-  const handleRequestParticipantLocation = async (participant) => {
-    const targetUserId =
-      participant?.userId?._id?.toString?.() ||
-      participant?.userId?.toString?.();
-    if (!targetUserId || !rideIdStr) return;
-    try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) return;
-      await connectRideSocket(token);
-      await requestParticipantLocationAccess(rideIdStr, targetUserId);
-      Alert.alert(
-        "Request sent",
-        "The participant will be asked to enable location for this ride."
-      );
-    } catch (err) {
-      Alert.alert(
-        "Could not send request",
-        getApiErrorMessage(err, "Try again in a moment.")
-      );
-    }
-  };
-
   const handleAcceptPassenger = useCallback(async (passengerId) => {
     const token = await AsyncStorage.getItem("token");
     const payload = {
@@ -556,43 +536,47 @@ const UpcomingDetailsPage = ({ route }) => {
   };
 
   const runStartRide = async () => {
+    const rid = rideIdStr;
+    if (!rid) {
+      Alert.alert("Error", "Ride information is missing. Go back and open the ride again.");
+      return;
+    }
+
+    setRideActionLoading(true);
     try {
-      setRideActionLoading(true);
-      setLoadingRide(true);
-
-      const coords = await ensureLocationReadyForRide();
       const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        Alert.alert("Error", "Please log in again.");
+        return;
+      }
 
-      const response = await startride(token, {
-        rideId: rideData._id,
-      });
+      const response = await startride(token, { rideId: rid });
 
       if (response?.success) {
         setRideStatus("started");
+        setRideStarted(true);
         setDriverToken(token);
-        await setActiveRideTracking(rideIdStr);
-        try {
-          await pushDriverLocationNow(rideIdStr, token, coords);
-        } catch (gpsErr) {
-          Alert.alert(
-            "Location error",
-            `Ride could not share GPS with admin. ${gpsErr.message}`
-          );
-          return;
-        }
-        Alert.alert("Success", response.message);
+        applyRideDetails({ status: "started" });
+        refreshUpcomingList();
+        setActiveRideTracking(rid).catch(() => {});
+        refreshRideDetailsQuiet().catch(() => {});
+
+        (async () => {
+          try {
+            if (await hasLocationPermission()) {
+              await pushDriverLocationNow(rid, token);
+            }
+          } catch (gpsErr) {
+            if (__DEV__) console.warn("[GPS] post-start:", gpsErr?.message);
+          }
+        })();
       } else {
         Alert.alert("Error", getApiErrorMessage(response, "Could not start ride"));
       }
     } catch (error) {
       const msg = getApiErrorMessage(error, "");
-      Alert.alert(
-        msg.toLowerCase().includes("location") ? "Location required" : "Could not start ride",
-        msg ||
-          "Enable location permission and GPS before starting a ride."
-      );
+      Alert.alert("Could not start ride", msg || "Check backend is running and phone can reach your PC IP.");
     } finally {
-      setLoadingRide(false);
       setRideActionLoading(false);
     }
   };
@@ -1063,11 +1047,6 @@ const UpcomingDetailsPage = ({ route }) => {
                       setSelectedPassenger(item);
                       setActiveSlider("removePassenger");
                     }}
-                    onRequestLocation={
-                      isRideStarted
-                        ? () => handleRequestParticipantLocation(item)
-                        : undefined
-                    }
                     onPress={() => openParticipantDetails(item, "passenger")}
                   />
                 ))}
@@ -1120,11 +1099,6 @@ const UpcomingDetailsPage = ({ route }) => {
                       openDirectChat({ userId: item.userId, role: "courier" })
                     }
                     onRemove={() => handleRemoveCourier(item._id)}
-                    onRequestLocation={
-                      isRideStarted
-                        ? () => handleRequestParticipantLocation(item)
-                        : undefined
-                    }
                     onPress={() => openParticipantDetails(item, "courier")}
                   />
                 ))}
@@ -1430,6 +1404,8 @@ const UpcomingDetailsPage = ({ route }) => {
           title={
             !rideStatus
               ? "Loading..."
+              : rideActionLoading && normalizedRideStatus === "pending"
+                ? "Starting ride…"
               : normalizedRideStatus === "pending"
                 ? "Start Ride"
                 : normalizedRideStatus === "started"
@@ -1448,9 +1424,13 @@ const UpcomingDetailsPage = ({ route }) => {
             normalizedRideStatus === "completed" ||
             normalizedRideStatus === "cancelled" ||
             normalizedRideStatus === "expired" ||
-            loadingRide
+            rideActionLoading ||
+            (normalizedRideStatus === "started" && loadingRide)
           }
-          loading={loadingRide}
+          loading={
+            rideActionLoading ||
+            (normalizedRideStatus === "started" && loadingRide)
+          }
           bottomInset={insets.bottom + scale(8)}
         />
       )}

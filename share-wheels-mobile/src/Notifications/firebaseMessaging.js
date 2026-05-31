@@ -11,6 +11,7 @@ import {
   getInitialNotification,
   onTokenRefresh,
   requestPermission,
+  hasPermission,
   registerDeviceForRemoteMessages,
   isDeviceRegisteredForRemoteMessages,
   setBackgroundMessageHandler,
@@ -26,4 +27,16 @@ export const getFCMMessaging = () => {
   return messagingInstance;
 };
 
-export { AuthorizationStatus, getToken, onMessage, onNotificationOpenedApp, getInitialNotification, onTokenRefresh, requestPermission, registerDeviceForRemoteMessages, isDeviceRegisteredForRemoteMessages, setBackgroundMessageHandler };
+export {
+  AuthorizationStatus,
+  getToken,
+  onMessage,
+  onNotificationOpenedApp,
+  getInitialNotification,
+  onTokenRefresh,
+  requestPermission,
+  hasPermission,
+  registerDeviceForRemoteMessages,
+  isDeviceRegisteredForRemoteMessages,
+  setBackgroundMessageHandler,
+};

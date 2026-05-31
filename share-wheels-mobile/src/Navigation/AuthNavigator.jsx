@@ -22,7 +22,6 @@ import NotificationScreen from "../Components/NotificationScreen";
 import { userProfile } from "../ApiService/ridesApiServices";
 import { verifyTokenApi } from "../ApiService/AuthApiService";
 import DriverLocationTracker from "../Components/DriverLocationTracker";
-import LocationAccessRequestListener from "../Components/LocationAccessRequestListener";
 import { clearAuthSession } from "../Utils/authSession";
 import { MIN_BOOTSTRAP_SPLASH_MS } from "../theme/splashTiming";
 import { NotificationsProvider } from "../context/NotificationsContext";
@@ -130,7 +129,6 @@ const AuthNavigator = () => {
       {isAuthenticated ? (
         <>
           <DriverLocationTracker />
-          <LocationAccessRequestListener />
         </>
       ) : null}
       <Stack.Navigator screenOptions={authScreenOptions}>

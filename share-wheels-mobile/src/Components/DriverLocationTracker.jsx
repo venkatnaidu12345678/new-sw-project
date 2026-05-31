@@ -19,7 +19,7 @@ const DriverLocationTracker = () => {
     };
 
     sync();
-    const interval = setInterval(sync, 4000);
+    const interval = setInterval(sync, 2000);
     return () => clearInterval(interval);
   }, []);
 

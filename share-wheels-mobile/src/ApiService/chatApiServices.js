@@ -1,4 +1,5 @@
 import { baseUrl } from "../Config";
+import { apiRequest } from "../Utils/apiRequest";
 
 const authHeaders = (token) => ({
   "Content-Type": "application/json",
@@ -30,33 +31,19 @@ export const sendRideChatMessage = async (token, rideId, message, recipientId) =
 
 export const updateRideLocation = async (token, rideId, lat, lng) => {
   const id = rideId?.toString?.() || rideId;
-  const res = await fetch(`${baseUrl}/rides/${id}/chat/location`, {
+  return apiRequest(`${baseUrl}/rides/${id}/chat/location`, {
+    token,
     method: "POST",
-    headers: authHeaders(token),
-    body: JSON.stringify({
-      lat,
-      lng,
-      latitude: lat,
-      longitude: lng,
-    }),
+    body: { lat, lng, latitude: lat, longitude: lng },
+    timeoutMs: 10000,
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg =
-      data.message ||
-      data.error ||
-      `Failed to update location (${res.status})`;
-    if (__DEV__) console.warn("[GPS] API error:", msg, data);
-    throw new Error(msg);
-  }
-  return data;
 };
 
 export const getRideTracking = async (token, rideId) => {
-  const res = await fetch(`${baseUrl}/rides/${rideId}/chat/tracking`, {
-    headers: authHeaders(token),
+  const id = rideId?.toString?.() || rideId;
+  return apiRequest(`${baseUrl}/rides/${id}/chat/tracking`, {
+    token,
+    method: "GET",
+    timeoutMs: 8000,
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.message || "Failed to load tracking");
-  return data;
 };
