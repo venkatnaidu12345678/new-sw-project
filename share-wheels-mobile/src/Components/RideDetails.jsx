@@ -14,7 +14,8 @@ import {
 } from "react-native";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { INPUT_COLORS } from "../theme/inputTheme";
+import { useTheme } from "../context/ThemeContext";
+import { useThemedStyles } from "../theme/useThemedStyles";
 import { getApiErrorMessage } from "../Utils/apiErrors";
 import { launchCamera } from "react-native-image-picker";
 import { courierSendRequestApi,
@@ -61,6 +62,8 @@ const refUserId = (ref) =>
 
 const RideDetails = ({ navigation, route }) => {
   const { ride } = route.params || {};
+  const { input } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { ProfileDetails } = profileData();
   const myUserId = refUserId(
     ProfileDetails?._id ||
@@ -332,12 +335,8 @@ const RideDetails = ({ navigation, route }) => {
   };
 
   return (
-    <ScreenContainer backgroundColor="#fff" edges={["top", "bottom"]}>
-      <ScreenHeader
-        title="Ride Details"
-        backgroundColor="#fff"
-        style={styles.fixedHeader}
-      />
+    <ScreenContainer edges={["top", "bottom"]}>
+      <ScreenHeader title="Ride Details " style={styles.fixedHeader} />
       <KeyboardAwareScreen style={styles.container}>
       <ScrollView
         style={styles.scroll}
@@ -504,21 +503,21 @@ const RideDetails = ({ navigation, route }) => {
 
             <TextInput
               placeholder="Courier type (e.g. document, parcel)"
-              placeholderTextColor={INPUT_COLORS.placeholder}
+              placeholderTextColor={input.placeholder}
               style={styles.input}
               onChangeText={(v) => handleCourierChange("courier_type", v)}
             />
 
             <TextInput
               placeholder="What to deliver"
-              placeholderTextColor={INPUT_COLORS.placeholder}
+              placeholderTextColor={input.placeholder}
               style={styles.input}
               onChangeText={(v) => handleCourierChange("what_to_deliver", v)}
             />
 
             <TextInput
               placeholder="Declared value (₹)"
-              placeholderTextColor={INPUT_COLORS.placeholder}
+              placeholderTextColor={input.placeholder}
               keyboardType="numeric"
               style={styles.input}
               onChangeText={(v) => handleCourierChange("amount_will", v)}
@@ -541,14 +540,14 @@ const RideDetails = ({ navigation, route }) => {
 
             <TextInput
               placeholder="Receiver full name"
-              placeholderTextColor={INPUT_COLORS.placeholder}
+              placeholderTextColor={input.placeholder}
               style={styles.input}
               onChangeText={(v) => handleCourierChange("receiver_name", v)}
             />
 
             <TextInput
               placeholder="Receiver mobile"
-              placeholderTextColor={INPUT_COLORS.placeholder}
+              placeholderTextColor={input.placeholder}
               keyboardType="phone-pad"
               style={styles.input}
               onChangeText={(v) => handleCourierChange("receiver_mobile", v)}
@@ -556,7 +555,7 @@ const RideDetails = ({ navigation, route }) => {
 
             <TextInput
               placeholder="Alternate mobile"
-              placeholderTextColor={INPUT_COLORS.placeholder}
+              placeholderTextColor={input.placeholder}
               keyboardType="phone-pad"
               style={styles.input}
               onChangeText={(v) => handleCourierChange("receiver_alternate_mobile", v)}
@@ -564,7 +563,7 @@ const RideDetails = ({ navigation, route }) => {
 
             <TextInput
               placeholder="Full delivery address"
-              placeholderTextColor={INPUT_COLORS.placeholder}
+              placeholderTextColor={input.placeholder}
               multiline
               style={styles.input}
               onChangeText={(v) => handleCourierChange("receiver_address", v)}
@@ -590,9 +589,9 @@ const RideDetails = ({ navigation, route }) => {
 
 export default RideDetails;
 
-/* 🔹 STYLES */
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F5F7FB" },
+const createStyles = (c) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.background },
   fixedHeader: {
     paddingHorizontal: LAYOUT.spacing.screen,
     paddingTop: LAYOUT.spacing.xs,
@@ -609,46 +608,46 @@ const styles = StyleSheet.create({
   headerTitle: { flex: 1, fontSize: 20, fontWeight: "600", marginLeft: 10 },
   dateRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16 },
   smallIcon: { width: 16, height: 16, marginRight: 6 },
-  dateText: { color: "#374151" },
-  card: { backgroundColor: "#FFF", margin: 16, padding: 16, borderRadius: 16 },
+  dateText: { color: c.textSecondary },
+  card: { backgroundColor: c.card, margin: 16, padding: 16, borderRadius: 16 },
   routeRow: { flexDirection: "row", alignItems: "center" },
   routeIcon: { width: 16, height: 16, marginRight: 10 },
-  verticalLine: { height: 40, width: 2, backgroundColor: "#D1D5DB", marginLeft: 7, marginVertical: 6 },
-  city: { fontWeight: "600", flex: 1 },
-  time: { color: "#2563EB" },
-  priceRow: { flexDirection: "row", justifyContent: "space-between", backgroundColor: "#E8F0FF", marginHorizontal: 16, padding: 16, borderRadius: 14 },
+  verticalLine: { height: 40, width: 2, backgroundColor: c.border, marginLeft: 7, marginVertical: 6 },
+  city: { fontWeight: "600", flex: 1, color: c.text },
+  time: { color: c.primary },
+  priceRow: { flexDirection: "row", justifyContent: "space-between", backgroundColor: c.primaryMuted, marginHorizontal: 16, padding: 16, borderRadius: 14 },
   passengerRow: { flexDirection: "row", alignItems: "center" },
   passengerIcon: { width: 20, height: 20, marginRight: 8 },
-  passengerText: { fontWeight: "600" },
-  price: { fontSize: LAYOUT.font.title, fontWeight: "700", color: "#2563EB" },
+  passengerText: { fontWeight: "600", color: c.text },
+  price: { fontSize: LAYOUT.font.title, fontWeight: "700", color: c.primary },
   driverRow: { flexDirection: "row", alignItems: "center" },
   avatar: { width: 48, height: 48, borderRadius: 24, marginRight: 10 },
-  driverName: { fontWeight: "600" },
+  driverName: { fontWeight: "600", color: c.text },
   verified: { color: "green", fontSize: 12 },
   infoRow: { flexDirection: "row", alignItems: "center", marginTop: 10 },
   infoIcon: { width: 22, height: 22, marginRight: 8 },
-  infoText: { color: "#374151" },
-  warningBox: { flexDirection: "row", backgroundColor: "#FEF3C7", marginHorizontal: 16, padding: 12, borderRadius: 12, alignItems: "center" },
-  warningText: { flex: 1, marginLeft: 10, color: "#92400E" },
-  quickReserveBox: { backgroundColor: "#DCFCE7" },
-  quickReserveText: { flex: 1, marginLeft: 10, color: "#166534", fontWeight: "600" },
-  ownRideBox: { backgroundColor: "#EFF6FF" },
-  ownRideText: { flex: 1, marginLeft: 10, color: "#1E40AF", fontWeight: "600" },
-  sectionTitle: { fontSize: 16, fontWeight: "600", marginBottom: 10 },
+  infoText: { color: c.textSecondary },
+  warningBox: { flexDirection: "row", backgroundColor: c.warningBg, marginHorizontal: 16, padding: 12, borderRadius: 12, alignItems: "center" },
+  warningText: { flex: 1, marginLeft: 10, color: c.warningText },
+  quickReserveBox: { backgroundColor: c.successBg },
+  quickReserveText: { flex: 1, marginLeft: 10, color: c.successText, fontWeight: "600" },
+  ownRideBox: { backgroundColor: c.infoBg },
+  ownRideText: { flex: 1, marginLeft: 10, color: c.infoText, fontWeight: "600" },
+  sectionTitle: { fontSize: 16, fontWeight: "600", marginBottom: 10, color: c.text },
   prefRow: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
   prefIcon: { width: 22, height: 22, marginRight: 8 },
  accordionHeader: {
   flexDirection: "row",
   justifyContent: "space-between",
   alignItems: "center",
-  backgroundColor: "#FFFFFF", // changed from blue
+  backgroundColor: c.surface,
   padding: 14,
   marginHorizontal: 16,
   borderRadius: 14,
   marginBottom: 8,
 
   // 🔹 SHADOW (iOS)
-  shadowColor: "#000",
+  shadowColor: c.shadow,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.08,
   shadowRadius: 4,
@@ -656,48 +655,47 @@ const styles = StyleSheet.create({
   // 🔹 ELEVATION (Android)
   elevation: 3,
 },
-  accordionTitle: { fontWeight: "600", fontSize: 16 },
+  accordionTitle: { fontWeight: "600", fontSize: 16, color: c.text },
   accordionContent: {
   marginHorizontal: 16,
   marginBottom: 12,
-  backgroundColor: "#FFFFFF",
+  backgroundColor: c.surface,
   borderRadius: 14,
   padding: 14,
 
   // 🔹 SHADOW
-  shadowColor: "#000",
+  shadowColor: c.shadow,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.05,
   shadowRadius: 3,
   elevation: 2,
 },
   input: {
-    backgroundColor: INPUT_COLORS.background,
+    backgroundColor: c.inputBg,
     padding: 14,
     borderRadius: 10,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: INPUT_COLORS.border,
-    color: INPUT_COLORS.text,
+    borderColor: c.border,
+    color: c.text,
     fontSize: 15,
   },
-  seatBox: { flexDirection: "row", justifyContent: "center", alignItems: "center", backgroundColor: "#FFF", padding: 10, borderRadius: 10, marginBottom: 20,marginTop:10 },
+  seatBox: { flexDirection: "row", justifyContent: "center", alignItems: "center", backgroundColor: c.card, padding: 10, borderRadius: 10, marginBottom: 20,marginTop:10 },
   seatBtn: { fontSize: 22, paddingHorizontal: 10 },
   seatCount: { fontSize: 16, fontWeight: "600", minWidth: 100, textAlign: "center" },
   seatBtnDisabled: { opacity: 0.35 },
   fareHint: {
     textAlign: "center",
-    color: "#475569",
+    color: c.textMuted,
     marginBottom: 14,
     fontSize: 14,
     fontWeight: "600",
   },
   primaryBtnDisabled: { opacity: 0.6 },
   courierIcon: { width: 20, height: 20, marginRight: 8 },
-  imageUpload: { backgroundColor: "#EEF2FF", padding: 12, borderRadius: 10, alignItems: "center", marginBottom: 12 },
-  imageUploadText: { color: "#2563EB", fontWeight: "600" },
+  imageUpload: { backgroundColor: c.primaryMuted, padding: 12, borderRadius: 10, alignItems: "center", marginBottom: 12 },
+  imageUploadText: { color: c.primary, fontWeight: "600" },
   previewImage: { width: "100%", height: 150, borderRadius: 10, marginBottom: 12 },
-  primaryBtn: { backgroundColor: "#2563EB", padding: 14, borderRadius: 12, alignItems: "center" },
-  btnText: { color: "#FFF", fontWeight: "600" },
-  
+  primaryBtn: { backgroundColor: c.primary, padding: 14, borderRadius: 12, alignItems: "center" },
+  btnText: { color: c.inverseText, fontWeight: "600" },
 });

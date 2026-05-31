@@ -30,10 +30,14 @@ import AdPlacement from "../Components/ads/AdPlacement";
 import { useAds } from "../context/AdsContext";
 import { useLocationSuggestions } from "../hooks/useLocationSuggestions";
 import { formatLocalISODate } from "../Utils/dateUtils";
+import { useTheme } from "../context/ThemeContext";
+import { useThemedStyles } from "../theme/useThemedStyles";
 
 const DashboardPage = () => {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { refreshUpcomingRides, ProfileDetails, setRefresh } = profileData();
 
   const [fromValue, setFromValue] = useState("");
@@ -275,7 +279,7 @@ const DashboardPage = () => {
   );
 
   return (
-    <ScreenContainer edges={["top"]} backgroundColor="#F8FAFC" style={styles.screen}>
+    <ScreenContainer edges={["top"]} style={styles.screen}>
       {terms === false ? <TermsPopup setRefresh={setRefresh} /> : null}
 
       {/* Fixed top nav — does not scroll */}
@@ -287,7 +291,6 @@ const DashboardPage = () => {
             <ScreenHeader
               title="Search results"
               onBack={exitSearchResults}
-              backgroundColor="#F8FAFC"
               style={styles.searchHeader}
             />
             <SearchLocation {...searchProps} />
@@ -334,42 +337,43 @@ const DashboardPage = () => {
 
 export default React.memo(DashboardPage);
 
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    paddingHorizontal: 0,
-  },
-  body: {
-    flex: 1,
-    paddingHorizontal: LAYOUT.spacing.screen,
-  },
-  flex: { flex: 1 },
-  title: {
-    fontSize: LAYOUT.font.title,
-    fontWeight: "700",
-    marginBottom: LAYOUT.spacing.md,
-    color: LAYOUT.colors.text,
-  },
-  bannerWrap: {
-    marginBottom: LAYOUT.spacing.sm,
-  },
-  section: {
-    fontSize: LAYOUT.font.section,
-    fontWeight: "700",
-    marginVertical: LAYOUT.spacing.md,
-    color: LAYOUT.colors.text,
-  },
-  errorText: {
-    color: "#B91C1C",
-    marginBottom: LAYOUT.spacing.sm,
-  },
-  emptyRides: {
-    textAlign: "center",
-    color: "#64748B",
-    marginTop: LAYOUT.spacing.md,
-  },
-  searchHeader: {
-    paddingHorizontal: LAYOUT.spacing.screen,
-    paddingTop: LAYOUT.spacing.xs,
-  },
-});
+const createStyles = (c) =>
+  StyleSheet.create({
+    screen: {
+      flex: 1,
+      paddingHorizontal: 0,
+    },
+    body: {
+      flex: 1,
+      paddingHorizontal: LAYOUT.spacing.screen,
+    },
+    flex: { flex: 1 },
+    title: {
+      fontSize: LAYOUT.font.title,
+      fontWeight: "700",
+      marginBottom: LAYOUT.spacing.md,
+      color: c.text,
+    },
+    bannerWrap: {
+      marginBottom: LAYOUT.spacing.sm,
+    },
+    section: {
+      fontSize: LAYOUT.font.section,
+      fontWeight: "700",
+      marginVertical: LAYOUT.spacing.md,
+      color: c.text,
+    },
+    errorText: {
+      color: c.errorText,
+      marginBottom: LAYOUT.spacing.sm,
+    },
+    emptyRides: {
+      textAlign: "center",
+      color: c.textMuted,
+      marginTop: LAYOUT.spacing.md,
+    },
+    searchHeader: {
+      paddingHorizontal: LAYOUT.spacing.screen,
+      paddingTop: LAYOUT.spacing.xs,
+    },
+  });

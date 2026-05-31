@@ -42,25 +42,27 @@ import { useMyRequestsSocket } from "../hooks/useAppSocket";
 import ScreenContainer from "./ui/ScreenContainer";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LAYOUT, getScrollBottomPadding } from "../theme/layout";
+import { useTheme } from "../context/ThemeContext";
+import { useThemedStyles } from "../theme/useThemedStyles";
 
-const ROLE_THEME = {
+const getRoleTheme = (c) => ({
   Passenger: {
-    card: ["#ECFDF5", "#F8FAFC", "#FFFFFF"],
-    border: "#34D399",
-    chip: "#059669",
-    statusSoft: "#DCFCE7",
-    statusText: "#166534",
-    price: "#047857",
+    card: [c.tintGreen, c.background, c.card],
+    border: c.successText,
+    chip: c.successText,
+    statusSoft: c.successBg,
+    statusText: c.successText,
+    price: c.successText,
   },
   Courier: {
-    card: ["#FFF7ED", "#FFFBEB", "#FFFFFF"],
-    border: "#FB923C",
-    chip: "#EA580C",
-    statusSoft: "#FFEDD5",
-    statusText: "#C2410C",
-    price: "#C2410C",
+    card: [c.tintOrange, c.background, c.card],
+    border: c.warningText,
+    chip: c.warningText,
+    statusSoft: c.warningBg,
+    statusText: c.warningText,
+    price: c.warningText,
   },
-};
+});
 
 const resolveRequestDate = (item) => {
   const primary = formatRequestDate(item?.date);
@@ -127,6 +129,9 @@ const MyRequest = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const ROLE_THEME = getRoleTheme(colors);
   const [activeTab, setActiveTab] = useState("Passenger");
   const [passengerRides, setPassengerRides] = useState([]);
   const [courierRides, setCourierRides] = useState([]);
@@ -549,10 +554,10 @@ export default MyRequest;
 
 /* STYLES */
 
-const styles = StyleSheet.create({
+const createStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
     paddingHorizontal: LAYOUT.spacing.screen,
     paddingBottom: LAYOUT.spacing.sm,
   },
@@ -567,13 +572,13 @@ headerTitle: {
   fontSize: LAYOUT.font.title,
   fontWeight: "800",
   marginLeft: 10,
-  color: "#111827",
+  color: c.text,
 },
 
   emptyText: {
     textAlign: "center",
     marginTop: 40,
-    color: "#64748B",
+    color: c.textMuted,
     fontSize: 15,
   },
 
@@ -581,7 +586,7 @@ headerTitle: {
     textAlign: "center",
     marginTop: 12,
     marginBottom: 8,
-    color: "#DC2626",
+    color: c.errorText,
     fontSize: 14,
     paddingHorizontal: 16,
   },
@@ -591,7 +596,7 @@ headerTitle: {
     padding: 18,
     marginBottom: 14,
     borderWidth: 1.4,
-    shadowColor: "#0F172A",
+    shadowColor: c.shadow,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.08,
     shadowRadius: 10,
@@ -612,7 +617,7 @@ headerTitle: {
   },
 
   ridesBadge: {
-    backgroundColor: "#E0E7FF",
+    backgroundColor: c.primaryMuted,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
@@ -621,7 +626,7 @@ headerTitle: {
   ridesBadgeText: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#3730A3",
+    color: c.primaryText,
   },
 
   roleChip: {
@@ -654,7 +659,7 @@ headerTitle: {
     marginLeft: 6,
     fontWeight: "700",
     flex: 1,
-    color: "#0F172A",
+    color: c.text,
   },
 
   metaRow: {
@@ -668,9 +673,9 @@ headerTitle: {
     flexDirection: "row",
     alignItems: "center",
     maxWidth: "48%",
-    backgroundColor: "rgba(255,255,255,0.72)",
+    backgroundColor: c.surface,
     borderWidth: 1,
-    borderColor: "rgba(226,232,240,0.9)",
+    borderColor: c.border,
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 5,
@@ -685,12 +690,12 @@ headerTitle: {
   metaText: {
     fontSize: 12,
     flexShrink: 1,
-    color: "#475569",
+    color: c.textMuted,
   },
 
   line: {
     height: 1,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: c.border,
     marginVertical: 10,
   },
 
@@ -705,7 +710,7 @@ headerTitle: {
   },
   priceLabel: {
     fontSize: 12,
-    color: "#64748B",
+    color: c.textMuted,
     fontWeight: "600",
     flex: 1,
     marginRight: 8,
@@ -724,22 +729,22 @@ headerTitle: {
     justifyContent: "center",
   },
   cardBtnOutline: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: c.surface,
     borderWidth: 1,
-    borderColor: "#CBD5E1",
+    borderColor: c.border,
   },
   cardBtnOutlineText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#475569",
+    color: c.textMuted,
   },
   cardBtnPrimary: {
-    backgroundColor: "#2563EB",
+    backgroundColor: c.primary,
   },
   cardBtnPrimaryText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: c.inverseText,
   },
 
   icon: {

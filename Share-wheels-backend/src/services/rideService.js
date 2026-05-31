@@ -17,6 +17,7 @@ const {
   applyScheduledStartToRide,
   MAX_POSTPONE_DURATION_MS,
   formatStartTimeHHmm,
+  isRidePastStartGracePeriod,
 } = require("../utils/rideScheduleUtils");
 const {
   notifyRideParticipants,
@@ -485,7 +486,7 @@ const sendPassengerRequest = async (user, { rideId, requires_seats }) => {
         },
       },
     },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+    { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
   );
 
   await closeStandalonePassengerRequestsAfterJoin(userId, ride);
@@ -701,8 +702,10 @@ const getRideDetails = async (rideId, viewerId) => {
     .populate("users_request_Couriers.userId", USER_FIELDS);
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
 
-  const stale = await expirePendingRideIfStale(ride);
-  ride = stale.ride || ride;
+  if (ride.status === "pending" && isRidePastStartGracePeriod(ride)) {
+    const stale = await expirePendingRideIfStale(ride);
+    ride = stale.ride || ride;
+  }
 
   const passengers = (ride.passengers || []).map((p) => sanitizeParticipant(p, viewerId));
   const all_deliveries = (ride.all_deliveries || []).map((c) => sanitizeParticipant(c, viewerId));
@@ -736,6 +739,7 @@ const getRideDetails = async (rideId, viewerId) => {
         boardingOtp: self.boardingOtp,
         boardingOtpExpires: self.boardingOtpExpires,
         isBoardingVerified: !!self.isBoardingVerified,
+        tripStatus: self.status || "accepted",
       };
     }
   }

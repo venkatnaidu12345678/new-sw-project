@@ -18,6 +18,9 @@ const RIDE_TYPES = new Set([
   "boarding_otp_issued",
   "boarding_otp_updated",
   "boarding_otp_verified",
+  "participant_picked_up",
+  "passenger_dropped",
+  "courier_delivered",
 ]);
 
 /**

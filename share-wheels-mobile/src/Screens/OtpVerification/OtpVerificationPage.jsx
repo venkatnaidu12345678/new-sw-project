@@ -13,7 +13,7 @@ import AuthButton from "../../Components/AuthButton";
 import AuthScreenLayout from "../../Components/auth/AuthScreenLayout";
 import { AUTH_COLORS, AUTH_GRADIENTS } from "../../theme/authTheme";
 import { verifyOtpApi } from "../../ApiService/AuthApiService";
-import { getDeviceToken } from "../../Notifications/FCMService";
+import { getDeviceTokenWithPermission } from "../../Notifications/FCMService";
 import { syncFcmTokenWithBackend } from "../../Notifications/registerToken";
 import { requestAppPermissionsOnSignIn } from "../../Utils/locationPermissions";
 import { getApiErrorMessage } from "../../Utils/apiErrors";
@@ -93,7 +93,7 @@ const OtpVerificationPage = ({ navigation, route, triggerAuth }) => {
     setLoading(true);
     setError("");
     try {
-      const fcmToken = await getDeviceToken();
+      const fcmToken = await getDeviceTokenWithPermission();
       const res = await verifyOtpApi({
         userId,
         otp: enteredOtp,
@@ -107,7 +107,7 @@ const OtpVerificationPage = ({ navigation, route, triggerAuth }) => {
           await AsyncStorage.setItem("USER_NAME", res.user.name);
         }
         await requestAppPermissionsOnSignIn();
-        await syncFcmTokenWithBackend();
+        await syncFcmTokenWithBackend({ force: true });
         triggerAuth?.();
       } else {
         setError(getApiErrorMessage(res, "Invalid OTP. Please try again."));

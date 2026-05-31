@@ -18,6 +18,8 @@ import seatIcon from "../../assets/person.png";
 import carIcon from "../../assets/caricon1.png";
 import { DS } from "../../theme/designSystem";
 import { formatDisplayTime } from "../../Utils/dateUtils";
+import { useTheme } from "../../context/ThemeContext";
+import { useThemedStyles } from "../../theme/useThemedStyles";
 
 const MAX_CARD_HEIGHT = Dimensions.get("window").height * 0.78;
 
@@ -37,7 +39,7 @@ const hasValue = (value) => {
   return s.length > 0 && s !== "—" && s !== "--" && s !== "-";
 };
 
-const DetailRow = ({ icon, label, value }) => (
+const DetailRow = ({ icon, label, value, styles }) => (
   <View style={styles.detailRow}>
     <Image source={icon} style={styles.detailIcon} />
     <View style={styles.detailTextCol}>
@@ -54,6 +56,8 @@ const RequestDetailPopover = ({
   onClose,
   showRides = false,
 }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const scale = useRef(new Animated.Value(0.92)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -143,7 +147,7 @@ const RequestDetailPopover = ({
 
             {loading ? (
               <View style={styles.loadingWrap}>
-                <ActivityIndicator size="large" color={DS.colors.primary} />
+                <ActivityIndicator size="large" color={colors.primary} />
                 <Text style={styles.loadingText}>Loading details…</Text>
               </View>
             ) : (
@@ -173,6 +177,7 @@ const RequestDetailPopover = ({
                         icon={row.icon}
                         label={row.label}
                         value={row.value}
+                        styles={styles}
                       />
                     ))}
                     {extraRows.map((row, index) => (
@@ -212,144 +217,145 @@ const RequestDetailPopover = ({
 
 export default RequestDetailPopover;
 
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.45)",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-  },
-  cardShell: {
-    width: "100%",
-    maxHeight: MAX_CARD_HEIGHT,
-  },
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 20,
-    maxHeight: MAX_CARD_HEIGHT,
-    overflow: "hidden",
-    ...DS.shadow.card,
-    elevation: 8,
-  },
-  scroll: {
-    flexGrow: 0,
-  },
-  scrollContent: {
-    paddingBottom: 12,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 14,
-  },
-  roleBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 999,
-  },
-  roleBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  closeBtn: {
-    fontSize: 20,
-    color: "#64748B",
-    fontWeight: "700",
-  },
-  loadingWrap: {
-    alignItems: "center",
-    paddingVertical: 28,
-    gap: 10,
-  },
-  loadingText: {
-    color: "#64748B",
-    fontSize: 13,
-  },
-  routeBlock: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F8FAFC",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  routeIcon: {
-    width: 16,
-    height: 16,
-    marginRight: 8,
-  },
-  routeText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#0F172A",
-  },
-  detailsBlock: {
-    gap: 10,
-    marginBottom: 16,
-  },
-  detailRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    backgroundColor: "#F8FAFC",
-    borderRadius: 10,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  extraRow: {
-    backgroundColor: "#F8FAFC",
-    borderRadius: 10,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  detailIcon: {
-    width: 16,
-    height: 16,
-    marginTop: 2,
-    marginRight: 10,
-  },
-  detailTextCol: {
-    flex: 1,
-  },
-  detailLabel: {
-    fontSize: 11,
-    color: "#64748B",
-    fontWeight: "600",
-    marginBottom: 2,
-  },
-  detailValue: {
-    fontSize: 14,
-    color: "#0F172A",
-    fontWeight: "600",
-  },
-  footerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderTopWidth: 1,
-    borderTopColor: "#E2E8F0",
-    paddingTop: 14,
-  },
-  statusPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: "600",
-    textTransform: "capitalize",
-  },
-  priceText: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0F172A",
-  },
-});
+const createStyles = (c) =>
+  StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      backgroundColor: c.overlay,
+      justifyContent: "center",
+      paddingHorizontal: 24,
+    },
+    cardShell: {
+      width: "100%",
+      maxHeight: MAX_CARD_HEIGHT,
+    },
+    card: {
+      backgroundColor: c.surface,
+      borderRadius: 20,
+      padding: 20,
+      maxHeight: MAX_CARD_HEIGHT,
+      overflow: "hidden",
+      ...DS.shadow.card,
+      elevation: 8,
+    },
+    scroll: {
+      flexGrow: 0,
+    },
+    scrollContent: {
+      paddingBottom: 12,
+    },
+    cardHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 14,
+    },
+    roleBadge: {
+      paddingHorizontal: 12,
+      paddingVertical: 5,
+      borderRadius: 999,
+    },
+    roleBadgeText: {
+      color: "#FFFFFF",
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    closeBtn: {
+      fontSize: 20,
+      color: c.textMuted,
+      fontWeight: "700",
+    },
+    loadingWrap: {
+      alignItems: "center",
+      paddingVertical: 28,
+      gap: 10,
+    },
+    loadingText: {
+      color: c.textMuted,
+      fontSize: 13,
+    },
+    routeBlock: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: c.surfaceAlt,
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 14,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    routeIcon: {
+      width: 16,
+      height: 16,
+      marginRight: 8,
+    },
+    routeText: {
+      flex: 1,
+      fontSize: 14,
+      fontWeight: "600",
+      color: c.text,
+    },
+    detailsBlock: {
+      gap: 10,
+      marginBottom: 16,
+    },
+    detailRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      backgroundColor: c.surfaceAlt,
+      borderRadius: 10,
+      padding: 10,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    extraRow: {
+      backgroundColor: c.surfaceAlt,
+      borderRadius: 10,
+      padding: 10,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    detailIcon: {
+      width: 16,
+      height: 16,
+      marginTop: 2,
+      marginRight: 10,
+    },
+    detailTextCol: {
+      flex: 1,
+    },
+    detailLabel: {
+      fontSize: 11,
+      color: c.textMuted,
+      fontWeight: "600",
+      marginBottom: 2,
+    },
+    detailValue: {
+      fontSize: 14,
+      color: c.text,
+      fontWeight: "600",
+    },
+    footerRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+      paddingTop: 14,
+    },
+    statusPill: {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 999,
+    },
+    statusText: {
+      fontSize: 12,
+      fontWeight: "600",
+      textTransform: "capitalize",
+    },
+    priceText: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: c.text,
+    },
+  });

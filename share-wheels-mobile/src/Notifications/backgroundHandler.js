@@ -1,14 +1,19 @@
 /**
  * Must be imported before AppRegistry (see index.js).
- * Handles FCM when the app is in background or quit (data-only extras).
+ * Shows tray notifications when FCM arrives in background / quit.
  */
 import {
   getFCMMessaging,
   setBackgroundMessageHandler,
 } from "./firebaseMessaging";
+import { displayForegroundNotification } from "./displayLocalNotification";
 
 setBackgroundMessageHandler(getFCMMessaging(), async (remoteMessage) => {
-  if (__DEV__) {
-    console.log("[FCM] background message:", remoteMessage?.messageId);
+  try {
+    await displayForegroundNotification(remoteMessage);
+  } catch (e) {
+    if (__DEV__) {
+      console.warn("[FCM] background display:", e?.message || e);
+    }
   }
 });

@@ -7,50 +7,63 @@ import { getRideDisplayFare } from "../Utils/fareUtils";
 import { formatDisplayDate, formatDisplayTime } from "../Utils/dateUtils";
 import UserAvatar from "./ui/UserAvatar";
 import { LAYOUT } from "../theme/layout";
+import { useTheme } from "../context/ThemeContext";
+import { useThemedStyles } from "../theme/useThemedStyles";
+import { getRoleCardThemes } from "../theme/appTheme";
 
-const ROLE_THEME = {
-  driver: {
-    accent: ["#2563EB", "#4F46E5"],
-    bg: ["#EFF6FF", "#F8FAFC", "#FFFFFF"],
-    border: "#60A5FA",
-    chipBg: "rgba(255,255,255,0.85)",
-    chipText: "#1D4ED8",
-    label: "Driver",
-    icon: "car-sport",
-    avatarRing: "#93C5FD",
-  },
-  passenger: {
-    accent: ["#059669", "#10B981"],
-    bg: ["#ECFDF5", "#F8FAFC", "#FFFFFF"],
-    border: "#34D399",
-    chipBg: "rgba(255,255,255,0.85)",
-    chipText: "#047857",
-    label: "Passenger",
-    icon: "person",
-    avatarRing: "#6EE7B7",
-  },
-  courier: {
-    accent: ["#D97706", "#F59E0B"],
-    bg: ["#FFFBEB", "#F8FAFC", "#FFFFFF"],
-    border: "#FBBF24",
-    chipBg: "rgba(255,255,255,0.85)",
-    chipText: "#B45309",
-    label: "Courier",
-    icon: "cube",
-    avatarRing: "#FCD34D",
-  },
+const getRoleTheme = (c) => {
+  const cards = getRoleCardThemes(c);
+  return {
+    driver: {
+      accent: [c.primary, c.primaryText],
+      bg: cards.Driver.card,
+      border: c.primary,
+      chipBg: c.surface,
+      chipText: c.primaryText,
+      label: "Driver",
+      icon: "car-sport",
+      avatarRing: c.primary,
+    },
+    passenger: {
+      accent: [c.successText, c.successText],
+      bg: cards.Passenger.card,
+      border: c.successText,
+      chipBg: c.surface,
+      chipText: c.successText,
+      label: "Passenger",
+      icon: "person",
+      avatarRing: c.successText,
+    },
+    courier: {
+      accent: [c.warningText, c.warningText],
+      bg: cards.Courier.card,
+      border: c.warningText,
+      chipBg: c.surface,
+      chipText: c.warningText,
+      label: "Courier",
+      icon: "cube",
+      avatarRing: c.warningText,
+    },
+  };
 };
 
-const MetaChip = ({ icon, label }) => (
+const MetaChip = ({ icon, label }) => {
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
+  return (
   <View style={styles.metaChip}>
-    <Icon name={icon} size={11} color="#64748B" />
+    <Icon name={icon} size={11} color={colors.textMuted} />
     <Text style={styles.metaChipText} numberOfLines={1}>
       {label}
     </Text>
   </View>
-);
+  );
+};
 
 const UpcomingRide = ({ data, onPress }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const ROLE_THEME = getRoleTheme(colors);
   const role = data?.myRole || "passenger";
   const theme = ROLE_THEME[role] || ROLE_THEME.passenger;
 
@@ -99,12 +112,12 @@ const UpcomingRide = ({ data, onPress }) => {
 
   const statusColors =
     data?.status === "started"
-      ? { bg: "#DCFCE7", text: "#15803D" }
+      ? { bg: colors.successBg, text: colors.successText }
       : isPending
-        ? { bg: "#FEF3C7", text: "#B45309" }
+        ? { bg: colors.warningBg, text: colors.warningText }
         : data?.isSchedulePassed && role === "driver"
-          ? { bg: "#DBEAFE", text: "#1D4ED8" }
-          : { bg: "rgba(255,255,255,0.9)", text: "#475569" };
+          ? { bg: colors.primaryMuted, text: colors.primaryText }
+          : { bg: colors.surface, text: colors.textMuted };
 
   const dateLabel = formatDisplayDate(data?.date, { showYear: false, weekday: false });
   const timeLabel = formatDisplayTime(data?.startTime);
@@ -173,7 +186,7 @@ const UpcomingRide = ({ data, onPress }) => {
               <Text style={styles.routeCity} numberOfLines={1}>
                 {routeFrom}
               </Text>
-              <Icon name="arrow-forward" size={12} color="#94A3B8" style={styles.routeArrow} />
+              <Icon name="arrow-forward" size={12} color={colors.textMuted} style={styles.routeArrow} />
               <Text style={styles.routeCity} numberOfLines={1}>
                 {routeTo}
               </Text>
@@ -198,13 +211,14 @@ const UpcomingRide = ({ data, onPress }) => {
 
 export default UpcomingRide;
 
-const styles = StyleSheet.create({
+const createStyles = (c) =>
+  StyleSheet.create({
   cardOuter: {
     borderRadius: LAYOUT.radius.md,
     marginBottom: LAYOUT.spacing.sm,
     borderWidth: 1.5,
     overflow: "hidden",
-    shadowColor: "#0F172A",
+    shadowColor: c.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 6,
@@ -242,12 +256,12 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#0F172A",
+    color: c.text,
     flexShrink: 1,
   },
   profileSub: {
     fontSize: 11,
-    color: "#64748B",
+    color: c.textMuted,
     marginTop: 1,
   },
   rolePill: {
@@ -302,7 +316,7 @@ const styles = StyleSheet.create({
   routeLine: {
     width: 2,
     height: 14,
-    backgroundColor: "#CBD5E1",
+    backgroundColor: c.border,
     marginVertical: 2,
   },
   routeDotTo: {
@@ -322,7 +336,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     fontWeight: "600",
-    color: "#1E293B",
+    color: c.text,
   },
   routeArrow: {
     marginHorizontal: 2,
@@ -336,17 +350,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    backgroundColor: "rgba(255,255,255,0.75)",
+    backgroundColor: c.surface,
     paddingHorizontal: 7,
     paddingVertical: 4,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "rgba(226,232,240,0.9)",
+    borderColor: c.border,
     maxWidth: "100%",
   },
   metaChipText: {
     fontSize: 10,
-    color: "#475569",
+    color: c.textMuted,
     fontWeight: "500",
     flexShrink: 1,
   },

@@ -5,7 +5,7 @@ import React, {
   useEffect,
   useState,
 } from "react";
-import { DeviceEventEmitter } from "react-native";
+import { AppState, DeviceEventEmitter } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   fetchNotifications,
@@ -15,13 +15,14 @@ import {
 
 export const NOTIFICATIONS_REFRESH_EVENT = "notifications:refresh";
 import { syncFcmTokenWithBackend } from "../Notifications/registerToken";
-import {
-  registerTokenRefreshHandler,
-} from "../Notifications/FCMService";
+import { registerTokenRefreshHandler } from "../Notifications/FCMService";
 import {
   connectAppSocket,
+  getAppSocket,
   subscribeSocketEvent,
 } from "../services/appSocket";
+
+const POLL_MS = 30000;
 
 const NotificationsContext = createContext(null);
 
@@ -89,37 +90,84 @@ export const NotificationsProvider = ({ children, isAuthenticated }) => {
       return undefined;
     }
 
-    refresh();
-    syncFcmTokenWithBackend();
-
-    const unsubRefresh = registerTokenRefreshHandler(() => {
-      syncFcmTokenWithBackend();
-    });
-
+    let active = true;
     let unsubSocket = () => {};
-    let socketActive = true;
+    let unsubTokenRefresh = () => {};
+    let pollId;
+    let reconnectHandler;
+    let appStateSub;
 
-    (async () => {
-      await connectAppSocket();
-      if (!socketActive) return;
-      unsubSocket = await subscribeSocketEvent("notificationReceived", () => {
-        refresh();
-        DeviceEventEmitter.emit(NOTIFICATIONS_REFRESH_EVENT);
+    const onNotificationPayload = () => {
+      if (!active) return;
+      refresh();
+      DeviceEventEmitter.emit(NOTIFICATIONS_REFRESH_EVENT);
+    };
+
+    const bootstrap = async () => {
+      await syncFcmTokenWithBackend({ force: true });
+      if (!active) return;
+
+      refresh();
+
+      unsubTokenRefresh = registerTokenRefreshHandler(() => {
+        syncFcmTokenWithBackend({ force: true }).then(() => {
+          if (active) refresh();
+        });
       });
-    })();
 
-    const interval = setInterval(refresh, 60000);
+      const s = await connectAppSocket();
+      if (!active || !s) return;
+
+      unsubSocket = await subscribeSocketEvent(
+        "notificationReceived",
+        onNotificationPayload
+      );
+
+      reconnectHandler = () => {
+        if (!active) return;
+        syncFcmTokenWithBackend({ force: true }).catch(() => {});
+        refresh();
+      };
+      s.io?.on("reconnect", reconnectHandler);
+
+      s.on("connect", () => {
+        if (active) refresh();
+      });
+    };
+
+    bootstrap();
+
+    pollId = setInterval(() => {
+      if (active) refresh();
+    }, POLL_MS);
+
     const sub = DeviceEventEmitter.addListener(
       NOTIFICATIONS_REFRESH_EVENT,
       refresh
     );
 
+    appStateSub = AppState.addEventListener("change", (state) => {
+      if (state === "active" && active) {
+        syncFcmTokenWithBackend({ force: false }).catch(() => {});
+        refresh();
+      }
+    });
+
     return () => {
-      socketActive = false;
-      unsubRefresh?.();
-      unsubSocket?.();
-      clearInterval(interval);
+      active = false;
+      clearInterval(pollId);
+      try {
+        unsubTokenRefresh?.();
+        unsubSocket?.();
+      } catch {
+        /* ignore */
+      }
+      const s = getAppSocket();
+      if (s?.io && reconnectHandler) {
+        s.io.off("reconnect", reconnectHandler);
+      }
       sub.remove();
+      appStateSub?.remove?.();
     };
   }, [isAuthenticated, refresh]);
 

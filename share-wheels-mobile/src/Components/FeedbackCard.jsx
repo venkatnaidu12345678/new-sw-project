@@ -12,8 +12,9 @@ import LinearGradient from "react-native-linear-gradient";
 import Icon from "react-native-vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { submitFeedback } from "../ApiService/feedbackApiService";
-import { INPUT_COLORS } from "../theme/inputTheme";
 import { LAYOUT } from "../theme/layout";
+import { useTheme } from "../context/ThemeContext";
+import { useThemedStyles } from "../theme/useThemedStyles";
 
 const CATEGORIES = [
   { id: "general", label: "General" },
@@ -23,6 +24,8 @@ const CATEGORIES = [
 ];
 
 const FeedbackCard = () => {
+  const { input } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [message, setMessage] = useState("");
   const [category, setCategory] = useState("general");
   const [sending, setSending] = useState(false);
@@ -76,9 +79,16 @@ const FeedbackCard = () => {
       </View>
 
       <TextInput
-        style={styles.input}
+        style={[
+          styles.input,
+          {
+            borderColor: input.border,
+            color: input.text,
+            backgroundColor: input.background,
+          },
+        ]}
         placeholder="Tell us what went well or what we can improve…"
-        placeholderTextColor={INPUT_COLORS.placeholder}
+        placeholderTextColor={input.placeholder}
         value={message}
         onChangeText={setMessage}
         multiline
@@ -109,100 +119,98 @@ const FeedbackCard = () => {
 
 export default FeedbackCard;
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: "#FFFFFF",
-    marginHorizontal: LAYOUT.spacing.md,
-    marginTop: LAYOUT.spacing.md,
-    borderRadius: LAYOUT.radius.lg,
-    padding: LAYOUT.spacing.md,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 14,
-  },
-  iconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  headerText: { flex: 1 },
-  title: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#0F172A",
-  },
-  adminNote: {
-    fontSize: 13,
-    color: "#64748B",
-    marginTop: 4,
-    lineHeight: 18,
-  },
-  chips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 12,
-  },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: "#F1F5F9",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  chipActive: {
-    backgroundColor: "#DBEAFE",
-    borderColor: "#93C5FD",
-  },
-  chipText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#64748B",
-  },
-  chipTextActive: {
-    color: "#1D4ED8",
-  },
-  input: {
-    minHeight: 100,
-    borderWidth: 1,
-    borderColor: INPUT_COLORS.border,
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 15,
-    color: INPUT_COLORS.text,
-    backgroundColor: INPUT_COLORS.background,
-    marginBottom: 12,
-  },
-  submitBtn: {
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  submitDisabled: {
-    opacity: 0.7,
-  },
-  submitGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 14,
-  },
-  submitText: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-});
+const createStyles = (c) =>
+  StyleSheet.create({
+    card: {
+      backgroundColor: c.surface,
+      marginHorizontal: LAYOUT.spacing.md,
+      marginTop: LAYOUT.spacing.md,
+      borderRadius: LAYOUT.radius.lg,
+      padding: LAYOUT.spacing.md,
+      borderWidth: 1,
+      borderColor: c.border,
+      shadowColor: c.shadow,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.06,
+      shadowRadius: 12,
+      elevation: 3,
+    },
+    headerRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      marginBottom: 14,
+    },
+    iconWrap: {
+      width: 44,
+      height: 44,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 12,
+    },
+    headerText: { flex: 1 },
+    title: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: c.text,
+    },
+    adminNote: {
+      fontSize: 13,
+      color: c.textMuted,
+      marginTop: 4,
+      lineHeight: 18,
+    },
+    chips: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginBottom: 12,
+    },
+    chip: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 20,
+      backgroundColor: c.chipBg,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    chipActive: {
+      backgroundColor: c.primaryMuted,
+      borderColor: c.primary,
+    },
+    chipText: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: c.textMuted,
+    },
+    chipTextActive: {
+      color: c.primaryText,
+    },
+    input: {
+      minHeight: 100,
+      borderWidth: 1,
+      borderRadius: 12,
+      padding: 14,
+      fontSize: 15,
+      marginBottom: 12,
+    },
+    submitBtn: {
+      borderRadius: 12,
+      overflow: "hidden",
+    },
+    submitDisabled: {
+      opacity: 0.7,
+    },
+    submitGradient: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      paddingVertical: 14,
+    },
+    submitText: {
+      color: "#FFFFFF",
+      fontSize: 15,
+      fontWeight: "700",
+    },
+  });

@@ -13,6 +13,8 @@ import { useNavigation } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import BackButton from "../Components/BackButton";
 import { getLegalPolicies } from "../ApiService/legalApiService";
+import { useTheme } from "../context/ThemeContext";
+import { useThemedStyles } from "../theme/useThemedStyles";
 
 const TABS = [
   { key: "terms", label: "Terms of Service", icon: "document-text-outline" },
@@ -47,6 +49,8 @@ const splitParagraphs = (text) => {
 
 export default function LegalPage() {
   const navigation = useNavigation();
+  const { colors, isDark } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [activeKey, setActiveKey] = useState("terms");
   const [policies, setPolicies] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -105,7 +109,7 @@ export default function LegalPage() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* Header */}
      <View style={styles.header}>
@@ -135,7 +139,7 @@ export default function LegalPage() {
                 <Ionicons
                   name={tab.icon}
                   size={16}
-                  color={active ? "#2979ff" : "#777"}
+                  color={active ? colors.primary : colors.textMuted}
                 />
 
                 <Text
@@ -204,128 +208,119 @@ export default function LegalPage() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f4f6fb",
-  },
-
-  header: {
-  flexDirection: "row",
-  alignItems: "center",
-  paddingHorizontal: 14,
-  paddingVertical: 14,
-  backgroundColor: "#fff",
-},
-
-headerTitle: {
-  flex: 1,
-  textAlign: "center",
-  fontSize: 18,
-  fontWeight: "600",
-},
-
-  tabs: {
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-
-  tabItem: {
-    marginHorizontal: 10,
-    paddingVertical: 12,
-  },
-
-  tabContent: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  tabText: {
-    fontSize: 13,
-    marginLeft: 5,
-    color: "#777",
-  },
-
-  activeTabText: {
-    color: "#2979ff",
-    fontWeight: "600",
-  },
-
-  activeLine: {
-    height: 2,
-    backgroundColor: "#2979ff",
-    marginTop: 6,
-  },
-
-  content: {
-    padding: 16,
-  },
-
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 18,
-  },
-
-  pageTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 6,
-  },
-
-  updated: {
-    fontSize: 12,
-    color: "#888",
-    marginBottom: 18,
-  },
-
-  block: {
-    marginBottom: 16,
-  },
-
-  heading: {
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-
-  body: {
-    fontSize: 13,
-    color: "#555",
-    lineHeight: 19,
-  },
-
-  supportBox: {
-    backgroundColor: "#eaf2ff",
-    padding: 18,
-    borderRadius: 10,
-    marginTop: 18,
-  },
-
-  supportTitle: {
-    fontWeight: "700",
-    fontSize: 14,
-    marginBottom: 4,
-  },
-
-  supportText: {
-    fontSize: 13,
-    color: "#555",
-    marginBottom: 12,
-  },
-
-  supportButton: {
-    backgroundColor: "#2979ff",
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-    alignSelf: "flex-start",
-  },
-
-  supportButtonText: {
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-});
+const createStyles = (c) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 14,
+      paddingVertical: 14,
+      backgroundColor: c.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    headerTitle: {
+      flex: 1,
+      textAlign: "center",
+      fontSize: 18,
+      fontWeight: "600",
+      color: c.text,
+    },
+    tabs: {
+      backgroundColor: c.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    tabItem: {
+      marginHorizontal: 10,
+      paddingVertical: 12,
+    },
+    tabContent: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    tabText: {
+      fontSize: 13,
+      marginLeft: 5,
+      color: c.textMuted,
+    },
+    activeTabText: {
+      color: c.primary,
+      fontWeight: "600",
+    },
+    activeLine: {
+      height: 2,
+      backgroundColor: c.primary,
+      marginTop: 6,
+    },
+    content: {
+      padding: 16,
+    },
+    card: {
+      backgroundColor: c.surface,
+      borderRadius: 10,
+      padding: 18,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    pageTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      marginBottom: 6,
+      color: c.text,
+    },
+    updated: {
+      fontSize: 12,
+      color: c.textMuted,
+      marginBottom: 18,
+    },
+    block: {
+      marginBottom: 16,
+    },
+    heading: {
+      fontSize: 14,
+      fontWeight: "600",
+      marginBottom: 4,
+      color: c.text,
+    },
+    body: {
+      fontSize: 13,
+      color: c.textSecondary,
+      lineHeight: 19,
+    },
+    supportBox: {
+      backgroundColor: c.primaryMuted,
+      padding: 18,
+      borderRadius: 10,
+      marginTop: 18,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    supportTitle: {
+      fontWeight: "700",
+      fontSize: 14,
+      marginBottom: 4,
+      color: c.text,
+    },
+    supportText: {
+      fontSize: 13,
+      color: c.textSecondary,
+      marginBottom: 12,
+    },
+    supportButton: {
+      backgroundColor: c.primary,
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      borderRadius: 6,
+      alignSelf: "flex-start",
+    },
+    supportButtonText: {
+      color: c.inverseText,
+      fontSize: 13,
+      fontWeight: "600",
+    },
+  });

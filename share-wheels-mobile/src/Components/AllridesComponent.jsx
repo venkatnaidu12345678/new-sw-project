@@ -12,7 +12,8 @@ import Icon from "react-native-vector-icons/Ionicons";
 import UserAvatar from "./ui/UserAvatar";
 import { formatVehicleLabel } from "./VehicleInfoStrip";
 import { LAYOUT, scale } from "../theme/layout";
-import { DS } from "../theme/designSystem";
+import { useTheme } from "../context/ThemeContext";
+import { useThemedStyles } from "../theme/useThemedStyles";
 import { RideListSkeleton } from "./ui/Skeleton";
 import AnimatedLoad from "./ui/AnimatedLoad";
 import AdPlacement from "./ads/AdPlacement";
@@ -24,14 +25,20 @@ import {
 const refId = (ref) =>
   ref?._id?.toString?.() || ref?.toString?.() || "";
 
-const MetaChip = ({ icon, label }) => (
-  <View style={styles.metaChip}>
-    <Icon name={icon} size={13} color="#64748B" />
-    <Text style={styles.metaChipText}>{label}</Text>
-  </View>
-);
+const MetaChip = ({ icon, label }) => {
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
+  return (
+    <View style={styles.metaChip}>
+      <Icon name={icon} size={13} color={colors.textMuted} />
+      <Text style={styles.metaChipText}>{label}</Text>
+    </View>
+  );
+};
 
 const SearchRideCard = ({ item, onPress }) => {
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
   const seats = item?.availableSeats ?? 0;
   const price = item?.ride_amount ?? 0;
   const vehicleLabel = formatVehicleLabel(item?.vehicle);
@@ -81,7 +88,7 @@ const SearchRideCard = ({ item, onPress }) => {
 
         {/* Driver */}
         <View style={styles.driverRow}>
-          <UserAvatar user={item?.creator} size={44} borderColor="#E2E8F0" />
+          <UserAvatar user={item?.creator} size={44} borderColor={colors.border} />
           <View style={styles.driverCol}>
             <Text style={styles.driverName} numberOfLines={1}>
               {item?.creator?.name || "Driver"}
@@ -96,7 +103,7 @@ const SearchRideCard = ({ item, onPress }) => {
             )}
           </View>
           <View style={styles.chevronWrap}>
-            <Icon name="chevron-forward" size={20} color="#94A3B8" />
+            <Icon name="chevron-forward" size={20} color={colors.textMuted} />
           </View>
         </View>
 
@@ -118,26 +125,31 @@ const SearchRideCard = ({ item, onPress }) => {
 
         <View style={styles.ctaRow}>
           <Text style={styles.ctaText}>Tap to view & request</Text>
-          <Icon name="arrow-forward-circle" size={18} color={DS.colors.primary} />
+          <Icon name="arrow-forward-circle" size={18} color={colors.primary} />
         </View>
       </View>
     </TouchableOpacity>
   );
 };
 
-const EmptyResults = () => (
+const EmptyResults = () => {
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
+  return (
   <View style={styles.emptyWrap}>
     <View style={styles.emptyIcon}>
-      <Icon name="car-outline" size={40} color="#94A3B8" />
+      <Icon name="car-outline" size={40} color={colors.textMuted} />
     </View>
     <Text style={styles.emptyTitle}>No rides found</Text>
     <Text style={styles.emptySub}>
       Try a different date or nearby cities for more options.
     </Text>
   </View>
-);
+  );
+};
 
 const AllridesComponent = ({ rides = [], loading, navigation, currentUserId }) => {
+  const styles = useThemedStyles(createStyles);
   const visibleRides = (rides || []).filter((item) => {
     if (!currentUserId) return true;
     return refId(item?.creator) !== refId(currentUserId);
@@ -200,7 +212,8 @@ const AllridesComponent = ({ rides = [], loading, navigation, currentUserId }) =
 
 export default React.memo(AllridesComponent);
 
-const styles = StyleSheet.create({
+const createStyles = (c) =>
+  StyleSheet.create({
   listRoot: {
     flex: 1,
   },
@@ -214,7 +227,7 @@ const styles = StyleSheet.create({
   resultCount: {
     fontSize: LAYOUT.font.small,
     fontWeight: "700",
-    color: "#64748B",
+    color: c.textMuted,
     marginBottom: LAYOUT.spacing.sm,
     marginLeft: 2,
     textTransform: "uppercase",
@@ -226,13 +239,17 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: c.surface,
     marginBottom: LAYOUT.spacing.md,
     borderRadius: LAYOUT.radius.lg,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: c.border,
     overflow: "hidden",
-    ...DS.shadow.card,
+    shadowColor: c.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
     shadowOpacity: 0.08,
     shadowRadius: 12,
     elevation: 4,
@@ -259,7 +276,7 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     borderWidth: 2,
-    borderColor: "#FFFFFF",
+    borderColor: c.surface,
   },
   routeDotFrom: {
     backgroundColor: "#22C55E",
@@ -271,7 +288,7 @@ const styles = StyleSheet.create({
     width: 2,
     flex: 1,
     minHeight: scale(28),
-    backgroundColor: "#E2E8F0",
+    backgroundColor: c.border,
     marginVertical: 4,
   },
   routeTextCol: {
@@ -288,7 +305,7 @@ const styles = StyleSheet.create({
   routeLabel: {
     fontSize: LAYOUT.font.tiny,
     fontWeight: "600",
-    color: "#94A3B8",
+    color: c.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.4,
     marginBottom: 2,
@@ -296,7 +313,7 @@ const styles = StyleSheet.create({
   routeCity: {
     fontSize: LAYOUT.font.section,
     fontWeight: "700",
-    color: "#0F172A",
+    color: c.text,
   },
   priceBlock: {
     alignItems: "flex-end",
@@ -304,18 +321,18 @@ const styles = StyleSheet.create({
   },
   priceLabel: {
     fontSize: LAYOUT.font.tiny,
-    color: "#94A3B8",
+    color: c.textMuted,
     marginBottom: 2,
   },
   priceValue: {
     fontSize: LAYOUT.font.title,
     fontWeight: "800",
-    color: DS.colors.primary,
+    color: c.primary,
   },
 
   divider: {
     height: 1,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: c.border,
     marginVertical: LAYOUT.spacing.md,
   },
 
@@ -330,11 +347,11 @@ const styles = StyleSheet.create({
   driverName: {
     fontSize: LAYOUT.font.body,
     fontWeight: "700",
-    color: "#0F172A",
+    color: c.text,
   },
   vehicleText: {
     fontSize: LAYOUT.font.small,
-    color: "#64748B",
+    color: c.textMuted,
     marginTop: 3,
   },
   chevronWrap: {
@@ -351,17 +368,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: c.surfaceAlt,
     paddingHorizontal: scale(10),
     paddingVertical: scale(6),
     borderRadius: scale(20),
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: c.border,
   },
   metaChipText: {
     fontSize: LAYOUT.font.small,
     fontWeight: "600",
-    color: "#475569",
+    color: c.textMuted,
   },
 
   ctaRow: {
@@ -372,12 +389,12 @@ const styles = StyleSheet.create({
     marginTop: LAYOUT.spacing.md,
     paddingTop: LAYOUT.spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
+    borderTopColor: c.border,
   },
   ctaText: {
     fontSize: LAYOUT.font.small,
     fontWeight: "600",
-    color: DS.colors.primary,
+    color: c.primary,
   },
 
   emptyWrap: {
@@ -391,7 +408,7 @@ const styles = StyleSheet.create({
     width: scale(80),
     height: scale(80),
     borderRadius: scale(40),
-    backgroundColor: "#F1F5F9",
+    backgroundColor: c.border,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: LAYOUT.spacing.md,
@@ -399,12 +416,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: LAYOUT.font.section,
     fontWeight: "700",
-    color: "#0F172A",
+    color: c.text,
     marginBottom: 8,
   },
   emptySub: {
     fontSize: LAYOUT.font.body,
-    color: "#64748B",
+    color: c.textMuted,
     textAlign: "center",
     lineHeight: scale(22),
   },

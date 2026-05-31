@@ -7,6 +7,8 @@ import {
   StyleSheet,
 } from "react-native";
 import { MOTION } from "../../theme/motion";
+import { useTheme } from "../../context/ThemeContext";
+import { useThemedStyles } from "../../theme/useThemedStyles";
 
 /**
  * Pill-style tabs with sliding indicator + label fade/scale.
@@ -18,6 +20,7 @@ const AnimatedTabs = ({
   style,
   variant = "pill",
 }) => {
+  const styles = useThemedStyles(createStyles);
   const slide = useRef(new Animated.Value(activeIndex)).current;
   const [tabWidth, setTabWidth] = React.useState(0);
   const labelAnims = useRef(tabs.map(() => new Animated.Value(0))).current;
@@ -79,13 +82,13 @@ const AnimatedTabs = ({
 
         return (
           <TouchableOpacity
-            key={typeof tab === "string" ? tab : tab.key}
+            key={tab}
             style={[
               isPill ? styles.pillTab : styles.chipTab,
               !isPill && isActive && styles.chipTabActive,
             ]}
-            onPress={() => onChange(index, tab)}
-            activeOpacity={0.75}
+            onPress={() => onChange(index)}
+            activeOpacity={0.85}
           >
             <Animated.Text
               style={[
@@ -94,7 +97,7 @@ const AnimatedTabs = ({
                 { opacity: labelOpacity, transform: [{ scale: labelScale }] },
               ]}
             >
-              {typeof tab === "string" ? tab : tab.label}
+              {tab}
             </Animated.Text>
           </TouchableOpacity>
         );
@@ -105,68 +108,68 @@ const AnimatedTabs = ({
 
 export default AnimatedTabs;
 
-const styles = StyleSheet.create({
-  pillWrap: {
-    flexDirection: "row",
-    backgroundColor: "#F1F5F9",
-    borderRadius: 14,
-    padding: 4,
-    marginBottom: 16,
-    position: "relative",
-  },
-  indicator: {
-    position: "absolute",
-    top: 4,
-    bottom: 4,
-    left: 0,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 11,
-    shadowColor: "#64748B",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  pillTab: {
-    flex: 1,
-    paddingVertical: 11,
-    alignItems: "center",
-    zIndex: 1,
-  },
-  pillLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#64748B",
-  },
-  pillLabelActive: {
-    color: "#0F172A",
-  },
-
-  chipWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginBottom: 16,
-  },
-  chipTab: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "#F1F5F9",
-    borderWidth: 1,
-    borderColor: "transparent",
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  chipTabActive: {
-    backgroundColor: "#EFF6FF",
-    borderColor: "#BFDBFE",
-  },
-  chipLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#64748B",
-  },
-  chipLabelActive: {
-    color: "#1D4ED8",
-  },
-});
+const createStyles = (c) =>
+  StyleSheet.create({
+    pillWrap: {
+      flexDirection: "row",
+      backgroundColor: c.chipBg,
+      borderRadius: 14,
+      padding: 4,
+      marginBottom: 16,
+      position: "relative",
+    },
+    indicator: {
+      position: "absolute",
+      top: 4,
+      bottom: 4,
+      left: 0,
+      backgroundColor: c.surface,
+      borderRadius: 11,
+      shadowColor: c.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.12,
+      shadowRadius: 6,
+      elevation: 3,
+    },
+    pillTab: {
+      flex: 1,
+      paddingVertical: 11,
+      alignItems: "center",
+      zIndex: 1,
+    },
+    pillLabel: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: c.textMuted,
+    },
+    pillLabelActive: {
+      color: c.text,
+    },
+    chipWrap: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      marginBottom: 16,
+    },
+    chipTab: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: c.chipBg,
+      borderWidth: 1,
+      borderColor: "transparent",
+      marginRight: 8,
+      marginBottom: 8,
+    },
+    chipTabActive: {
+      backgroundColor: c.primaryMuted,
+      borderColor: c.border,
+    },
+    chipLabel: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: c.textMuted,
+    },
+    chipLabelActive: {
+      color: c.primaryText,
+    },
+  });

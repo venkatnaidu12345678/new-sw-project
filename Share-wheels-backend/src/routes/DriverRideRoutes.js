@@ -24,5 +24,15 @@ router.post(
   authMiddleware,
   rideVerificationController.verifyParticipant
 );
+router.patch(
+  "/:rideId/passengers/:participantId/drop",
+  authMiddleware,
+  rideVerificationController.dropPassenger
+);
+router.patch(
+  "/:rideId/couriers/:participantId/deliver",
+  authMiddleware,
+  rideVerificationController.deliverCourier
+);
 
 module.exports = router;

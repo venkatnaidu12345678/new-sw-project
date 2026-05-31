@@ -10,6 +10,7 @@ import {
   Animated,
   TouchableWithoutFeedback,
   Alert,
+  Switch,
 } from "react-native";
 import LinearGradient from "react-native-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -39,11 +40,14 @@ import { AUTH_COLORS } from "../theme/authTheme";
 import { uploadAndSetProfileImage } from "../ApiService/imageApiService";
 import { userProfile } from "../ApiService/ridesApiServices";
 import { isRemoteImageUrl } from "../Utils/imageUpload";
+import { useTheme } from "../context/ThemeContext";
 
 const MyProfile = () => {
   const { ProfileDetails, SetProfileDetails, logout } = profileData();
   const navigation = useNavigation();
   const { refreshAds } = useAds();
+  const { isDark, colors, toggleTheme } = useTheme();
+  const themedStyles = React.useMemo(() => createStyles(colors), [colors]);
 
   useFocusEffect(
     useCallback(() => {
@@ -178,88 +182,114 @@ const MyProfile = () => {
   };
 
   return (
-    <ScreenContainer backgroundColor="#F1F5F9" edges={["top"]}>
-    <KeyboardAwareScreen style={styles.container}>
+    <ScreenContainer backgroundColor={colors.background} edges={["top"]}>
+    <KeyboardAwareScreen style={themedStyles.container}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: LAYOUT.spacing.xl + 80 }}
       >
         <LinearGradient
-          colors={["#0F172A", AUTH_COLORS.primaryDark, AUTH_COLORS.primary]}
+          colors={colors.heroGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.profileHero}
+          style={themedStyles.profileHero}
         >
-          <Text style={styles.heroLabel}>My profile</Text>
-          <View style={styles.topRow}>
-            <View style={styles.avatarWrapper}>
+          <Text style={themedStyles.heroLabel}>My profile</Text>
+          <View style={themedStyles.topRow}>
+            <View style={themedStyles.avatarWrapper}>
               <TouchableOpacity onPress={openImage} activeOpacity={0.9}>
-                <Image source={imageSource} style={styles.avatar} />
+                <Image source={imageSource} style={themedStyles.avatar} />
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.editBtn}
+                style={themedStyles.editBtn}
                 onPress={pickImage}
                 disabled={uploadingPhoto}
               >
                 <Icon name="camera" size={14} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
-            <View style={styles.nameBlock}>
-              <Text style={styles.name}>{personal?.name || "User"}</Text>
+            <View style={themedStyles.nameBlock}>
+              <Text style={themedStyles.name}>{personal?.name || "User"}</Text>
               {personal?.userNo ? (
-                <Text style={styles.userNo}>ID · {personal.userNo}</Text>
+                <Text style={themedStyles.userNo}>ID · {personal.userNo}</Text>
               ) : null}
-              <Text style={styles.email} numberOfLines={1}>
+              <Text style={themedStyles.email} numberOfLines={1}>
                 {personal?.email || personal?.phoneNumber || "—"}
               </Text>
             </View>
           </View>
         </LinearGradient>
 
-        <Text style={styles.sectionHeading}>Account details</Text>
+        <Text style={themedStyles.sectionHeading}>Appearance</Text>
+        <View style={themedStyles.menuCard}>
+          <View style={themedStyles.menuRow}>
+            <View style={[themedStyles.menuIcon, { backgroundColor: colors.primaryMuted }]}>
+              <Icon
+                name={isDark ? "moon" : "sunny"}
+                size={22}
+                color={colors.primary}
+              />
+            </View>
+            <View style={themedStyles.themeTextCol}>
+              <Text style={themedStyles.menuTitle}>Dark theme</Text>
+              <Text style={themedStyles.themeSub}>
+                {isDark ? "On — easier on the eyes at night" : "Off — light background"}
+              </Text>
+            </View>
+            <Switch
+              value={isDark}
+              onValueChange={toggleTheme}
+              trackColor={{ false: "#CBD5E1", true: colors.primary }}
+              thumbColor="#FFFFFF"
+              accessibilityLabel="Toggle dark theme"
+            />
+          </View>
+        </View>
+
+        <Text style={themedStyles.sectionHeading}>Account details</Text>
         <PersonalInformationCard personal={personal} vehicle={vehicle} />
 
-        <Text style={styles.sectionHeading}>Feedback</Text>
+        <Text style={themedStyles.sectionHeading}>Feedback</Text>
         <FeedbackCard />
 
-        <Text style={styles.sectionHeading}>Support</Text>
+        <Text style={themedStyles.sectionHeading}>Support</Text>
         <Supportcard />
 
-        <Text style={styles.sectionHeading}>More</Text>
-        <View style={styles.menuCard}>
+        <Text style={themedStyles.sectionHeading}>More</Text>
+        <View style={themedStyles.menuCard}>
           <TouchableOpacity
-            style={styles.menuRow}
+            style={themedStyles.menuRow}
             onPress={() => navigation.navigate("Legal")}
             activeOpacity={0.85}
           >
-            <View style={[styles.menuIcon, { backgroundColor: "#EEF2FF" }]}>
-              <Image source={LegalIcon} style={styles.menuIconImg} />
+            <View style={[themedStyles.menuIcon, { backgroundColor: colors.primaryMuted }]}>
+              <Image source={LegalIcon} style={themedStyles.menuIconImg} />
             </View>
-            <Text style={styles.menuTitle}>Legal</Text>
-            <Icon name="chevron-forward" size={20} color="#94A3B8" />
+            <Text style={themedStyles.menuTitle}>Legal</Text>
+            <Icon name="chevron-forward" size={20} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
 
         <AdPlacement placement="profile" />
 
         <TouchableOpacity
-          style={styles.logoutBtn}
+          style={themedStyles.logoutBtn}
           onPress={handleLogout}
           activeOpacity={0.85}
         >
-          <Text style={styles.logoutText}>Log out</Text>
+          <Text style={themedStyles.logoutText}>Log out</Text>
         </TouchableOpacity>
       </ScrollView>
 
       {/* IMAGE PREVIEW MODAL */}
       <Modal visible={visible} transparent animationType="fade">
         <TouchableWithoutFeedback onPress={closeImage}>
-          <View style={styles.modalContainer}>
+          <View style={themedStyles.modalContainer}>
             <Animated.Image
               source={imageSource}
               style={[
-                styles.fullImage,
+                themedStyles.fullImage,
                 { transform: [{ scale: scaleAnim }] },
               ]}
               resizeMode="contain"
@@ -274,10 +304,11 @@ const MyProfile = () => {
 
 export default MyProfile;
 
-const styles = StyleSheet.create({
+const createStyles = (colors) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: colors.background,
   },
 
   profileHero: {
@@ -353,10 +384,19 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
+  themeTextCol: {
+    flex: 1,
+    marginRight: 8,
+  },
+  themeSub: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
   sectionHeading: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#64748B",
+    color: colors.textMuted,
     marginLeft: LAYOUT.spacing.md + 4,
     marginTop: LAYOUT.spacing.lg,
     marginBottom: 4,
@@ -378,12 +418,12 @@ const styles = StyleSheet.create({
   },
 
   menuCard: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.card,
     marginHorizontal: LAYOUT.spacing.md,
     marginTop: 4,
     borderRadius: LAYOUT.radius.lg,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: colors.border,
     overflow: "hidden",
   },
 
@@ -412,7 +452,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     fontWeight: "600",
-    color: "#0F172A",
+    color: colors.text,
   },
 
   logoutBtn: {

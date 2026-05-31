@@ -58,8 +58,14 @@ const passengerOnRideSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     requires_seats: { type: Number, min: 1, default: 1 },
     ride_amount: rideAmountField,
-    status: { type: String, default: "accepted" },
+    status: {
+      type: String,
+      enum: ["accepted", "picked_up", "dropped"],
+      default: "accepted",
+    },
     joinedAt: { type: Date, default: Date.now },
+    pickedUpAt: { type: Date },
+    droppedAt: { type: Date },
     ...participantVerificationFields,
   },
   { _id: true }
@@ -100,6 +106,13 @@ const courierOnRideSchema = new mongoose.Schema(
     },
     requestedAt: { type: Date, default: Date.now },
     assignedAt: { type: Date },
+    status: {
+      type: String,
+      enum: ["accepted", "picked_up", "delivered"],
+      default: "accepted",
+    },
+    pickedUpAt: { type: Date },
+    deliveredAt: { type: Date },
     ...participantVerificationFields,
   },
   { _id: true }

@@ -33,6 +33,9 @@ import { useAds } from "../context/AdsContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LAYOUT, getScrollBottomPadding } from "../theme/layout";
 import { formatDisplayTime } from "../Utils/dateUtils";
+import { useTheme } from "../context/ThemeContext";
+import { useThemedStyles } from "../theme/useThemedStyles";
+import { getRoleCardThemes } from "../theme/appTheme";
 
 const FILTER_TABS = ["All", "Driver", "Passenger", "Courier"];
 
@@ -41,35 +44,30 @@ const roleColors = {
   Passenger: ["#16A34A", "#4ADE80"],
   Courier: ["#EA580C", "#FDBA74"],
 };
-const roleCardTheme = {
-  Driver: { card: ["#EFF6FF", "#F8FAFC", "#FFFFFF"], border: "#93C5FD" },
-  Passenger: { card: ["#ECFDF5", "#F8FAFC", "#FFFFFF"], border: "#86EFAC" },
-  Courier: { card: ["#FFF7ED", "#FFFBEB", "#FFFFFF"], border: "#FDBA74" },
-};
 
-const sliderThemes = {
+const getSliderThemes = (c) => ({
   Driver: {
-    gradient: ["#EFF6FF", "#F8FAFC", "#FFFFFF"],
-    borderColor: "#93C5FD",
+    gradient: getRoleCardThemes(c).Driver.card,
+    borderColor: getRoleCardThemes(c).Driver.border,
     handleColor: "#60A5FA",
-    closeColor: "#1E3A8A",
-    backdropOpacity: 0.45,
+    closeColor: c.primaryText,
+    backdropOpacity: 0.55,
   },
   Passenger: {
-    gradient: ["#ECFDF5", "#F8FAFC", "#FFFFFF"],
-    borderColor: "#86EFAC",
+    gradient: getRoleCardThemes(c).Passenger.card,
+    borderColor: getRoleCardThemes(c).Passenger.border,
     handleColor: "#4ADE80",
-    closeColor: "#166534",
-    backdropOpacity: 0.45,
+    closeColor: c.successText,
+    backdropOpacity: 0.55,
   },
   Courier: {
-    gradient: ["#FFF7ED", "#FFFBEB", "#FFFFFF"],
-    borderColor: "#FDBA74",
+    gradient: getRoleCardThemes(c).Courier.card,
+    borderColor: getRoleCardThemes(c).Courier.border,
     handleColor: "#FB923C",
-    closeColor: "#9A3412",
-    backdropOpacity: 0.45,
+    closeColor: c.warningText,
+    backdropOpacity: 0.55,
   },
-};
+});
 
 const toDateLabel = (value) => {
   if (!value) return "—";
@@ -81,6 +79,10 @@ const toTimeLabel = (value) => formatDisplayTime(value) || "—";
 
 const RideHistory = () => {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const roleCardTheme = getRoleCardThemes(colors);
+  const sliderThemes = getSliderThemes(colors);
   const { refreshAds } = useAds();
   const [rides, setRides] = useState([]);
   const [filteredRides, setFilteredRides] = useState([]);
@@ -333,11 +335,10 @@ const RideHistory = () => {
 
 export default RideHistory;
 
-/* STYLES */
-const styles = StyleSheet.create({
+const createStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
     paddingHorizontal: LAYOUT.spacing.screen,
     paddingBottom: LAYOUT.spacing.sm,
   },
@@ -352,7 +353,7 @@ const styles = StyleSheet.create({
     fontSize: LAYOUT.font.title,
     fontWeight: "800",
     marginLeft: 10,
-    color: "#111827",
+    color: c.text,
   },
 
   skeletonPad: { padding: 16, flex: 1 },
@@ -366,12 +367,12 @@ const styles = StyleSheet.create({
 
   noDataText: {
     fontSize: 16,
-    color: "#6B7280",
+    color: c.textMuted,
     fontWeight: "500",
   },
   errorBanner: {
-    color: "#B91C1C",
-    backgroundColor: "#FEF2F2",
+    color: c.errorText,
+    backgroundColor: c.errorBg,
     padding: 10,
     borderRadius: 8,
     marginBottom: 12,
@@ -384,15 +385,15 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 16,
     borderRadius: 20,
-    backgroundColor: "#E2E8F0",
+    backgroundColor: c.chipBg,
     marginRight: 10,
   },
 
-  activeFilterBtn: { backgroundColor: "#0F172A" },
+  activeFilterBtn: { backgroundColor: c.primary },
 
-  filterText: { color: "#334155", fontWeight: "600" },
+  filterText: { color: c.textSecondary, fontWeight: "600" },
 
-  activeFilterText: { color: "#fff" },
+  activeFilterText: { color: c.inverseText },
 
   row: { flexDirection: "row", marginBottom: 20 },
 
@@ -409,7 +410,7 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1.2,
     elevation: 3,
-    shadowColor: "#0F172A",
+    shadowColor: c.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 8,
@@ -440,13 +441,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
 
-  price: { fontWeight: "800", fontSize: 14, color: "#0F172A" },
+  price: { fontWeight: "800", fontSize: 14, color: c.text },
 
-  route: { fontSize: 15, fontWeight: "700", marginBottom: 6, color: "#0F172A" },
+  route: { fontSize: 15, fontWeight: "700", marginBottom: 6, color: c.text },
 
   bottomRow: { flexDirection: "row", justifyContent: "space-between" },
 
-  meta: { fontSize: 12, color: "#64748B" },
+  meta: { fontSize: 12, color: c.textMuted },
 
   status: { fontWeight: "700" },
 });

@@ -42,6 +42,13 @@ export async function connectAppSocket() {
 
       socket.io.on("reconnect", async () => {
         const t = await AsyncStorage.getItem("token");
+        if (t && socket) {
+          socket.auth = { token: t };
+        }
+      });
+
+      socket.on("connect", async () => {
+        const t = await AsyncStorage.getItem("token");
         if (t && socket) socket.auth = { token: t };
       });
     }

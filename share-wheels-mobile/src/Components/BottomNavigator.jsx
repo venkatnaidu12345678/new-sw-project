@@ -13,12 +13,14 @@ import CreateOptionsCard from "./CreateRequestIcon";
 import AnimatedTabIcon from "./ui/AnimatedTabIcon";
 import { LAYOUT, scale, getTabBarInset } from "../theme/layout";
 import { shouldShowCreateFab } from "../Utils/mainTabNavigation";
+import { useTheme } from "../context/ThemeContext";
 
 import requestIcon from "../assets/requesticon.png";
 
 const Tab = createBottomTabNavigator();
 
 export default function BottomNavigator() {
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const bottomPad =
     Platform.OS === "ios"
@@ -33,7 +35,7 @@ export default function BottomNavigator() {
   const showCreateFab = isNavigatorFocused && showCreateFabOnTab;
 
   return (
-    <View style={styles.shell}>
+    <View style={[styles.shell, { backgroundColor: colors.background }]}>
       <Tab.Navigator
         initialRouteName="Home"
         detachInactiveScreens={false}
@@ -46,16 +48,16 @@ export default function BottomNavigator() {
             height: tabHeight,
             paddingBottom: bottomPad,
             paddingTop: 6,
-            backgroundColor: "#FFFFFF",
+            backgroundColor: colors.tabBar,
             borderTopWidth: StyleSheet.hairlineWidth,
-            borderTopColor: "#E2E8F0",
+            borderTopColor: colors.tabBarBorder,
             elevation: 0,
             shadowOpacity: 0,
             shadowOffset: { width: 0, height: 0 },
             shadowRadius: 0,
           },
           tabBarItemStyle: styles.tabItem,
-          sceneStyle: { backgroundColor: "#F8FAFC", flex: 1 },
+          sceneStyle: { backgroundColor: colors.background, flex: 1 },
 
           tabBarIcon: ({ focused }) => {
             if (route.name === "Request") {
@@ -65,7 +67,7 @@ export default function BottomNavigator() {
                     source={requestIcon}
                     style={[
                       styles.requestIcon,
-                      { tintColor: focused ? "#2563EB" : "#94A3B8" },
+                      { tintColor: focused ? colors.primary : colors.tabInactive },
                     ]}
                   />
                 </AnimatedTabIcon>
@@ -86,7 +88,7 @@ export default function BottomNavigator() {
                 <Icon
                   name={iconName}
                   size={scale(20)}
-                  color={focused ? "#2563EB" : "#94A3B8"}
+                  color={focused ? colors.primary : colors.tabInactive}
                 />
               </AnimatedTabIcon>
             );
@@ -116,7 +118,6 @@ export default function BottomNavigator() {
 const styles = StyleSheet.create({
   shell: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
   },
   tabItem: {
     paddingVertical: 6,

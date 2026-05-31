@@ -13,6 +13,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import RequestMatchingRides from "./RequestMatchingRides";
 import { DS } from "../../theme/designSystem";
+import { useThemedStyles } from "../../theme/useThemedStyles";
 
 const SHEET_MAX = Dimensions.get("window").height * 0.72;
 
@@ -25,6 +26,7 @@ const RequestRelatedRidesSheet = ({
   onJoinRide,
 }) => {
   const insets = useSafeAreaInsets();
+  const styles = useThemedStyles(createStyles);
   const translateY = useRef(new Animated.Value(SHEET_MAX)).current;
 
   useEffect(() => {
@@ -128,58 +130,59 @@ const RequestRelatedRidesSheet = ({
 
 export default RequestRelatedRidesSheet;
 
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.45)",
-    justifyContent: "flex-end",
-  },
-  sheet: {
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    maxHeight: SHEET_MAX,
-    ...DS.shadow.card,
-    elevation: 16,
-  },
-  handleWrap: {
-    alignItems: "center",
-    paddingTop: 10,
-    paddingBottom: 6,
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#CBD5E1",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    gap: 12,
-  },
-  headerTextCol: {
-    flex: 1,
-  },
-  title: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: "#0F172A",
-  },
-  subtitle: {
-    fontSize: 13,
-    color: "#64748B",
-    marginTop: 2,
-  },
-  closeBtn: {
-    fontSize: 20,
-    color: "#64748B",
-    fontWeight: "700",
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 8,
-  },
-});
+const createStyles = (c) =>
+  StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      backgroundColor: c.overlay,
+      justifyContent: "flex-end",
+    },
+    sheet: {
+      backgroundColor: c.surface,
+      borderTopLeftRadius: 22,
+      borderTopRightRadius: 22,
+      maxHeight: SHEET_MAX,
+      ...DS.shadow.card,
+      elevation: 16,
+    },
+    handleWrap: {
+      alignItems: "center",
+      paddingTop: 10,
+      paddingBottom: 6,
+    },
+    handle: {
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: c.textMuted,
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      paddingHorizontal: 20,
+      paddingBottom: 12,
+      gap: 12,
+    },
+    headerTextCol: {
+      flex: 1,
+    },
+    title: {
+      fontSize: 17,
+      fontWeight: "800",
+      color: c.text,
+    },
+    subtitle: {
+      fontSize: 13,
+      color: c.textMuted,
+      marginTop: 2,
+    },
+    closeBtn: {
+      fontSize: 20,
+      color: c.textMuted,
+      fontWeight: "700",
+    },
+    scrollContent: {
+      paddingHorizontal: 20,
+      paddingBottom: 8,
+    },
+  });

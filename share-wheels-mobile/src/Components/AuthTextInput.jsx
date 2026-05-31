@@ -5,6 +5,8 @@ import LinearGradient from "react-native-linear-gradient";
 import AppTextInput from "./ui/AppTextInput";
 import { AUTH_GRADIENTS } from "../theme/authTheme";
 import { LAYOUT } from "../theme/layout";
+import { useTheme } from "../context/ThemeContext";
+import { useThemedStyles } from "../theme/useThemedStyles";
 
 const AuthTextInput = ({
   value,
@@ -15,6 +17,8 @@ const AuthTextInput = ({
   maxLength,
   autoCapitalize,
 }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [showPassword, setShowPassword] = useState(false);
   const isPassword = secureTextEntry === true;
 
@@ -46,7 +50,7 @@ const AuthTextInput = ({
               <Icon
                 name={showPassword ? "eye" : "eye-slash"}
                 size={20}
-                color="#64748B"
+                color={colors.textMuted}
               />
             </TouchableOpacity>
           )}
@@ -58,7 +62,8 @@ const AuthTextInput = ({
 
 export default AuthTextInput;
 
-const styles = StyleSheet.create({
+const createStyles = (c) =>
+  StyleSheet.create({
   container: {
     marginBottom: LAYOUT.spacing.sm,
   },
@@ -68,7 +73,7 @@ const styles = StyleSheet.create({
   },
   inner: {
     position: "relative",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: c.surface,
     borderRadius: LAYOUT.radius.md,
     overflow: "hidden",
   },

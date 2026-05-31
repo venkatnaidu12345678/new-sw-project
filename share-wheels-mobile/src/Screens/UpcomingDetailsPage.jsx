@@ -7,6 +7,7 @@ import {
   Image,
   ScrollView,
   Alert,
+  DeviceEventEmitter,
 } from "react-native";
 
 import BottomSlider from "../Components/BottomSlider";
@@ -29,6 +30,8 @@ import {
   driverrejectpassengerrequest,
   listVerificationParticipants,
   verifyBoardingParticipant,
+  dropPassengerOnRide,
+  deliverCourierOnRide,
   updateRideSeats,
   cancelRideApi,
 } from "../ApiService/ridesApiServices";
@@ -62,14 +65,22 @@ import { getRideChatMessages } from "../ApiService/chatApiServices";
 import { profileData } from "../Navigation/AuthNavigator";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LAYOUT, getScrollBottomPadding, scale } from "../theme/layout";
-import { DS } from "../theme/designSystem";
+import { DS, themeToDS } from "../theme/designSystem";
+import { useThemedStyles } from "../theme/useThemedStyles";
+import { useTheme } from "../context/ThemeContext";
 import caricon from "../assets/caricon.png";
 import courier from "../assets/courier.png"
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { convertDate } from '../Utils';
 import { formatDisplayTime } from '../Utils/dateUtils';
 import { formatLocalISODate } from "../Utils/dateUtils";
-import { getRideDisplayFare, getPassengerFare, getCourierFare } from '../Utils/fareUtils'
+import { getRideDisplayFare, getPassengerFare, getCourierFare } from '../Utils/fareUtils';
+import {
+  canDropPassenger,
+  canDeliverCourier,
+  tripStatusLabel,
+} from "../Utils/participantTripStatus";
+import { NOTIFICATIONS_REFRESH_EVENT } from "../context/NotificationsContext";
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator } from "react-native";
 import { pushDriverLocationNow } from "../hooks/useDriverLocation";
@@ -92,6 +103,8 @@ import { useRideSocket } from "../hooks/useAppSocket";
 const UpcomingDetailsPage = ({ route }) => {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { rideData } = route.params || {};
   const { setRefreshUpcomingrides } = profileData() || {};
 
@@ -514,7 +527,11 @@ const UpcomingDetailsPage = ({ route }) => {
       setVerifyLoading(true);
       const token = await AsyncStorage.getItem("token");
       const res = await verifyBoardingParticipant(token, rideData?._id, { userNo, otp });
-      Alert.alert("Verified", res?.message || "Participant verified");
+      Alert.alert(
+        "Picked up",
+        res?.message || "OTP verified — marked Picked Up"
+      );
+      DeviceEventEmitter.emit(NOTIFICATIONS_REFRESH_EVENT);
       if (res?.verification) {
         setVerification({
           total: res.verification.total,
@@ -532,6 +549,36 @@ const UpcomingDetailsPage = ({ route }) => {
       Alert.alert("Verification failed", err.message);
     } finally {
       setVerifyLoading(false);
+    }
+  };
+
+  const handleDropPassenger = async (item) => {
+    const participantId = item?._id;
+    if (!participantId || !rideIdStr) return;
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) return;
+      const res = await dropPassengerOnRide(token, rideIdStr, participantId);
+      Alert.alert("Dropped", res?.message || "Passenger marked as Dropped");
+      DeviceEventEmitter.emit(NOTIFICATIONS_REFRESH_EVENT);
+      fetchRideDetails();
+    } catch (err) {
+      Alert.alert("Could not update", getApiErrorMessage(err, "Try again."));
+    }
+  };
+
+  const handleDeliverCourier = async (item) => {
+    const participantId = item?._id;
+    if (!participantId || !rideIdStr) return;
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) return;
+      const res = await deliverCourierOnRide(token, rideIdStr, participantId);
+      Alert.alert("Delivered", res?.message || "Courier marked as Delivered");
+      DeviceEventEmitter.emit(NOTIFICATIONS_REFRESH_EVENT);
+      fetchRideDetails();
+    } catch (err) {
+      Alert.alert("Could not update", getApiErrorMessage(err, "Try again."));
     }
   };
 
@@ -731,11 +778,8 @@ const UpcomingDetailsPage = ({ route }) => {
 
 
   return (
-    <ScreenContainer
-      backgroundColor="#fff"
-      style={{ paddingHorizontal: LAYOUT.spacing.screen }}
-    >
-      <ScreenHeader title="Ride details" backgroundColor="#fff" />
+    <ScreenContainer style={{ paddingHorizontal: LAYOUT.spacing.screen }}>
+      <ScreenHeader title="Ride details" />
 
       <View style={styles.buttonContainer}>
         <TouchableOpacity
@@ -875,7 +919,7 @@ const UpcomingDetailsPage = ({ route }) => {
             </Text>
             <Text style={styles.boardingHint}>
               {myBoarding.isBoardingVerified
-                ? "Verified by driver ✓"
+                ? `Status: ${tripStatusLabel(myBoarding.tripStatus || "picked_up")} ✓`
                 : normalizedRideStatus === "started"
                   ? "Ride in progress — keep your User ID and OTP visible for the driver if needed."
                   : "Share your User ID and OTP with the driver before the ride starts."}
@@ -952,7 +996,7 @@ const UpcomingDetailsPage = ({ route }) => {
               )}
             </>
           ) : (
-            <View style={[styles.card, { backgroundColor: "#FFF7ED" }]}>
+            <View style={[styles.card, { backgroundColor: colors.tintOrange }]}>
               <Text style={styles.label}>
                 <Image source={seat} style={styles.icon} /> Available Seats
               </Text>
@@ -1025,6 +1069,7 @@ const UpcomingDetailsPage = ({ route }) => {
                     fare={getPassengerFare(item)}
                     fareLabel="Fare"
                     verified={!!item?.isBoardingVerified}
+                    tripStatus={item?.status}
                     showVerify={
                       !item?.isBoardingVerified &&
                       (rideStatus === "pending" || rideStatus === "started")
@@ -1037,6 +1082,11 @@ const UpcomingDetailsPage = ({ route }) => {
                       });
                       setActiveSlider("otp");
                     }}
+                    onDrop={
+                      canDropPassenger(item, isRideStarted)
+                        ? () => handleDropPassenger(item)
+                        : undefined
+                    }
                     onCall={() =>
                       handleCall(item?.userId?.mobile, "passenger")
                     }
@@ -1080,6 +1130,7 @@ const UpcomingDetailsPage = ({ route }) => {
                     fare={item?.amount_will || 0}
                     fareLabel="Amount"
                     verified={!!item?.isBoardingVerified}
+                    tripStatus={item?.status}
                     showVerify={
                       !item?.isBoardingVerified &&
                       (rideStatus === "pending" || rideStatus === "started")
@@ -1092,6 +1143,11 @@ const UpcomingDetailsPage = ({ route }) => {
                       });
                       setActiveSlider("otp");
                     }}
+                    onDeliver={
+                      canDeliverCourier(item, isRideStarted)
+                        ? () => handleDeliverCourier(item)
+                        : undefined
+                    }
                     onCall={() =>
                       handleCall(item?.userId?.mobile, "courier")
                     }
@@ -1439,8 +1495,11 @@ const UpcomingDetailsPage = ({ route }) => {
 };
 
 export default UpcomingDetailsPage;
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#fff" },
+
+const createStyles = (c) => {
+  const DS = themeToDS(c);
+  return StyleSheet.create({
+  screen: { flex: 1, backgroundColor: c.background },
 
   buttonContainer: {
     flexDirection: "row",
@@ -1451,22 +1510,22 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   driverActionsCard: {
-    backgroundColor: "#FEF2F2",
+    backgroundColor: c.errorBg,
     borderRadius: 12,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#FECACA",
+    borderColor: c.errorBorder,
   },
   driverActionsTitle: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#991B1B",
+    color: c.errorText,
     marginBottom: 4,
   },
   driverActionsHint: {
     fontSize: 12,
-    color: "#7F1D1D",
+    color: c.errorText,
     lineHeight: 17,
     marginBottom: 12,
   },
@@ -1477,14 +1536,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   driverActionCancel: {
-    backgroundColor: "#fff",
-    borderColor: "#DC2626",
+    backgroundColor: c.surface,
+    borderColor: c.errorText,
   },
   driverActionMuted: {
     opacity: 0.55,
   },
   driverActionCancelText: {
-    color: "#DC2626",
+    color: c.errorText,
     fontWeight: "700",
     fontSize: 14,
   },
@@ -1597,12 +1656,12 @@ const styles = StyleSheet.create({
   participantDetailsTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#0F172A",
+    color: c.text,
     marginBottom: 10,
   },
   participantDetailsCard: {
-    backgroundColor: "#F8FAFC",
-    borderColor: "#E2E8F0",
+    backgroundColor: c.surfaceAlt,
+    borderColor: c.border,
     borderWidth: 1,
     borderRadius: 14,
     padding: 12,
@@ -1618,7 +1677,7 @@ const styles = StyleSheet.create({
   otpText: { fontWeight: "700" },
 
   detailsCard: {
-    backgroundColor: "#fff",
+    backgroundColor: c.surface,
     borderRadius: LAYOUT.radius.lg,
     padding: LAYOUT.spacing.screen,
     marginBottom: LAYOUT.spacing.md,
@@ -1631,7 +1690,7 @@ const styles = StyleSheet.create({
   locationTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#111827",
+    color: c.text,
   },
 
   verticalLineImage: {
@@ -1653,7 +1712,7 @@ const styles = StyleSheet.create({
   card: { width: "48%", padding: 16, borderRadius: 16 },
 
   driverOptionsCard: {
-    backgroundColor: "#EFF6FF",
+    backgroundColor: c.primaryMuted,
     paddingVertical: 12,
     paddingHorizontal: 8,
     justifyContent: "center",
@@ -1675,23 +1734,23 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#3B82F6",
+    borderColor: c.primary,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: c.surface,
   },
   chatChip: {
     paddingHorizontal: 12,
     height: 36,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#2563EB",
+    borderColor: c.primary,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#EFF6FF",
+    backgroundColor: c.primaryMuted,
   },
   chatChipText: {
-    color: "#2563EB",
+    color: c.primary,
     fontWeight: "600",
     fontSize: 13,
   },
@@ -1701,20 +1760,20 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#EF4444",
+    borderColor: c.errorText,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: c.surface,
   },
 
   callText: {
-    color: "#3B82F6",
+    color: c.primary,
     fontSize: 14,
     fontWeight: "500",
   },
 
   removeText: {
-    color: "#EF4444",
+    color: c.errorText,
     fontSize: 14,
     fontWeight: "500",
   },
@@ -1724,38 +1783,39 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: 12,
     marginTop: 16,
+    color: c.text,
   },
   quickReserveBanner: {
-    backgroundColor: "#DCFCE7",
+    backgroundColor: c.successBg,
     padding: 12,
     borderRadius: 10,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#86EFAC",
+    borderColor: c.border,
   },
   quickReserveBannerText: {
-    color: "#166534",
+    color: c.successText,
     fontSize: 13,
     fontWeight: "600",
     textAlign: "center",
   },
   sendRequestBtn: {
-    backgroundColor: "#E8F0FF",
+    backgroundColor: c.primaryMuted,
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: "center",
     marginVertical: 15,
     borderWidth: 1,
-    borderColor: "#2F6BFF",
+    borderColor: c.primary,
   },
 
   sendRequestText: {
-    color: "#2F6BFF",
+    color: c.primary,
     fontWeight: "600",
     fontSize: 14,
   },
   myPassengerCard: {
-    backgroundColor: "#fff",
+    backgroundColor: c.surface,
     borderRadius: 14,
     padding: 14,
     marginBottom: 17,
@@ -1777,25 +1837,23 @@ const styles = StyleSheet.create({
   callBtn: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#2563EB",
+    borderColor: c.primary,
     borderRadius: 8,
     padding: 10,
     marginRight: 8,
     alignItems: "center",
   },
 
-  callText: { color: "#2563EB", fontWeight: "600" },
-
   removeBtn: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#EF4444",
+    borderColor: c.errorText,
     borderRadius: 8,
     padding: 10,
     alignItems: "center",
   },
 
-  removeText: { color: "#EF4444", fontWeight: "600" },
+  removeText: { color: c.errorText, fontWeight: "600" },
 
   filter: { flexDirection: "row", marginBottom: 14 },
 
@@ -1803,18 +1861,18 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 14,
     borderRadius: 20,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: c.chipBg,
     marginRight: 8,
   },
 
-  activeTab: { backgroundColor: "#111827" },
+  activeTab: { backgroundColor: c.primary },
 
-  tabText: { fontSize: 13, color: "#374151" },
+  tabText: { fontSize: 13, color: c.textSecondary },
 
-  activeTabText: { color: "#fff" },
+  activeTabText: { color: c.inverseText },
 
   requestCard: {
-    backgroundColor: "#fff",
+    backgroundColor: c.surface,
     borderRadius: 16,
     padding: 14,
     marginBottom: 14,
@@ -1839,9 +1897,9 @@ const styles = StyleSheet.create({
 
   requestName: { fontSize: 15, fontWeight: "600" },
 
-  requestSub: { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  requestSub: { fontSize: 12, color: c.textMuted, marginTop: 2 },
 
-  requestPickup: { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
+  requestPickup: { fontSize: 11, color: c.textMuted, marginTop: 2 },
 
   requestPrice: { fontSize: 14, fontWeight: "600" },
 
@@ -1868,14 +1926,7 @@ const styles = StyleSheet.create({
 
   declineText: { color: "#fff", fontWeight: "600" },
   driverCard: {
-    backgroundColor: "#EEF4FF",
-    borderRadius: 14,
-    padding: 16,
-    marginTop: 15,
-  },
-
-  driverCard: {
-    backgroundColor: "#EEF4FF",
+    backgroundColor: c.primaryMuted,
     borderRadius: 14,
     padding: 16,
     marginTop: 15,
@@ -1901,9 +1952,9 @@ const styles = StyleSheet.create({
     maxHeight: scale(300),
     marginBottom: LAYOUT.spacing.md,
     borderWidth: 1,
-    borderColor: LAYOUT.colors.border,
+    borderColor: DS.colors.border,
     borderRadius: LAYOUT.radius?.lg || 14,
-    backgroundColor: "#FAFBFC",
+    backgroundColor: c.surfaceAlt,
   },
   participantListContent: {
     padding: LAYOUT.spacing.sm,
@@ -1911,8 +1962,9 @@ const styles = StyleSheet.create({
   },
   emptyList: {
     textAlign: "center",
-    color: LAYOUT.colors.textMuted,
+    color: DS.colors.textMuted,
     marginBottom: LAYOUT.spacing.md,
     fontSize: 14,
   },
 });
+};

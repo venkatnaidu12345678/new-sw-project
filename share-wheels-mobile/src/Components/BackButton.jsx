@@ -1,12 +1,14 @@
 import React from "react";
 import { TouchableOpacity, Image, StyleSheet } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import { useTheme } from "../context/ThemeContext";
 
-// Import your icon
 import backIcon from "../assets/backicon.png";
 
 const BackButton = ({ onPress, style, iconStyle }) => {
   const navigation = useNavigation();
+  const { isDark, colors } = useTheme();
+  const iconTint = isDark ? "#FFFFFF" : colors.text;
 
   const handlePress = () => {
     if (onPress) {
@@ -18,7 +20,10 @@ const BackButton = ({ onPress, style, iconStyle }) => {
 
   return (
     <TouchableOpacity onPress={handlePress} style={[styles.container, style]}>
-      <Image source={backIcon} style={[styles.icon, iconStyle]} />
+      <Image
+        source={backIcon}
+        style={[styles.icon, { tintColor: iconTint }, iconStyle]}
+      />
     </TouchableOpacity>
   );
 };

@@ -12,8 +12,9 @@ import {
 import Icon from "react-native-vector-icons/Ionicons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import LinearGradient from "react-native-linear-gradient";
-import { INPUT_COLORS } from "../theme/inputTheme";
 import { LAYOUT } from "../theme/layout";
+import { useTheme } from "../context/ThemeContext";
+import { useThemedStyles } from "../theme/useThemedStyles";
 import GradientField from "./ui/GradientField";
 
 import {
@@ -43,6 +44,8 @@ const SearchLocation = ({
   onDismissSuggestions,
   activeField,
 }) => {
+  const { input, colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [errors, setErrors] = useState({});
 
   const onSearchPress = () => {
@@ -98,7 +101,7 @@ const SearchLocation = ({
       <GradientField variant="from">
         <TextInput
           placeholder="From — pickup city"
-          placeholderTextColor={INPUT_COLORS.placeholder}
+          placeholderTextColor={input.placeholder}
           value={fromValue}
           blurOnSubmit={false}
           onChangeText={(text) => {
@@ -110,7 +113,7 @@ const SearchLocation = ({
           onBlur={() => onBlur?.()}
           style={styles.input}
         />
-        <Icon name="radio-button-on" size={18} color="#3B82F6" />
+        <Icon name="radio-button-on" size={18} color={colors.primary} />
       </GradientField>
       {errors.from && <Text style={styles.error}>{errors.from}</Text>}
       {renderSuggestions("FROM")}
@@ -118,7 +121,7 @@ const SearchLocation = ({
       <GradientField variant="to">
         <TextInput
           placeholder="To — destination city"
-          placeholderTextColor={INPUT_COLORS.placeholder}
+          placeholderTextColor={input.placeholder}
           value={toValue}
           blurOnSubmit={false}
           onChangeText={(text) => {
@@ -130,7 +133,7 @@ const SearchLocation = ({
           onBlur={() => onBlur?.()}
           style={styles.input}
         />
-        <Icon name="radio-button-on" size={18} color="#22C55E" />
+        <Icon name="radio-button-on" size={18} color={colors.successText} />
       </GradientField>
       {errors.to && <Text style={styles.error}>{errors.to}</Text>}
       {renderSuggestions("TO")}
@@ -151,7 +154,7 @@ const SearchLocation = ({
               <Text style={styles.dateText}>
                 {date ? date.toDateString() : "Select Date"}
               </Text>
-              <Icon name="calendar-outline" size={20} color="#F59E0B" />
+              <Icon name="calendar-outline" size={20} color={colors.warningText} />
             </TouchableOpacity>
           </GradientField>
           {errors.date && <Text style={styles.error}>{errors.date}</Text>}
@@ -178,7 +181,7 @@ const SearchLocation = ({
 
           <TouchableOpacity style={styles.searchButtonWrap} onPress={onSearchPress}>
             <LinearGradient
-              colors={["#2563EB", "#4F46E5", "#7C3AED"]}
+              colors={colors.heroGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.searchGradient}
@@ -194,14 +197,15 @@ const SearchLocation = ({
 
 export default SearchLocation;
 
-const styles = StyleSheet.create({
+const createStyles = (c) =>
+  StyleSheet.create({
   container: {
     marginVertical: 10,
   },
   input: {
     flex: 1,
     fontSize: 15,
-    color: INPUT_COLORS.text,
+    color: c.text,
   },
   dateTap: {
     flex: 1,
@@ -212,7 +216,7 @@ const styles = StyleSheet.create({
   dateText: {
     flex: 1,
     fontSize: 15,
-    color: INPUT_COLORS.text,
+    color: c.text,
   },
   searchButtonWrap: {
     marginTop: LAYOUT.spacing.sm,
@@ -225,20 +229,20 @@ const styles = StyleSheet.create({
     borderRadius: LAYOUT.radius.md,
   },
   searchText: {
-    color: "#fff",
+    color: c.inverseText,
     fontSize: LAYOUT.font.body,
     fontWeight: "700",
   },
   inlineDropdown: {
-    backgroundColor: "#fff",
+    backgroundColor: c.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: c.border,
     maxHeight: 200,
     marginBottom: 8,
     elevation: 8,
     zIndex: 60,
-    shadowColor: "#6366F1",
+    shadowColor: c.shadow,
     shadowOpacity: 0.12,
     shadowRadius: 8,
     overflow: "hidden",
@@ -246,17 +250,17 @@ const styles = StyleSheet.create({
   suggestion: {
     padding: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: c.border,
   },
   suggestionPressed: {
-    backgroundColor: "#EFF6FF",
+    backgroundColor: c.primaryMuted,
   },
   suggestionText: {
     fontSize: 15,
-    color: "#111",
+    color: c.text,
   },
   error: {
-    color: "#DC2626",
+    color: c.errorText,
     fontSize: 12,
     marginBottom: 8,
     marginLeft: 4,

@@ -98,13 +98,21 @@ async function sendPushNotification(token, title, body, data = {}) {
         channelId: "share_wheels_default",
         sound: "default",
         priority: "high",
+        visibility: "public",
+        defaultSound: true,
+        defaultVibrateTimings: true,
       },
     },
     apns: {
+      headers: {
+        "apns-priority": "10",
+      },
       payload: {
         aps: {
+          alert: { title, body },
           sound: "default",
           badge: 1,
+          "content-available": 1,
         },
       },
     },

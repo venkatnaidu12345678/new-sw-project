@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useMemo } from "react";
 import { Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
@@ -21,8 +21,9 @@ import {
 import { courierRequest } from "../ApiService/ridesApiServices";
 import { getApiErrorMessage } from "../Utils/apiErrors";
 import { validateLocation, validatePrice } from "../Utils";
-import { COURIER_THEME as T } from "../theme/requestFormTheme";
+import { getCourierTheme } from "../theme/requestFormTheme";
 import { DS } from "../theme/designSystem";
+import { useTheme } from "../context/ThemeContext";
 
 const COURIER_TYPES = [
   { label: "Select courier type", value: "" },
@@ -55,8 +56,11 @@ const goToMyRequestsTab = (navigation, activeTab) => {
 
 const CourierRequest = () => {
   const navigation = useNavigation();
+  const { colors } = useTheme();
+  const T = useMemo(() => getCourierTheme(colors), [colors]);
   const fromToRef = useRef();
   const [formResetKey, setFormResetKey] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
 
   const [payload, setPayload] = useState({ ...EMPTY_COURIER_PAYLOAD });
 
@@ -127,6 +131,7 @@ const CourierRequest = () => {
     }
 
     try {
+      setSubmitting(true);
       const token = await AsyncStorage.getItem("token");
       if (!token) {
         Alert.alert("Error", "User not authenticated");
@@ -168,6 +173,8 @@ const CourierRequest = () => {
         "Error",
         getApiErrorMessage(error, "Failed to create courier request")
       );
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -175,7 +182,7 @@ const CourierRequest = () => {
     bg: T.date.bg,
     border: T.date.border,
     icon: T.date.icon,
-    label: T.date.icon,
+    label: T.text,
     surface: T.surface,
   };
 
@@ -274,7 +281,7 @@ const CourierRequest = () => {
           <StyledField label="What to deliver" theme={T}>
             <StyledTextInput
               theme={T}
-              accent={{ bg: "#FFF7ED", border: "#FED7AA", icon: T.heroIcon }}
+              accent={{ bg: T.picker.bg, border: T.picker.border, icon: T.heroIcon }}
               icon="document-text-outline"
               placeholder="Describe the parcel (size, weight, fragile, etc.)"
               multiline
@@ -310,7 +317,7 @@ const CourierRequest = () => {
         >
           <StyledTextInput
             theme={T}
-            accent={{ bg: "#EEF2FF", border: "#C7D2FE", icon: "#4F46E5" }}
+            accent={{ bg: T.sections.receiver.bg, border: T.cardBorder, icon: T.sections.receiver.color }}
             icon="person-outline"
             placeholder="Receiver full name"
             value={payload.receiver_name}
@@ -319,7 +326,7 @@ const CourierRequest = () => {
 
           <StyledTextInput
             theme={T}
-            accent={{ bg: "#EEF2FF", border: "#C7D2FE", icon: "#4F46E5" }}
+            accent={{ bg: T.sections.receiver.bg, border: T.cardBorder, icon: T.sections.receiver.color }}
             icon="call-outline"
             placeholder="Receiver mobile (10 digits)"
             keyboardType="phone-pad"
@@ -332,7 +339,7 @@ const CourierRequest = () => {
 
           <StyledTextInput
             theme={T}
-            accent={{ bg: "#F8FAFC", border: "#E2E8F0", icon: T.textMuted }}
+            accent={{ bg: T.surface, border: T.cardBorder, icon: T.textMuted }}
             icon="call-outline"
             placeholder="Alternate mobile (optional)"
             keyboardType="phone-pad"
@@ -348,7 +355,7 @@ const CourierRequest = () => {
 
           <StyledTextInput
             theme={T}
-            accent={{ bg: "#EEF2FF", border: "#C7D2FE", icon: "#4F46E5" }}
+            accent={{ bg: T.sections.receiver.bg, border: T.cardBorder, icon: T.sections.receiver.color }}
             icon="location-outline"
             placeholder="Full delivery address"
             multiline
@@ -358,7 +365,12 @@ const CourierRequest = () => {
         </RequestSection>
       </KeyboardAwareScreen>
 
-      <FixedButton title="Post request" onPress={handleCreateRequest} />
+      <FixedButton
+        title="Post request"
+        onPress={handleCreateRequest}
+        loading={submitting}
+        disabled={submitting}
+      />
     </>
   );
 };

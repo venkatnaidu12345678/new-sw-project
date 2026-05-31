@@ -7,6 +7,7 @@ import {
   parseLocalDate,
   formatDisplayDate,
 } from "../Utils/dateUtils";
+import { useTheme } from "../context/ThemeContext";
 
 const CalenderRange = ({
   rideData,
@@ -17,16 +18,20 @@ const CalenderRange = ({
   endLabel = "To date",
   accent,
 }) => {
-  const cardStyle = accent
-    ? { backgroundColor: accent.bg, borderColor: accent.border }
-    : null;
-  const inputStyle = accent
-    ? { backgroundColor: accent.surface || "#FFFFFF", borderColor: accent.border }
-    : null;
-  const iconColor = accent?.icon || "#059669";
-  const labelColor = accent?.label || "#334155";
+  const { colors, isDark } = useTheme();
   const [showStart, setShowStart] = useState(false);
   const [showEnd, setShowEnd] = useState(false);
+
+  const cardStyle = {
+    backgroundColor: accent?.bg ?? colors.surface,
+    borderColor: accent?.border ?? colors.border,
+  };
+  const inputStyle = {
+    backgroundColor: accent?.surface ?? colors.inputBg,
+    borderColor: accent?.border ?? colors.border,
+  };
+  const iconColor = accent?.icon ?? colors.primary;
+  const labelColor = accent?.label ?? colors.text;
 
   const today = useMemo(() => {
     const t = new Date();
@@ -76,6 +81,11 @@ const CalenderRange = ({
     : "Select start";
   const endText = selectedEnd ? formatDisplayDate(selectedEnd) : "Select end";
 
+  const valueStyle = (hasSelection) => [
+    styles.value,
+    { color: hasSelection ? colors.text : colors.textMuted },
+  ];
+
   return (
     <View style={styles.container}>
       <View style={styles.row}>
@@ -90,8 +100,10 @@ const CalenderRange = ({
             onPress={openStart}
             activeOpacity={0.85}
           >
-            <Text style={styles.value} numberOfLines={2}>{startText}</Text>
-            <Icon name="chevron-down" size={16} color="#94A3B8" />
+            <Text style={valueStyle(!!selectedStart)} numberOfLines={2}>
+              {startText}
+            </Text>
+            <Icon name="chevron-down" size={16} color={colors.textMuted} />
           </TouchableOpacity>
 
           {showStart ? (
@@ -100,6 +112,7 @@ const CalenderRange = ({
               mode="date"
               display={Platform.OS === "ios" ? "spinner" : "calendar"}
               minimumDate={today}
+              themeVariant={isDark ? "dark" : "light"}
               onChange={onStartChange}
             />
           ) : null}
@@ -116,8 +129,10 @@ const CalenderRange = ({
             onPress={openEnd}
             activeOpacity={0.85}
           >
-            <Text style={styles.value} numberOfLines={2}>{endText}</Text>
-            <Icon name="chevron-down" size={16} color="#94A3B8" />
+            <Text style={valueStyle(!!selectedEnd)} numberOfLines={2}>
+              {endText}
+            </Text>
+            <Icon name="chevron-down" size={16} color={colors.textMuted} />
           </TouchableOpacity>
 
           {showEnd ? (
@@ -126,6 +141,7 @@ const CalenderRange = ({
               mode="date"
               display={Platform.OS === "ios" ? "spinner" : "calendar"}
               minimumDate={currentStartDate}
+              themeVariant={isDark ? "dark" : "light"}
               onChange={onEndChange}
             />
           ) : null}
@@ -147,9 +163,7 @@ const styles = StyleSheet.create({
   },
   inputCard: {
     width: "100%",
-    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E5E7EB",
     borderRadius: 12,
     padding: 12,
   },
@@ -164,8 +178,6 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    backgroundColor: "#FFFFFF",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -177,7 +189,5 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: "600",
-    color: "#0F172A",
   },
 });
-

@@ -185,13 +185,13 @@ const updateRideStatus = async (rideId, status) => {
   if (!allowed.includes(status)) {
     return { status: 400, body: { message: "Invalid status" } };
   }
-  const ride = await Ride.findByIdAndUpdate(rideId, { status }, { new: true });
+  const ride = await Ride.findByIdAndUpdate(rideId, { status }, { returnDocument: "after" });
   if (!ride) return { status: 404, body: { message: "Ride not found" } };
   return { status: 200, body: { success: true, ride } };
 };
 
 const updateUserVerification = async (userId, isVerified) => {
-  const user = await User.findByIdAndUpdate(userId, { isVerified }, { new: true }).select(
+  const user = await User.findByIdAndUpdate(userId, { isVerified }, { returnDocument: "after" }).select(
     "-password -otp -otpExpires"
   );
   if (!user) return { status: 404, body: { message: "User not found" } };

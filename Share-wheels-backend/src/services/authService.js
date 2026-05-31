@@ -369,7 +369,7 @@ const editVehicle = async (user, body, files = {}) => {
 
 const updateTerms = async (userId, isAccepted) => {
   if (typeof isAccepted !== "boolean") return { status: 400, body: { success: false, message: "isAccepted must be true or false" } };
-  const user = await User.findByIdAndUpdate(userId, { isTermsAndServicesAccepted: isAccepted }, { new: true });
+  const user = await User.findByIdAndUpdate(userId, { isTermsAndServicesAccepted: isAccepted }, { returnDocument: "after" });
   if (!user) return { status: 404, body: { success: false, message: "User not found" } };
   return {
     status: 200,

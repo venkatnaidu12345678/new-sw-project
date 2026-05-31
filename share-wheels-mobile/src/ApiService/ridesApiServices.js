@@ -260,6 +260,24 @@ export const verifyBoardingParticipant = async (token, rideId, payload) => {
   return data;
 };
 
+export const dropPassengerOnRide = async (token, rideId, participantId) => {
+  const id = rideId?.toString?.() || rideId;
+  const pid = participantId?.toString?.() || participantId;
+  return apiRequest(
+    `${baseUrl}${endPoints.verifyParticipanturl}/${id}/passengers/${pid}/drop`,
+    { token, method: "PATCH", timeoutMs: 15000 }
+  );
+};
+
+export const deliverCourierOnRide = async (token, rideId, participantId) => {
+  const id = rideId?.toString?.() || rideId;
+  const pid = participantId?.toString?.() || participantId;
+  return apiRequest(
+    `${baseUrl}${endPoints.verifyParticipanturl}/${id}/couriers/${pid}/deliver`,
+    { token, method: "PATCH", timeoutMs: 15000 }
+  );
+};
+
 export const startride = async (token, rideData) => {
   const rideId =
     rideData?.rideId?.toString?.() ||

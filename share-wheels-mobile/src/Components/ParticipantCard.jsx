@@ -7,6 +7,8 @@ import {
 } from "react-native";
 import UserAvatar from "./ui/UserAvatar";
 import { LAYOUT } from "../theme/layout";
+import { tripStatusLabel } from "../Utils/participantTripStatus";
+import { useThemedStyles } from "../theme/useThemedStyles";
 
 const ParticipantCard = ({
   user,
@@ -15,14 +17,19 @@ const ParticipantCard = ({
   fare,
   fareLabel = "Fare",
   verified = false,
+  tripStatus,
   showVerify = false,
   onVerify,
   onCall,
   onMessage,
   onRemove,
+  onDrop,
+  onDeliver,
   onPress,
 }) => {
+  const styles = useThemedStyles(createStyles);
   const accent = role === "courier" ? "#F97316" : "#16A34A";
+  const statusLabel = tripStatus ? tripStatusLabel(tripStatus) : null;
 
   return (
     <TouchableOpacity
@@ -34,6 +41,9 @@ const ParticipantCard = ({
         <UserAvatar user={user} size={LAYOUT.sizes.avatarMd} />
         <View style={styles.infoCol}>
           <Text style={styles.name}>{user?.name || (role === "courier" ? "Courier" : "Passenger")}</Text>
+          {statusLabel ? (
+            <Text style={styles.tripStatus}>{statusLabel}</Text>
+          ) : null}
           {subtitleLines.map((line, idx) => (
             <Text key={`${line}-${idx}`} style={styles.subtitle} numberOfLines={1}>
               {line}
@@ -53,6 +63,16 @@ const ParticipantCard = ({
             <Text style={styles.verifyText}>Verify</Text>
           </TouchableOpacity>
         ) : null}
+        {onDrop ? (
+          <TouchableOpacity style={[styles.actionBtn, styles.dropBtn]} onPress={onDrop}>
+            <Text style={styles.dropText}>Drop</Text>
+          </TouchableOpacity>
+        ) : null}
+        {onDeliver ? (
+          <TouchableOpacity style={[styles.actionBtn, styles.deliverBtn]} onPress={onDeliver}>
+            <Text style={styles.deliverText}>Delivered</Text>
+          </TouchableOpacity>
+        ) : null}
         <TouchableOpacity style={styles.actionBtn} onPress={onCall}>
           <Text style={styles.actionText}>Call</Text>
         </TouchableOpacity>
@@ -69,14 +89,15 @@ const ParticipantCard = ({
 
 export default ParticipantCard;
 
-const styles = StyleSheet.create({
+const createStyles = (c) =>
+  StyleSheet.create({
   card: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: c.surface,
     borderRadius: 14,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: c.border,
     borderLeftWidth: 4,
     elevation: 1,
   },
@@ -92,11 +113,17 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#0F172A",
+    color: c.text,
+  },
+  tripStatus: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: c.primary,
+    marginTop: 2,
   },
   subtitle: {
     fontSize: 12,
-    color: "#64748B",
+    color: c.textMuted,
     marginTop: 2,
   },
   fareCol: {
@@ -104,18 +131,18 @@ const styles = StyleSheet.create({
   },
   verified: {
     fontSize: 11,
-    color: "#16A34A",
+    color: c.successText,
     fontWeight: "700",
     marginBottom: 4,
   },
   fareLabel: {
     fontSize: 11,
-    color: "#64748B",
+    color: c.textMuted,
   },
   fare: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#0F172A",
+    color: c.text,
   },
   actionsRow: {
     flexDirection: "row",
@@ -127,30 +154,48 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 8,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: c.primaryMuted,
     borderWidth: 1,
-    borderColor: "#BFDBFE",
+    borderColor: c.border,
   },
   actionText: {
-    color: "#2563EB",
+    color: c.primary,
     fontSize: 12,
     fontWeight: "600",
   },
   verifyBtn: {
-    backgroundColor: "#DCFCE7",
-    borderColor: "#86EFAC",
+    backgroundColor: c.successBg,
+    borderColor: c.border,
   },
   verifyText: {
-    color: "#166534",
+    color: c.successText,
     fontSize: 12,
     fontWeight: "600",
   },
+  dropBtn: {
+    backgroundColor: c.primaryMuted,
+    borderColor: c.border,
+  },
+  dropText: {
+    color: c.primaryText,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  deliverBtn: {
+    backgroundColor: c.warningBg,
+    borderColor: c.warningBorder,
+  },
+  deliverText: {
+    color: c.warningText,
+    fontSize: 12,
+    fontWeight: "700",
+  },
   removeBtn: {
-    backgroundColor: "#FEF2F2",
-    borderColor: "#FECACA",
+    backgroundColor: c.errorBg,
+    borderColor: c.errorBorder,
   },
   removeText: {
-    color: "#DC2626",
+    color: c.errorText,
     fontSize: 12,
     fontWeight: "600",
   },

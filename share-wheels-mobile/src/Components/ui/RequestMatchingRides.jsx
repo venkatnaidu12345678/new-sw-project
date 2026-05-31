@@ -8,8 +8,9 @@ import {
 } from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
 import UserAvatar from "./UserAvatar";
-import { DS } from "../../theme/designSystem";
 import { formatDisplayDate, formatRideTimeLabel } from "../../Utils/dateUtils";
+import { useTheme } from "../../context/ThemeContext";
+import { useThemedStyles } from "../../theme/useThemedStyles";
 
 const RequestMatchingRides = ({
   rides = [],
@@ -20,6 +21,8 @@ const RequestMatchingRides = ({
   onJoinRide,
   emptyMessage,
 }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const isCourier = role === "Courier";
   const list = linkedRide
     ? [linkedRide, ...rides.filter((r) => String(r._id) !== String(linkedRide._id))]
@@ -28,7 +31,7 @@ const RequestMatchingRides = ({
   if (!list.length) {
     return (
       <View style={styles.emptyWrap}>
-        <Icon name="car-outline" size={28} color="#94A3B8" />
+        <Icon name="car-outline" size={28} color={colors.textMuted} />
         <Text style={styles.emptyTitle}>No matching driver rides</Text>
         <Text style={styles.emptySub}>
           {emptyMessage ||
@@ -55,7 +58,7 @@ const RequestMatchingRides = ({
         return (
           <View key={String(ride._id)} style={styles.rideCard}>
             <View style={styles.driverRow}>
-              <UserAvatar user={ride.creator} size={44} borderColor="#E2E8F0" />
+              <UserAvatar user={ride.creator} size={44} borderColor={colors.border} />
               <View style={styles.driverCol}>
                 <Text style={styles.driverName} numberOfLines={1}>
                   {driverName}
@@ -119,129 +122,130 @@ const RequestMatchingRides = ({
 
 export default RequestMatchingRides;
 
-const styles = StyleSheet.create({
-  wrap: {
-    marginTop: 4,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#334155",
-    marginBottom: 10,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  rideCard: {
-    backgroundColor: "#F8FAFC",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  driverRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 8,
-  },
-  driverCol: {
-    flex: 1,
-    minWidth: 0,
-  },
-  driverName: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#0F172A",
-  },
-  rideRoute: {
-    fontSize: 12,
-    color: "#64748B",
-    marginTop: 2,
-  },
-  linkedBadge: {
-    backgroundColor: "#DBEAFE",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-  linkedBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#1D4ED8",
-  },
-  rideMeta: {
-    fontSize: 12,
-    color: "#64748B",
-    marginTop: 2,
-  },
-  actionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 10,
-  },
-  secondaryBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#CBD5E1",
-    backgroundColor: "#fff",
-  },
-  secondaryBtnText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#475569",
-  },
-  primaryBtn: {
-    flex: 1,
-    backgroundColor: DS.colors.primary,
-    paddingVertical: 9,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 36,
-  },
-  primaryBtnDisabled: {
-    opacity: 0.7,
-  },
-  primaryBtnText: {
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  pendingPill: {
-    flex: 1,
-    backgroundColor: "#FEF3C7",
-    paddingVertical: 8,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  pendingText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#92400E",
-  },
-  emptyWrap: {
-    alignItems: "center",
-    paddingVertical: 20,
-    paddingHorizontal: 12,
-    backgroundColor: "#F8FAFC",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  emptyTitle: {
-    marginTop: 8,
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#475569",
-  },
-  emptySub: {
-    marginTop: 4,
-    fontSize: 12,
-    color: "#94A3B8",
-    textAlign: "center",
-  },
-});
+const createStyles = (c) =>
+  StyleSheet.create({
+    wrap: {
+      marginTop: 4,
+    },
+    sectionTitle: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: c.textSecondary,
+      marginBottom: 10,
+      textTransform: "uppercase",
+      letterSpacing: 0.4,
+    },
+    rideCard: {
+      backgroundColor: c.surfaceAlt,
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 10,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    driverRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      marginBottom: 8,
+    },
+    driverCol: {
+      flex: 1,
+      minWidth: 0,
+    },
+    driverName: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: c.text,
+    },
+    rideRoute: {
+      fontSize: 12,
+      color: c.textMuted,
+      marginTop: 2,
+    },
+    linkedBadge: {
+      backgroundColor: c.primaryMuted,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 999,
+    },
+    linkedBadgeText: {
+      fontSize: 10,
+      fontWeight: "700",
+      color: c.primaryText,
+    },
+    rideMeta: {
+      fontSize: 12,
+      color: c.textMuted,
+      marginTop: 2,
+    },
+    actionRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginTop: 10,
+    },
+    secondaryBtn: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.surface,
+    },
+    secondaryBtnText: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: c.textSecondary,
+    },
+    primaryBtn: {
+      flex: 1,
+      backgroundColor: c.primary,
+      paddingVertical: 9,
+      borderRadius: 8,
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 36,
+    },
+    primaryBtnDisabled: {
+      opacity: 0.7,
+    },
+    primaryBtnText: {
+      color: "#fff",
+      fontSize: 13,
+      fontWeight: "700",
+    },
+    pendingPill: {
+      flex: 1,
+      backgroundColor: c.warningBg,
+      paddingVertical: 8,
+      borderRadius: 8,
+      alignItems: "center",
+    },
+    pendingText: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: c.warningText,
+    },
+    emptyWrap: {
+      alignItems: "center",
+      paddingVertical: 20,
+      paddingHorizontal: 12,
+      backgroundColor: c.surfaceAlt,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    emptyTitle: {
+      marginTop: 8,
+      fontSize: 14,
+      fontWeight: "700",
+      color: c.textSecondary,
+    },
+    emptySub: {
+      marginTop: 4,
+      fontSize: 12,
+      color: c.textMuted,
+      textAlign: "center",
+    },
+  });

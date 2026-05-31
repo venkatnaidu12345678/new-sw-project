@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useCallback } from "react";
 import { StatusBar, StyleSheet, DeviceEventEmitter } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NOTIFICATIONS_REFRESH_EVENT } from "./src/context/NotificationsContext";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
@@ -10,6 +11,7 @@ import { NavigationContainer } from "@react-navigation/native";
 
 import AuthNavigator from "./src/Navigation/AuthNavigator";
 import { AdsProvider } from "./src/context/AdsContext";
+import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
 import {
   requestUserPermission,
   registerForegroundHandler,
@@ -21,9 +23,11 @@ import { ensureNotificationChannel } from "./src/Notifications/displayLocalNotif
 import { registerNotifeeForegroundPress } from "./src/Notifications/displayLocalNotification";
 import { handleNotificationOpen } from "./src/Notifications/notificationNavigation";
 import { consumePendingNotificationOpen } from "./src/Notifications/notifeeBackground";
+import { syncFcmTokenWithBackend } from "./src/Notifications/registerToken";
 
-export default function App() {
+function AppShell() {
   const navigationRef = useRef(null);
+  const { colors, navigationTheme } = useTheme();
 
   const onNotificationOpen = useCallback((remoteMessage) => {
     if (!remoteMessage || !navigationRef.current) return;
@@ -31,6 +35,10 @@ export default function App() {
   }, []);
 
   const handleNavigationReady = useCallback(async () => {
+    const token = await AsyncStorage.getItem("token");
+    if (token) {
+      syncFcmTokenWithBackend({ force: false }).catch(() => {});
+    }
     const pending = await consumePendingNotificationOpen();
     if (pending) {
       setTimeout(() => onNotificationOpen(pending), 600);
@@ -87,22 +95,33 @@ export default function App() {
   }, [onNotificationOpen]);
 
   return (
+    <GestureHandlerRootView
+      style={[styles.mainContainer, { backgroundColor: colors.background }]}
+    >
+      <StatusBar
+        translucent={false}
+        backgroundColor={colors.statusBarBg}
+        barStyle={colors.statusBar}
+      />
+      <NavigationContainer
+        ref={navigationRef}
+        onReady={handleNavigationReady}
+        theme={navigationTheme}
+      >
+        <AdsProvider>
+          <AuthNavigator />
+        </AdsProvider>
+      </NavigationContainer>
+    </GestureHandlerRootView>
+  );
+}
+
+export default function App() {
+  return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-      <GestureHandlerRootView style={styles.mainContainer}>
-        <StatusBar
-          translucent={false}
-          backgroundColor="#F8FAFC"
-          barStyle="dark-content"
-        />
-        <NavigationContainer
-          ref={navigationRef}
-          onReady={handleNavigationReady}
-        >
-          <AdsProvider>
-            <AuthNavigator />
-          </AdsProvider>
-        </NavigationContainer>
-      </GestureHandlerRootView>
+      <ThemeProvider>
+        <AppShell />
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }
@@ -110,6 +129,5 @@ export default function App() {
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
   },
 });

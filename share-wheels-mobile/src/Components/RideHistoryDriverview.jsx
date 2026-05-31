@@ -15,13 +15,22 @@ import {
   getPassengerFare,
   getCourierFare,
   getDriverTotalEarnings,
+  getDriverPendingEarnings,
 } from "../Utils/fareUtils";
+import {
+  passengerCountsTowardEarnings,
+  courierCountsTowardEarnings,
+  tripStatusLabel,
+} from "../Utils/participantTripStatus";
 import { formatDisplayTime } from "../Utils/dateUtils";
+import { useThemedStyles } from "../theme/useThemedStyles";
 
 const RideHistoryDriverview = ({ ride, loading }) => {
+  const styles = useThemedStyles(createStyles);
   const passengers = ride?.passengers || [];
   const couriers = ride?.all_deliveries || [];
   const totalEarnings = getDriverTotalEarnings(ride);
+  const pendingEarnings = getDriverPendingEarnings(ride);
   const dateLabel =
     ride?.formattedDate ||
     (ride?.date ? new Date(ride.date).toLocaleDateString() : "—");
@@ -80,6 +89,7 @@ const RideHistoryDriverview = ({ ride, loading }) => {
             passengers.map((p, index) => {
               const fare = getPassengerFare(p);
               const seats = p?.requires_seats || 1;
+              const counts = passengerCountsTowardEarnings(p);
               return (
                 <View key={p?._id || index} style={styles.passengerRow}>
                   <UserAvatar user={p?.userId} size={44} />
@@ -92,9 +102,20 @@ const RideHistoryDriverview = ({ ride, loading }) => {
                       {p?.userId?.gender || "—"} · {seats} seat
                       {seats !== 1 ? "s" : ""}
                     </Text>
+                    <Text style={styles.passengerMeta}>
+                      {p?.isBoardingVerified ? tripStatusLabel(p?.status) : "Not verified"}
+                      {counts ? " · counts in earnings" : ""}
+                    </Text>
                   </View>
 
-                  <Text style={styles.passengerPrice}>₹{fare}</Text>
+                  <Text
+                    style={[
+                      styles.passengerPrice,
+                      !counts && styles.passengerPriceMuted,
+                    ]}
+                  >
+                    ₹{counts ? fare : 0}
+                  </Text>
                 </View>
               );
             })
@@ -104,26 +125,46 @@ const RideHistoryDriverview = ({ ride, loading }) => {
           {couriers.length === 0 ? (
             <Text style={styles.empty}>No couriers on this ride</Text>
           ) : (
-            couriers.map((c, index) => (
-              <View key={c?._id || index} style={styles.passengerRow}>
-                <UserAvatar user={c?.userId} size={44} />
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.passengerName}>
-                    {c?.userId?.name || "Courier"}
-                  </Text>
-                  <Text style={styles.passengerMeta}>
-                    {c?.parcel || c?.what_to_deliver || "Parcel"}
+            couriers.map((c, index) => {
+              const fare = getCourierFare(c);
+              const counts = courierCountsTowardEarnings(c);
+              return (
+                <View key={c?._id || index} style={styles.passengerRow}>
+                  <UserAvatar user={c?.userId} size={44} />
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={styles.passengerName}>
+                      {c?.userId?.name || "Courier"}
+                    </Text>
+                    <Text style={styles.passengerMeta}>
+                      {c?.parcel || c?.what_to_deliver || "Parcel"}
+                    </Text>
+                    <Text style={styles.passengerMeta}>
+                      {c?.isBoardingVerified ? tripStatusLabel(c?.status) : "Not verified"}
+                      {counts ? " · counts in earnings" : ""}
+                    </Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.passengerPrice,
+                      !counts && styles.passengerPriceMuted,
+                    ]}
+                  >
+                    ₹{counts ? fare : 0}
                   </Text>
                 </View>
-                <Text style={styles.passengerPrice}>₹{getCourierFare(c)}</Text>
-              </View>
-            ))
+              );
+            })
           )}
 
           <LinearGradient colors={["#1D4ED8", "#2563EB"]} style={styles.totalCard}>
             <View>
-              <Text style={styles.totalLabel}>Total Earnings</Text>
+              <Text style={styles.totalLabel}>Total Earnings (OTP verified)</Text>
               <Text style={styles.totalAmount}>₹{totalEarnings}</Text>
+              {pendingEarnings > 0 ? (
+                <Text style={styles.pendingNote}>
+                  ₹{pendingEarnings} pending (picked up, not dropped/delivered yet)
+                </Text>
+              ) : null}
             </View>
           </LinearGradient>
         </View>
@@ -134,7 +175,8 @@ const RideHistoryDriverview = ({ ride, loading }) => {
 
 export default RideHistoryDriverview;
 
-const styles = StyleSheet.create({
+const createStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 4,
@@ -147,22 +189,22 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
+    borderBottomColor: c.border,
     marginBottom: 12,
   },
   headerTitle: {
     fontSize: 17,
     fontWeight: "800",
-    color: "#0F172A",
+    color: c.text,
   },
   headerSub: {
     fontSize: 12,
-    color: "#64748B",
+    color: c.textMuted,
     marginTop: 2,
     fontWeight: "600",
   },
   rolePill: {
-    backgroundColor: "#DBEAFE",
+    backgroundColor: c.primaryMuted,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
@@ -170,15 +212,15 @@ const styles = StyleSheet.create({
   rolePillText: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#1D4ED8",
+    color: c.primaryText,
     textTransform: "capitalize",
   },
   routeCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: c.surface,
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#DBEAFE",
+    borderColor: c.border,
     elevation: 2,
     marginBottom: 16,
   },
@@ -194,57 +236,57 @@ const styles = StyleSheet.create({
   routeLine: {
     width: 2,
     height: 32,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: c.border,
     marginLeft: 11,
     marginVertical: 6,
   },
   place: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#111827",
+    color: c.text,
   },
   address: {
     fontSize: 12,
-    color: "#6B7280",
+    color: c.textMuted,
     marginTop: 2,
   },
   sectionTitle: {
     fontSize: 14,
     fontWeight: "700",
     marginBottom: 10,
-    color: "#111827",
+    color: c.text,
   },
   rideMeta: {
     fontSize: 12,
-    color: "#64748B",
+    color: c.textMuted,
     marginBottom: 12,
   },
   empty: {
     textAlign: "center",
     marginTop: 20,
-    color: "#6B7280",
+    color: c.textMuted,
   },
   passengerRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
+    borderBottomColor: c.border,
   },
   passengerName: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#111827",
+    color: c.text,
   },
   passengerMeta: {
     fontSize: 12,
-    color: "#6B7280",
+    color: c.textMuted,
     marginTop: 2,
   },
   passengerPrice: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#111827",
+    color: c.text,
   },
   scrollContent: {
     paddingBottom: 24,
@@ -273,5 +315,15 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#FFFFFF",
     marginTop: 4,
+  },
+  pendingNote: {
+    fontSize: 11,
+    color: "#DBEAFE",
+    marginTop: 6,
+    fontWeight: "600",
+  },
+  passengerPriceMuted: {
+    color: c.textMuted,
+    textDecorationLine: "line-through",
   },
 });

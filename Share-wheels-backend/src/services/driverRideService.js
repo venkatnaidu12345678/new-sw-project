@@ -171,8 +171,20 @@ const startRide = async (user, { rideId }) => {
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
   if (ride.creator.toString() !== userId.toString()) return { status: 403, body: { success: false, message: "Only ride creator can start the ride" } };
 
-  const stale = await expirePendingRideIfStale(ride);
-  ride = stale.ride || ride;
+  if (isRidePastStartGracePeriod(ride)) {
+    const stale = await expirePendingRideIfStale(ride);
+    ride = stale.ride || ride;
+    if (ride.status === "expired") {
+      return {
+        status: 400,
+        body: {
+          success: false,
+          message:
+            "This ride has expired because it was not started within 6 hours of the scheduled time",
+        },
+      };
+    }
+  }
 
   if (ride.status !== "pending") {
     return {
@@ -187,18 +199,6 @@ const startRide = async (user, { rideId }) => {
               : ride.status === "expired"
                 ? "This ride has expired and can no longer be started"
                 : "Ride cannot be started in its current state",
-      },
-    };
-  }
-
-  if (isRidePastStartGracePeriod(ride)) {
-    await expireRide(ride);
-    return {
-      status: 400,
-      body: {
-        success: false,
-        message:
-          "This ride has expired because it was not started within 6 hours of the scheduled time",
       },
     };
   }
@@ -219,14 +219,16 @@ const startRide = async (user, { rideId }) => {
   await ride.save();
 
   const driverName = user.name || "Driver";
-  await notifyRideParticipants(ride, {
+  emitRideParticipantsUpdated(ride._id, { action: "started" });
+  notifyRideParticipants(ride, {
     title: "Ride started",
     body: `${driverName} has started the ride ({route}).`,
     driverMessage: `You started the ride ({route}).`,
     type: "ride_started",
     excludeDriver: false,
+  }).catch((err) => {
+    console.warn("[startRide] notify participants:", err?.message || err);
   });
-  emitRideParticipantsUpdated(ride._id, { action: "started" });
 
   if (global.io) {
     global.io.to("admin:tracking").emit("rideStarted", {

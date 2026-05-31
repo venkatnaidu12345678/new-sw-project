@@ -15,23 +15,33 @@ import {
 } from "../liveTracking/liveTrackingState";
 import { subscribeGpsUpdates } from "../Utils/gpsService";
 import { hasLocationPermission } from "../Utils/locationPermissions";
-import { apiRequest } from "../Utils/apiRequest";
-import { baseUrl } from "../Config";
 
-const BOOTSTRAP_TIMEOUT_MS = 6000;
-const BACKUP_POLL_MS = 20000;
+const LOCAL_GPS_THROTTLE_MS = 2000;
 
-async function fetchTrackingFast(token, rideId) {
-  const id = normalizeRideId(rideId);
-  return apiRequest(`${baseUrl}/rides/${id}/chat/tracking`, {
-    token,
-    method: "GET",
-    timeoutMs: BOOTSTRAP_TIMEOUT_MS,
+/** Cheap fingerprint to skip redundant React state updates. */
+const trackingFingerprint = (tracking) => {
+  const lt = tracking?.liveTracking;
+  if (!lt) return "";
+  const parts = [];
+  const d = lt.driverLocation;
+  if (d) {
+    parts.push(
+      `d:${Number(d.lat ?? d.latitude).toFixed(4)},${Number(d.lng ?? d.longitude).toFixed(4)}`
+    );
+  }
+  (lt.participantLocations || []).forEach((p) => {
+    const id = normalizeRideId(p.userId);
+    const lat = Number(p.lat ?? p.latitude);
+    const lng = Number(p.lng ?? p.longitude);
+    if (!id || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    parts.push(`${id}:${p.role}:${lat.toFixed(4)},${lng.toFixed(4)}`);
   });
-}
+  const hist = lt.locationHistory?.length || 0;
+  return `${parts.sort().join("|")}|h:${hist}`;
+};
 
 /**
- * Live map state: socket-first updates, fast bootstrap, local GPS shown instantly.
+ * Live map state: socket-only updates after one-time bootstrap.
  */
 export function useLiveRideMap({
   rideId,
@@ -48,33 +58,59 @@ export function useLiveRideMap({
   const [permission, setPermission] = useState(false);
   const [localGps, setLocalGps] = useState(false);
   const bootstrapped = useRef(false);
+  const lastLocalGpsAt = useRef(0);
+  const trackingFpRef = useRef("");
 
   useEffect(() => {
     if (tokenProp) setToken(tokenProp);
     else AsyncStorage.getItem("token").then(setToken);
   }, [tokenProp]);
 
-  const applyBootstrap = useCallback((apiBody) => {
-    const normalized = normalizeTrackingApi(apiBody);
-    if (!normalized) return;
+  const setTrackingIfChanged = useCallback((updater) => {
     setTracking((prev) => {
-      if (!prev) return normalized;
-      return mergeSocketLocation(normalized, {
-        rideId: rid,
-        participantLocations: prev.liveTracking?.participantLocations || [],
-        driverLocation: prev.liveTracking?.driverLocation,
-      });
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      if (!next) return next;
+      const fp = trackingFingerprint(next);
+      if (fp && fp === trackingFpRef.current) return prev;
+      trackingFpRef.current = fp;
+      return next;
     });
-    bootstrapped.current = true;
-  }, [rid]);
+  }, []);
+
+  const applyBootstrap = useCallback(
+    (apiBody) => {
+      const normalized = normalizeTrackingApi(apiBody);
+      if (!normalized) return;
+      setTrackingIfChanged((prev) => {
+        if (!prev) return normalized;
+        return mergeSocketLocation(normalized, {
+          rideId: rid,
+          participantLocations: prev.liveTracking?.participantLocations || [],
+          driverLocation: prev.liveTracking?.driverLocation,
+        });
+      });
+      bootstrapped.current = true;
+    },
+    [rid, setTrackingIfChanged]
+  );
+
+  const bootstrapFromApi = useCallback(async () => {
+    if (!token || !rid) return;
+    try {
+      const data = await getRideTracking(token, rid);
+      applyBootstrap(data);
+    } catch {
+      /* socket updates will populate the map */
+    }
+  }, [token, rid, applyBootstrap]);
 
   const onSocketPayload = useCallback(
     (payload) => {
       if (normalizeRideId(payload?.rideId) !== rid) return;
       setSocketLive(true);
-      setTracking((prev) => mergeSocketLocation(prev, payload));
+      setTrackingIfChanged((prev) => mergeSocketLocation(prev, payload));
     },
-    [rid]
+    [rid, setTrackingIfChanged]
   );
 
   useEffect(() => {
@@ -84,36 +120,30 @@ export function useLiveRideMap({
     }
 
     let unsubLocation = () => {};
-    let pollId;
+    let unsubReconnect = () => {};
     let cancelled = false;
 
     (async () => {
       try {
-        await connectAppSocket();
+        const s = await connectAppSocket();
         if (cancelled) return;
         await joinRideRoom(rid);
         if (cancelled) return;
 
-        unsubLocation = await subscribeSocketEvent(
-          "locationUpdate",
-          onSocketPayload
-        );
+        unsubLocation = await subscribeSocketEvent("locationUpdate", onSocketPayload);
 
         if (!bootstrapped.current) {
-          fetchTrackingFast(token, rid)
-            .then(applyBootstrap)
-            .catch(() => {
-              getRideTracking(token, rid)
-                .then(applyBootstrap)
-                .catch(() => {});
-            });
+          bootstrapFromApi();
         }
 
-        pollId = setInterval(() => {
-          fetchTrackingFast(token, rid)
-            .then(applyBootstrap)
-            .catch(() => {});
-        }, BACKUP_POLL_MS);
+        if (s?.io) {
+          const onReconnect = () => {
+            if (cancelled) return;
+            bootstrapFromApi();
+          };
+          s.io.on("reconnect", onReconnect);
+          unsubReconnect = () => s.io.off("reconnect", onReconnect);
+        }
       } catch (e) {
         if (__DEV__) console.warn("[live-map] connect:", e?.message);
       }
@@ -121,15 +151,17 @@ export function useLiveRideMap({
 
     return () => {
       cancelled = true;
-      clearInterval(pollId);
       try {
         unsubLocation();
+        unsubReconnect();
       } catch {
         /* ignore */
       }
       setSocketLive(false);
+      bootstrapped.current = false;
+      trackingFpRef.current = "";
     };
-  }, [enabled, rid, token, onSocketPayload, applyBootstrap]);
+  }, [enabled, rid, token, onSocketPayload, bootstrapFromApi]);
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -139,8 +171,11 @@ export function useLiveRideMap({
     });
     const unsub = subscribeGpsUpdates((coords) => {
       if (!active || !coords) return;
+      const now = Date.now();
+      if (now - lastLocalGpsAt.current < LOCAL_GPS_THROTTLE_MS) return;
+      lastLocalGpsAt.current = now;
       setLocalGps(true);
-      setTracking((prev) =>
+      setTrackingIfChanged((prev) =>
         applyLocalGps(prev, {
           userId: myUserId,
           role: myRole,
@@ -154,7 +189,7 @@ export function useLiveRideMap({
       active = false;
       unsub();
     };
-  }, [enabled, myUserId, myRole, myName]);
+  }, [enabled, myUserId, myRole, myName, setTrackingIfChanged]);
 
   const counts = useMemo(() => countOnMap(tracking), [tracking]);
 

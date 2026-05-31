@@ -12,7 +12,7 @@ import LinearGradient from "react-native-linear-gradient";
 import { Picker } from "@react-native-picker/picker";
 
 import { DS } from "../../theme/designSystem";
-import { INPUT_COLORS } from "../../theme/inputTheme";
+import { useTheme } from "../../context/ThemeContext";
 
 export const RequestHero = ({
   theme,
@@ -110,36 +110,45 @@ export const StyledTextInput = ({
   style,
   multiline,
   ...props
-}) => (
+}) => {
+  const { input } = useTheme();
+  return (
   <View
     style={[
       styles.inputWrap,
       multiline && styles.inputWrapMultiline,
-      accent && {
-        backgroundColor: accent.bg || INPUT_COLORS.background,
-        borderColor: accent.border || INPUT_COLORS.border,
+      {
+        backgroundColor: accent?.bg || input.background,
+        borderColor: accent?.border || input.border,
       },
     ]}
   >
-    {icon ? (
-      <View style={styles.inputIconWrap}>
-        <Icon name={icon} size={18} color={accent?.icon || theme.textMuted} />
-      </View>
-    ) : null}
-    <TextInput
-      style={[
-        styles.input,
-        icon && styles.inputWithIcon,
-        multiline && styles.inputMultiline,
-        style,
-      ]}
-      placeholderTextColor={INPUT_COLORS.placeholder}
-      multiline={multiline}
-      textAlignVertical={multiline ? "top" : "center"}
-      {...props}
-    />
-  </View>
-);
+      {icon ? (
+        <View
+          style={[
+            styles.inputIconWrap,
+            { backgroundColor: theme.surface },
+          ]}
+        >
+          <Icon name={icon} size={18} color={accent?.icon || theme.textMuted} />
+        </View>
+      ) : null}
+      <TextInput
+        style={[
+          styles.input,
+          { color: input.text },
+          icon && styles.inputWithIcon,
+          multiline && styles.inputMultiline,
+          style,
+        ]}
+        placeholderTextColor={input.placeholder}
+        multiline={multiline}
+        textAlignVertical={multiline ? "top" : "center"}
+        {...props}
+      />
+    </View>
+  );
+};
 
 export const StyledPicker = ({
   label,
@@ -154,9 +163,9 @@ export const StyledPicker = ({
     <View
       style={[
         styles.pickerWrap,
-        accent && {
-          backgroundColor: accent.bg,
-          borderColor: accent.border,
+        {
+          backgroundColor: accent?.bg || theme.surface,
+          borderColor: accent?.border || theme.cardBorder,
         },
       ]}
     >
@@ -203,7 +212,7 @@ export const RequestSeatsStepper = ({
     borderColor: accent.border,
   };
   const iconColor = accent.icon;
-  const labelColor = accent.icon;
+  const labelColor = theme.text;
 
   const seats = Math.max(min, Math.min(max, Number(value) || min));
 
@@ -233,14 +242,15 @@ export const RequestSeatsStepper = ({
             <Text
               style={[
                 seatsStyles.stepBtnText,
-                seats <= min && seatsStyles.stepBtnDisabled,
+                { color: theme.text },
+                seats <= min && { color: theme.textMuted },
               ]}
             >
               −
             </Text>
           </TouchableOpacity>
 
-          <Text style={seatsStyles.count}>{seats}</Text>
+          <Text style={[seatsStyles.count, { color: theme.text }]}>{seats}</Text>
 
           <TouchableOpacity
             onPress={increase}
@@ -251,7 +261,8 @@ export const RequestSeatsStepper = ({
             <Text
               style={[
                 seatsStyles.stepBtnText,
-                seats >= max && seatsStyles.stepBtnDisabled,
+                { color: theme.text },
+                seats >= max && { color: theme.textMuted },
               ]}
             >
               +
@@ -269,30 +280,33 @@ export const RequestPriceInput = ({
   onChangeText,
   theme,
   placeholder = "Enter amount you will pay",
-}) => (
-  <StyledField label={label} required theme={theme}>
-    <View
-      style={[
-        styles.priceWrap,
-        {
-          backgroundColor: theme.price.bg,
-          borderColor: theme.price.border,
-        },
-      ]}
-    >
-      <Text style={[styles.rupee, { color: theme.price.icon }]}>₹</Text>
-      <TextInput
-        style={styles.priceInput}
-        value={value}
-        onChangeText={onChangeText}
-        keyboardType="numeric"
-        placeholder={placeholder}
-        placeholderTextColor={INPUT_COLORS.placeholder}
-        maxLength={7}
-      />
-    </View>
-  </StyledField>
-);
+}) => {
+  const { input } = useTheme();
+  return (
+    <StyledField label={label} required theme={theme}>
+      <View
+        style={[
+          styles.priceWrap,
+          {
+            backgroundColor: theme.price.bg,
+            borderColor: theme.price.border,
+          },
+        ]}
+      >
+        <Text style={[styles.rupee, { color: theme.price.icon }]}>₹</Text>
+        <TextInput
+          style={[styles.priceInput, { color: input.text }]}
+          value={value}
+          onChangeText={onChangeText}
+          keyboardType="numeric"
+          placeholder={placeholder}
+          placeholderTextColor={input.placeholder}
+          maxLength={7}
+        />
+      </View>
+    </StyledField>
+  );
+};
 
 const seatsStyles = StyleSheet.create({
   container: {
@@ -301,9 +315,7 @@ const seatsStyles = StyleSheet.create({
   },
   inputCard: {
     width: "100%",
-    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E5E7EB",
     borderRadius: 12,
     padding: 12,
   },
@@ -370,7 +382,7 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 16,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "rgba(255,255,255,0.95)",
     alignItems: "center",
     justifyContent: "center",
     marginRight: DS.spacing.md,
@@ -454,8 +466,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: DS.radius.md,
     paddingHorizontal: DS.spacing.sm,
-    backgroundColor: INPUT_COLORS.background,
-    borderColor: INPUT_COLORS.border,
   },
   inputWrapMultiline: {
     alignItems: "flex-start",
@@ -466,7 +476,6 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
     marginRight: DS.spacing.sm,
@@ -474,7 +483,6 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: DS.font.body,
-    color: INPUT_COLORS.text,
     paddingVertical: Platform.OS === "ios" ? 12 : 8,
   },
   inputWithIcon: {
@@ -491,8 +499,6 @@ const styles = StyleSheet.create({
     borderRadius: DS.radius.md,
     minHeight: DS.sizes.inputHeight,
     overflow: "hidden",
-    backgroundColor: INPUT_COLORS.background,
-    borderColor: INPUT_COLORS.border,
   },
   pickerIconWrap: {
     paddingLeft: DS.spacing.md,
@@ -518,7 +524,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: DS.font.section,
     fontWeight: "700",
-    color: INPUT_COLORS.text,
     paddingVertical: Platform.OS === "ios" ? 12 : 8,
   },
 });

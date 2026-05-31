@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useMemo } from "react";
 import { Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
@@ -18,8 +18,9 @@ import {
 
 import { createpassengerrequest } from "../ApiService/ridesApiServices";
 import { validateLocation, validatePrice } from "../Utils";
-import { PASSENGER_THEME as T } from "../theme/requestFormTheme";
+import { getPassengerTheme } from "../theme/requestFormTheme";
 import { DS } from "../theme/designSystem";
+import { useTheme } from "../context/ThemeContext";
 
 const EMPTY_PASSENGER_PAYLOAD = {
   from: "",
@@ -41,8 +42,11 @@ const goToMyRequestsTab = (navigation, activeTab) => {
 
 const PassengerRequest = () => {
   const navigation = useNavigation();
+  const { colors } = useTheme();
+  const T = useMemo(() => getPassengerTheme(colors), [colors]);
   const formRef = useRef();
   const [formResetKey, setFormResetKey] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
 
   const [payload, setPayload] = useState({ ...EMPTY_PASSENGER_PAYLOAD });
 
@@ -93,6 +97,7 @@ const PassengerRequest = () => {
     }
 
     try {
+      setSubmitting(true);
       const token = await AsyncStorage.getItem("token");
       if (!token) {
         Alert.alert("Error", "User not authenticated");
@@ -122,6 +127,8 @@ const PassengerRequest = () => {
     } catch (error) {
       console.log("Passenger Request Error:", error);
       Alert.alert("Error", error?.message || "Failed to create request");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -129,7 +136,7 @@ const PassengerRequest = () => {
     bg: T.date.bg,
     border: T.date.border,
     icon: T.date.icon,
-    label: T.date.icon,
+    label: T.text,
     surface: T.surface,
   };
 
@@ -238,7 +245,12 @@ const PassengerRequest = () => {
         </RequestSection>
       </KeyboardAwareScreen>
 
-      <FixedButton title="Post request" onPress={handleCreateRequest} />
+      <FixedButton
+        title="Post request"
+        onPress={handleCreateRequest}
+        loading={submitting}
+        disabled={submitting}
+      />
     </>
   );
 };

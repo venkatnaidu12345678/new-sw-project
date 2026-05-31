@@ -127,7 +127,7 @@ const updateAd = async (id, body) => {
   }
   if (update.priority !== undefined) update.priority = Number(update.priority) || 0;
 
-  const ad = await Ad.findByIdAndUpdate(id, update, { new: true, runValidators: true });
+  const ad = await Ad.findByIdAndUpdate(id, update, { returnDocument: "after", runValidators: true });
   if (!ad) return { status: 404, body: { success: false, message: "Ad not found" } };
   return { status: 200, body: { success: true, message: "Ad updated", ad } };
 };
@@ -145,7 +145,7 @@ const recordClick = async (id) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return { status: 400, body: { success: false, message: "Invalid ad ID" } };
   }
-  const ad = await Ad.findByIdAndUpdate(id, { $inc: { clicks: 1 } }, { new: true });
+  const ad = await Ad.findByIdAndUpdate(id, { $inc: { clicks: 1 } }, { returnDocument: "after" });
   if (!ad) return { status: 404, body: { success: false, message: "Ad not found" } };
   return { status: 200, body: { success: true } };
 };

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, ScrollView } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRoute } from "@react-navigation/native";
 import BackButton from "../Components/BackButton";
@@ -14,8 +14,12 @@ import Icon from "react-native-vector-icons/Ionicons";
 import { useLiveRideMap } from "../hooks/useLiveRideMap";
 import { setActiveRideTracking } from "../Utils/activeRideTracking";
 import { normalizeRideId } from "../liveTracking/liveTrackingState";
+import { useTheme } from "../context/ThemeContext";
+import { useThemedStyles } from "../theme/useThemedStyles";
 
 const RideLiveMap = () => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const route = useRoute();
   const { rideId, rideTitle, myRole, rideStatus } = route.params || {};
 
@@ -75,7 +79,7 @@ const RideLiveMap = () => {
   }, [isStarted, permission, statusHint]);
 
   return (
-    <ScreenContainer backgroundColor="#F8FAFC" style={styles.container}>
+    <ScreenContainer style={styles.container} edges={["top"]}>
       <View style={styles.header}>
         <BackButton />
         <View style={styles.headerText}>
@@ -95,82 +99,114 @@ const RideLiveMap = () => {
         </View>
       )}
 
-      <GoogleRideMap
-        tracking={
-          tracking || { liveTracking: { participantLocations: [] } }
-        }
-        myRole={effectiveRole}
-        style={styles.map}
-        height={400}
-        autoFocus
-        showMyLocation={isStarted && permission}
-        gpsStatusText={mapGpsHint}
-      />
-
-      {isStarted && statusHint ? (
-        <Text style={styles.statusLine}>{statusHint}</Text>
-      ) : null}
-
-      {isDriver && isStarted && waitingParticipants.length > 0 ? (
-        <Text style={styles.driverHint}>
-          {waitingParticipants.length} participant
-          {waitingParticipants.length > 1 ? "s" : ""} not on the map yet (location
-          not enabled at sign-in).
-        </Text>
-      ) : null}
-
-      <View style={styles.legend}>
-        {["driver", "passenger", "courier"].map((role) => (
-          <View key={role} style={styles.legendRow}>
-            <View
-              style={[
-                styles.legendIcon,
-                { backgroundColor: ROLE_PIN_COLORS[role] },
-              ]}
-            >
-              <Icon name={ROLE_MAP_ICONS[role]} size={14} color="#FFFFFF" />
-            </View>
-            <Text style={styles.legendText}>
-              {role.charAt(0).toUpperCase() + role.slice(1)}
-              {role === "passenger" && counts.passengers > 0
-                ? ` (${counts.passengers})`
-                : ""}
-              {role === "courier" && counts.couriers > 0
-                ? ` (${counts.couriers})`
-                : ""}
-            </Text>
-          </View>
-        ))}
+      <View style={styles.mapArea}>
+        <GoogleRideMap
+          tracking={
+            tracking || { liveTracking: { participantLocations: [] } }
+          }
+          myRole={effectiveRole}
+          fill
+          autoFocus
+          showMyLocation={isStarted && permission}
+          gpsStatusText={mapGpsHint}
+          fullscreenTitle={rideTitle || "Live map"}
+        />
       </View>
 
-      <Text style={styles.note}>
-        {isDriver
-          ? "Map auto-zooms to everyone sharing GPS. Updates arrive instantly over the network."
-          : "Your position appears on the map as soon as GPS is available."}
-      </Text>
+      <ScrollView
+        style={styles.footerScroll}
+        contentContainerStyle={styles.footerContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.expandHint}>
+          Tap the expand icon on the map for fullscreen view.
+        </Text>
+
+        {isStarted && statusHint ? (
+          <Text style={styles.statusLine}>{statusHint}</Text>
+        ) : null}
+
+        {isDriver && isStarted && waitingParticipants.length > 0 ? (
+          <Text style={styles.driverHint}>
+            {waitingParticipants.length} participant
+            {waitingParticipants.length > 1 ? "s" : ""} not on the map yet (location
+            not enabled at sign-in).
+          </Text>
+        ) : null}
+
+        <View style={styles.legend}>
+          {["driver", "passenger", "courier"].map((role) => (
+            <View key={role} style={styles.legendRow}>
+              <View
+                style={[
+                  styles.legendIcon,
+                  { backgroundColor: ROLE_PIN_COLORS[role] },
+                ]}
+              >
+                <Icon name={ROLE_MAP_ICONS[role]} size={14} color="#FFFFFF" />
+              </View>
+              <Text style={styles.legendText}>
+                {role.charAt(0).toUpperCase() + role.slice(1)}
+                {role === "passenger" && counts.passengers > 0
+                  ? ` (${counts.passengers})`
+                  : ""}
+                {role === "courier" && counts.couriers > 0
+                  ? ` (${counts.couriers})`
+                  : ""}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        <Text style={styles.note}>
+          {isDriver
+            ? "Map auto-zooms to everyone sharing GPS. Updates arrive instantly over the network."
+            : "Your position appears on the map as soon as GPS is available."}
+        </Text>
+      </ScrollView>
     </ScreenContainer>
   );
 };
 
 export default RideLiveMap;
 
-const styles = StyleSheet.create({
+const createStyles = (c) =>
+  StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 16 },
+  mapArea: {
+    flex: 1,
+    minHeight: 280,
+    marginTop: 4,
+  },
+  footerScroll: {
+    flexGrow: 0,
+    maxHeight: 200,
+  },
+  footerContent: {
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
+  expandHint: {
+    fontSize: 11,
+    color: c.textMuted,
+    textAlign: "center",
+    marginBottom: 6,
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: 48,
+    paddingTop: 8,
     paddingBottom: 12,
   },
   headerText: { marginLeft: 8, flex: 1 },
-  title: { fontSize: 18, fontWeight: "700" },
-  subtitle: { fontSize: 13, color: "#64748B" },
-  hint: { color: "#D97706", marginBottom: 12, fontSize: 13 },
+  title: { fontSize: 18, fontWeight: "700", color: c.text },
+  subtitle: { fontSize: 13, color: c.textMuted },
+  hint: { color: c.warningText, marginBottom: 12, fontSize: 13 },
   liveBadge: {
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
-    backgroundColor: "#DCFCE7",
+    backgroundColor: c.successBg,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 20,
@@ -180,21 +216,20 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#16A34A",
+    backgroundColor: c.successText,
     marginRight: 6,
   },
-  liveText: { fontSize: 12, fontWeight: "700", color: "#166534" },
-  map: { marginTop: 8 },
+  liveText: { fontSize: 12, fontWeight: "700", color: c.successText },
   statusLine: {
     fontSize: 12,
-    color: "#475569",
+    color: c.textMuted,
     marginTop: 10,
     textAlign: "center",
     fontWeight: "600",
   },
   driverHint: {
     fontSize: 11,
-    color: "#D97706",
+    color: c.warningText,
     marginTop: 8,
     textAlign: "center",
     lineHeight: 16,
@@ -205,7 +240,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
     marginTop: 16,
     paddingVertical: 10,
-    backgroundColor: "#fff",
+    backgroundColor: c.surface,
     borderRadius: 10,
   },
   legendRow: { flexDirection: "row", alignItems: "center" },
@@ -217,13 +252,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 6,
     borderWidth: 1,
-    borderColor: "#FFFFFF",
+    borderColor: c.border,
   },
-  legendText: { fontSize: 13, color: "#334155", fontWeight: "600" },
+  legendText: { fontSize: 13, color: c.textSecondary, fontWeight: "600" },
   note: {
     marginTop: 12,
     fontSize: 12,
-    color: "#64748B",
+    color: c.textMuted,
     textAlign: "center",
     lineHeight: 18,
   },

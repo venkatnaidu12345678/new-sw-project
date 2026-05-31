@@ -43,12 +43,16 @@ const buildTrackingPayload = (ride, user, role, lat, lng, now) => ({
   userId: user._id.toString(),
   participantId: user._id.toString(),
   name: user.name || "User",
-  driver: ride.creator
-    ? {
-        id: ride.creator._id?.toString?.() || ride.creator?.toString?.(),
-        name: ride.creator.name,
-      }
-    : null,
+  driver: {
+    id:
+      ride.creator?._id?.toString?.() ||
+      ride.creator?.toString?.() ||
+      null,
+    name:
+      role === "driver"
+        ? user.name || "Driver"
+        : ride.creator?.name || "Driver",
+  },
   location: { lat, lng, updatedAt: now },
   driverLocation: pickDriverLocation(ride.liveTracking),
   participantLocations: ride.liveTracking?.participantLocations || [],
@@ -66,7 +70,9 @@ const updateParticipantLocation = async (user, rideId, body) => {
     return { status: 400, body: { success: false, message: "Valid lat and lng required" } };
   }
 
-  const ride = await Ride.findById(rideId).populate("creator", "name mobile");
+  const ride = await Ride.findById(rideId).select(
+    "status creator passengers all_deliveries liveTracking from to"
+  );
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
 
   const role = getRideParticipantRole(ride, user._id);
@@ -84,7 +90,7 @@ const updateParticipantLocation = async (user, rideId, body) => {
   ride.liveTracking.isActive = true;
   if (!ride.liveTracking.startedAt) ride.liveTracking.startedAt = now;
 
-  upsertParticipantLocation(ride, user, role, latitude, longitude, now);
+  upsertParticipantLocation(ride.liveTracking, user, role, latitude, longitude, now);
 
   if (role === "driver") {
     ride.liveTracking.driverLocation = { lat: latitude, lng: longitude, updatedAt: now };
@@ -95,11 +101,11 @@ const updateParticipantLocation = async (user, rideId, body) => {
     }
   }
 
-  ride.markModified("liveTracking");
-  await ride.save();
-
   const payload = buildTrackingPayload(ride, user, role, latitude, longitude, now);
   emitLocation(rideId, payload);
+
+  ride.markModified("liveTracking");
+  await ride.save();
 
   return { status: 200, body: { success: true, tracking: payload } };
 };
@@ -245,25 +251,32 @@ const getRideTracking = async (rideId) => {
   };
 };
 
+const serializeParticipantRow = (p) => ({
+  userId: p.userId?._id?.toString?.() || p.userId?.toString?.() || String(p.userId),
+  role: p.role,
+  name: p.name,
+  lat: p.lat,
+  lng: p.lng,
+  updatedAt: p.updatedAt,
+});
+
 const getTrackingForUser = async (user, rideId) => {
   if (!mongoose.Types.ObjectId.isValid(rideId)) {
     return { status: 400, body: { success: false, message: "Invalid ride ID" } };
   }
   const ride = await Ride.findById(rideId)
-    .populate("creator", "name mobile")
-    .populate("passengers.userId", "name mobile")
-    .populate("all_deliveries.userId", "name mobile")
-    .select("creator passengers all_deliveries status liveTracking from to");
+    .select("creator passengers.userId all_deliveries.userId status liveTracking from to")
+    .lean();
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
 
   const role = getRideParticipantRole(ride, user._id);
   if (!role) return { status: 403, body: { success: false, message: "Not on this ride" } };
 
-  const liveTracking = ride.liveTracking?.toObject?.() || ride.liveTracking || {};
+  const liveTracking = ride.liveTracking || {};
   const byUserId = new Map();
   (liveTracking.participantLocations || []).forEach((p) => {
-    const uid = p.userId?._id?.toString?.() || p.userId?.toString?.();
-    if (uid) byUserId.set(uid, p);
+    const row = serializeParticipantRow(p);
+    if (row.userId) byUserId.set(row.userId, row);
   });
 
   const ensureEntry = (uid, entryRole, name) => {
@@ -279,24 +292,14 @@ const getTrackingForUser = async (user, rideId) => {
     });
   };
 
-  const driverId =
-    ride.creator?._id?.toString?.() || ride.creator?.toString?.();
-  if (driverId) {
-    ensureEntry(driverId, "driver", ride.creator?.name || "Driver");
-  }
+  const driverId = ride.creator?.toString?.();
+  if (driverId) ensureEntry(driverId, "driver", "Driver");
   (ride.passengers || []).forEach((p) => {
-    const u = p.userId?._id || p.userId;
-    ensureEntry(u, "passenger", p.userId?.name || "Passenger");
+    ensureEntry(p.userId, "passenger", "Passenger");
   });
   (ride.all_deliveries || []).forEach((d) => {
-    const u = d.userId?._id || d.userId;
-    ensureEntry(u, "courier", d.userId?.name || "Courier");
+    ensureEntry(d.userId, "courier", "Courier");
   });
-
-  const participantLocations = Array.from(byUserId.values()).map((p) => ({
-    ...p,
-    userId: p.userId?._id?.toString?.() || p.userId?.toString?.() || p.userId,
-  }));
 
   return {
     status: 200,
@@ -310,7 +313,7 @@ const getTrackingForUser = async (user, rideId) => {
       liveTracking: {
         ...liveTracking,
         driverLocation: pickDriverLocation(liveTracking),
-        participantLocations,
+        participantLocations: Array.from(byUserId.values()),
       },
     },
   };

@@ -26,19 +26,22 @@ import { clearAuthSession } from "../Utils/authSession";
 import { MIN_BOOTSTRAP_SPLASH_MS } from "../theme/splashTiming";
 import { NotificationsProvider } from "../context/NotificationsContext";
 import { useAppSocketConnection } from "../hooks/useAppSocket";
+import { syncFcmTokenWithBackend } from "../Notifications/registerToken";
+import { useTheme } from "../context/ThemeContext";
 
 const Stack = createNativeStackNavigator();
 const ProfileContext = createContext(null);
 
 export const profileData = () => useContext(ProfileContext);
 
-const authScreenOptions = {
-  headerShown: false,
-  animation: "fade",
-  contentStyle: { backgroundColor: "#0F172A" },
-};
-
 const AuthNavigator = () => {
+  const { colors } = useTheme();
+  const authScreenOptions = {
+    headerShown: false,
+    animation: "fade",
+    contentStyle: { backgroundColor: colors.background },
+  };
+
   const [booting, setBooting] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [refresh, setRefresh] = useState(0);
@@ -74,6 +77,7 @@ const AuthNavigator = () => {
       if (res?.success) {
         setIsAuthenticated(true);
         await getProfileData(token);
+        syncFcmTokenWithBackend({ force: true }).catch(() => {});
       } else {
         await AsyncStorage.multiRemove(["token", "user", "USER_NAME"]);
         setIsAuthenticated(false);

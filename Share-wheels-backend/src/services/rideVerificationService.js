@@ -4,6 +4,13 @@ const User = require("../models/userModel");
 const { assignUserNoIfMissing } = require("../utils/userNoHelper");
 const { generateBoardingOtp, boardingOtpExpiry } = require("../utils/boardingOtpHelper");
 const { notifyUser } = require("./notificationService");
+const {
+  TRIP_STATUS,
+  tripStatusLabel,
+  countsTowardDriverEarnings,
+  canMarkDropped,
+  canMarkDelivered,
+} = require("../utils/participantTripStatus");
 
 const USER_POPULATE = "name email mobile profile_img userNo";
 
@@ -71,10 +78,14 @@ const listVerificationParticipants = async (user, rideId) => {
   const mapEntry = (entry, role) => ({
     role,
     userId: entry.userId?._id,
+    participantId: entry._id,
     name: entry.userId?.name,
     userNo: entry.userId?.userNo,
     isBoardingVerified: !!entry.isBoardingVerified,
     verifiedAt: entry.verifiedAt,
+    status: entry.status || TRIP_STATUS.ACCEPTED,
+    statusLabel: tripStatusLabel(entry.status),
+    countsTowardEarnings: countsTowardDriverEarnings(entry, role),
   });
 
   const participants = [
@@ -159,6 +170,8 @@ const verifyParticipant = async (user, { rideId, userNo, otp }) => {
 
   entry.isBoardingVerified = true;
   entry.verifiedAt = new Date();
+  entry.status = TRIP_STATUS.PICKED_UP;
+  entry.pickedUpAt = new Date();
   ride.markModified("passengers");
   ride.markModified("all_deliveries");
   await ride.save();
@@ -167,10 +180,20 @@ const verifyParticipant = async (user, { rideId, userNo, otp }) => {
   if (participantUserId) {
     const route = `${ride.from} → ${ride.to}`;
     await notifyUser(participantUserId, {
-      title: "Boarding verified",
-      body: `Your boarding OTP was verified for the ride (${route}).`,
-      type: "boarding_otp_verified",
+      title: "Picked up",
+      body: `You are marked Picked Up on the ride (${route}).`,
+      type: "participant_picked_up",
       data: { rideId: ride._id.toString(), role: type },
+    });
+    await notifyUser(ride.creator, {
+      title: type === "courier" ? "Courier picked up" : "Passenger picked up",
+      body: `${entry.userId?.name || "Participant"} verified and picked up (${route}).`,
+      type: "participant_picked_up",
+      data: {
+        rideId: ride._id.toString(),
+        role: type,
+        participantId: entry._id?.toString?.(),
+      },
     });
   }
 
@@ -236,9 +259,153 @@ const ensureParticipantBoardingOtp = async (entry, userId, rideContext = null) =
   }
 };
 
+const findPassengerEntry = (ride, participantId) =>
+  ride.passengers?.find((p) => p._id?.toString() === participantId?.toString());
+
+const findCourierEntry = (ride, participantId) =>
+  ride.all_deliveries?.find((c) => c._id?.toString() === participantId?.toString());
+
+const markPassengerDropped = async (user, { rideId, participantId }) => {
+  if (!mongoose.Types.ObjectId.isValid(rideId) || !mongoose.Types.ObjectId.isValid(participantId)) {
+    return { status: 400, body: { success: false, message: "Invalid ride or participant ID" } };
+  }
+
+  const ride = await Ride.findById(rideId).populate("passengers.userId", USER_POPULATE);
+  if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
+  if (ride.creator.toString() !== user._id.toString()) {
+    return { status: 403, body: { success: false, message: "Only driver can update passenger status" } };
+  }
+  if (ride.status !== "started") {
+    return { status: 400, body: { success: false, message: "Ride must be started" } };
+  }
+
+  const entry = findPassengerEntry(ride, participantId);
+  if (!entry) {
+    return { status: 404, body: { success: false, message: "Passenger not found on this ride" } };
+  }
+  if (!canMarkDropped(entry)) {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message: entry.isBoardingVerified
+          ? "Passenger must be Picked Up before Drop"
+          : "Verify passenger OTP before Drop",
+      },
+    };
+  }
+
+  entry.status = TRIP_STATUS.DROPPED;
+  entry.droppedAt = new Date();
+  ride.markModified("passengers");
+  await ride.save();
+
+  const uid = entry.userId?._id || entry.userId;
+  const route = `${ride.from} → ${ride.to}`;
+  if (uid) {
+    await notifyUser(uid, {
+      title: "Dropped off",
+      body: `You were dropped off for the ride (${route}).`,
+      type: "passenger_dropped",
+      data: { rideId: ride._id.toString(), participantId: entry._id.toString() },
+    });
+  }
+  await notifyUser(ride.creator, {
+    title: "Passenger dropped",
+    body: `${entry.userId?.name || "Passenger"} marked Dropped — earnings updated (${route}).`,
+    type: "passenger_dropped",
+    data: { rideId: ride._id.toString(), participantId: entry._id.toString() },
+  });
+
+  return {
+    status: 200,
+    body: {
+      success: true,
+      message: "Passenger marked as Dropped",
+      participant: {
+        role: "passenger",
+        participantId: entry._id,
+        status: entry.status,
+        statusLabel: tripStatusLabel(entry.status),
+        countsTowardEarnings: true,
+      },
+    },
+  };
+};
+
+const markCourierDelivered = async (user, { rideId, participantId }) => {
+  if (!mongoose.Types.ObjectId.isValid(rideId) || !mongoose.Types.ObjectId.isValid(participantId)) {
+    return { status: 400, body: { success: false, message: "Invalid ride or participant ID" } };
+  }
+
+  const ride = await Ride.findById(rideId).populate("all_deliveries.userId", USER_POPULATE);
+  if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
+  if (ride.creator.toString() !== user._id.toString()) {
+    return { status: 403, body: { success: false, message: "Only driver can update courier status" } };
+  }
+  if (ride.status !== "started") {
+    return { status: 400, body: { success: false, message: "Ride must be started" } };
+  }
+
+  const entry = findCourierEntry(ride, participantId);
+  if (!entry) {
+    return { status: 404, body: { success: false, message: "Courier not found on this ride" } };
+  }
+  if (!canMarkDelivered(entry)) {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message: entry.isBoardingVerified
+          ? "Courier must be Picked Up before Delivered"
+          : "Verify courier OTP before Delivered",
+      },
+    };
+  }
+
+  entry.status = TRIP_STATUS.DELIVERED;
+  entry.deliveredAt = new Date();
+  ride.markModified("all_deliveries");
+  await ride.save();
+
+  const uid = entry.userId?._id || entry.userId;
+  const route = `${ride.from} → ${ride.to}`;
+  if (uid) {
+    await notifyUser(uid, {
+      title: "Parcel delivered",
+      body: `Your delivery was marked Delivered (${route}).`,
+      type: "courier_delivered",
+      data: { rideId: ride._id.toString(), participantId: entry._id.toString() },
+    });
+  }
+  await notifyUser(ride.creator, {
+    title: "Courier delivered",
+    body: `${entry.userId?.name || "Courier"} marked Delivered — earnings updated (${route}).`,
+    type: "courier_delivered",
+    data: { rideId: ride._id.toString(), participantId: entry._id.toString() },
+  });
+
+  return {
+    status: 200,
+    body: {
+      success: true,
+      message: "Courier marked as Delivered",
+      participant: {
+        role: "courier",
+        participantId: entry._id,
+        status: entry.status,
+        statusLabel: tripStatusLabel(entry.status),
+        countsTowardEarnings: true,
+      },
+    },
+  };
+};
+
 module.exports = {
   listVerificationParticipants,
   verifyParticipant,
+  markPassengerDropped,
+  markCourierDelivered,
   assertAllParticipantsVerified,
   ensureParticipantBoardingOtp,
   attachBoardingOtp,

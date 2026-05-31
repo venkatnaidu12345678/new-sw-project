@@ -9,16 +9,17 @@ import {
   Pressable,
 } from "react-native";
 import LinearGradient from "react-native-linear-gradient";
+import { useTheme } from "../context/ThemeContext";
 
 const SCREEN_HEIGHT = Dimensions.get("window").height;
-const DEFAULT_THEME = {
+const getDefaultTheme = (c, isDark) => ({
   backdropColor: "#000",
-  backdropOpacity: 0.42,
-  gradient: ["#FFFFFF", "#F8FAFC", "#F1F5F9"],
-  borderColor: "#CBD5E1",
-  handleColor: "#94A3B8",
-  closeColor: "#334155",
-};
+  backdropOpacity: isDark ? 0.65 : 0.42,
+  gradient: [c.sliderPanel, c.surfaceAlt, c.background],
+  borderColor: c.border,
+  handleColor: c.textMuted,
+  closeColor: c.textSecondary,
+});
 
 const BottomSlider = ({
   visible,
@@ -28,10 +29,11 @@ const BottomSlider = ({
   scrollable = true,
   theme = {},
 }) => {
+  const { colors, isDark } = useTheme();
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const dragY = useRef(new Animated.Value(0)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
-  const mergedTheme = { ...DEFAULT_THEME, ...theme };
+  const mergedTheme = { ...getDefaultTheme(colors, isDark), ...theme };
   const [mounted, setMounted] = useState(visible);
   const onCloseRef = useRef(onClose);
   const wasOpenRef = useRef(visible);
@@ -150,7 +152,10 @@ const BottomSlider = ({
       <Animated.View
         style={[
           styles.slider,
-          { borderTopColor: mergedTheme.borderColor },
+          {
+            borderTopColor: mergedTheme.borderColor,
+            shadowColor: colors.shadow,
+          },
           {
             transform: [{ translateY: Animated.add(translateY, dragY) }],
           },
@@ -196,7 +201,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: SCREEN_HEIGHT * 0.75,
-    backgroundColor: "#fff",
     borderTopWidth: 1.2,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,

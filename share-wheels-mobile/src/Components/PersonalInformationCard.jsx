@@ -5,7 +5,6 @@ import {
   StyleSheet,
   Image,
   TouchableOpacity,
-  SafeAreaView,
   TextInput,
   Alert,
   ActivityIndicator,
@@ -15,7 +14,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { editVechileApi } from "../ApiService/AuthApiService";
-import { INPUT_COLORS } from "../theme/inputTheme";
+import { useTheme } from "../context/ThemeContext";
+import { useThemedStyles } from "../theme/useThemedStyles";
 
 // Icons
 import gender from "../assets/gender.png";
@@ -30,6 +30,8 @@ import editIcon from "../assets/editicon.png";
 import vehicleInfoIcon from "../assets/caricon2.png";
 
 const PersonalInformationCard = ({ personal, vehicle }) => {
+  const { input } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [editingVehicle, setEditingVehicle] = useState(false);
 
   // Personal
@@ -133,7 +135,7 @@ const PersonalInformationCard = ({ personal, vehicle }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       {/* PERSONAL */}
       <View style={styles.card}>
         <Text style={styles.heading}>Personal Information</Text>
@@ -195,7 +197,7 @@ const PersonalInformationCard = ({ personal, vehicle }) => {
                     ? "License number"
                     : "Plate holder name"
                 }
-                placeholderTextColor={INPUT_COLORS.placeholder}
+                placeholderTextColor={input.placeholder}
                 value={item.value}
                 onChangeText={item.setter}
               />
@@ -240,7 +242,7 @@ const PersonalInformationCard = ({ personal, vehicle }) => {
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={input.text} />
             ) : (
               <Text style={styles.saveText}>Save</Text>
             )}
@@ -264,24 +266,25 @@ const PersonalInformationCard = ({ personal, vehicle }) => {
           onChange={onChangeExpiryDate}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 
 export default PersonalInformationCard;
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F3F4F6" },
+const createStyles = (c) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.background },
 
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: c.surface,
     borderRadius: 16,
     padding: 20,
     margin: 16,
     elevation: 6,
   },
 
-  heading: { fontSize: 18, fontWeight: "700", marginBottom: 10 },
+  heading: { fontSize: 18, fontWeight: "700", marginBottom: 10, color: c.text },
 
   cardHeader: {
     flexDirection: "row",
@@ -293,26 +296,26 @@ const styles = StyleSheet.create({
 
   icon: { width: 30, height: 30, marginRight: 10 },
 
-  value: { fontSize: 16, fontWeight: "600" },
-  userNoValue: { letterSpacing: 1, color: "#2563EB" },
+  value: { fontSize: 16, fontWeight: "600", color: c.text },
+  userNoValue: { letterSpacing: 1, color: c.primary },
 
   input: {
     borderBottomWidth: 1,
-    borderColor: INPUT_COLORS.border,
+    borderColor: c.border,
     fontSize: 16,
     padding: 4,
-    color: INPUT_COLORS.text,
+    color: c.text,
     flex: 1,
   },
 
   saveButton: {
-    backgroundColor: "#2563EB",
+    backgroundColor: c.primary,
     padding: 12,
     borderRadius: 8,
     marginTop: 10,
   },
 
-  saveText: { color: "#fff", textAlign: "center" },
+  saveText: { color: c.inverseText, textAlign: "center" },
 
   editIcon: { width: 20, height: 20 },
 

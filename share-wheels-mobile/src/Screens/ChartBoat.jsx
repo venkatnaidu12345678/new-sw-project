@@ -21,7 +21,8 @@ import { ChatListSkeleton } from "../Components/ui/Skeleton";
 import AnimatedLoad from "../Components/ui/AnimatedLoad";
 import ChatMessage from "../Components/ui/ChatMessage";
 import TypingIndicator from "../Components/ui/TypingIndicator";
-import { INPUT_COLORS } from "../theme/inputTheme";
+import { useTheme } from "../context/ThemeContext";
+import { useThemedStyles } from "../theme/useThemedStyles";
 
 const FALLBACK_SUGGESTIONS = [
   "Full account summary",
@@ -33,6 +34,7 @@ const FALLBACK_SUGGESTIONS = [
 ];
 
 const QuickChip = ({ label, onPress, disabled, index }) => {
+  const styles = useThemedStyles(createStyles);
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.9)).current;
 
@@ -69,6 +71,8 @@ const QuickChip = ({ label, onPress, disabled, index }) => {
 };
 
 const ChartBoat = () => {
+  const { input: inputColors, colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
   const listRef = useRef(null);
   const sendScale = useRef(new Animated.Value(1)).current;
@@ -268,7 +272,7 @@ const ChartBoat = () => {
         <View style={[styles.inputRow, { paddingBottom: insets.bottom + 10 }]}>
           <TextInput
             placeholder="Ask about rides, payments, courier..."
-            placeholderTextColor={INPUT_COLORS.placeholder}
+            placeholderTextColor={inputColors.placeholder}
             value={input}
             onChangeText={setInput}
             style={styles.input}
@@ -309,11 +313,12 @@ function getOfflineReply(text) {
 
 export default ChartBoat;
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8FAFC" },
+const createStyles = (c) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.background },
   body: { flex: 1 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
-  loadingText: { marginTop: 12, color: "#64748B", fontSize: 14 },
+  loadingText: { marginTop: 12, color: c.textMuted, fontSize: 14 },
 
   header: {
     flexDirection: "row",
@@ -321,18 +326,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: "#E2E8F0",
-    backgroundColor: "#FFFFFF",
+    borderColor: c.border,
+    backgroundColor: c.surface,
   },
   headerTextWrap: { flex: 1, marginLeft: 4 },
-  headerTitle: { fontSize: 18, fontWeight: "700", color: "#0F172A" },
+  headerTitle: { fontSize: 18, fontWeight: "700", color: c.text },
   adminBanner: {
     fontSize: 11,
-    color: "#64748B",
+    color: c.textMuted,
     marginTop: 4,
     lineHeight: 15,
   },
-  active: { fontSize: 12, color: "#2563EB", marginTop: 4, fontWeight: "500" },
+  active: { fontSize: 12, color: c.primary, marginTop: 4, fontWeight: "500" },
 
   listContent: {
     paddingHorizontal: 14,
@@ -342,13 +347,13 @@ const styles = StyleSheet.create({
 
   typingWrap: { alignSelf: "flex-start", marginVertical: 6 },
   typingBubble: {
-    backgroundColor: "#F1F5F9",
+    backgroundColor: c.surfaceAlt,
     borderRadius: 18,
     borderBottomLeftRadius: 5,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: c.border,
   },
 
   quickWrap: {
@@ -359,19 +364,19 @@ const styles = StyleSheet.create({
   },
   quickBtn: {
     borderWidth: 1,
-    borderColor: "#BFDBFE",
-    backgroundColor: "#FFFFFF",
+    borderColor: c.border,
+    backgroundColor: c.surface,
     borderRadius: 20,
     paddingVertical: 7,
     paddingHorizontal: 13,
     margin: 4,
-    shadowColor: "#3B82F6",
+    shadowColor: c.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
     elevation: 1,
   },
-  quickText: { fontSize: 12, color: "#1D4ED8", fontWeight: "600" },
+  quickText: { fontSize: 12, color: c.primaryText, fontWeight: "600" },
 
   inputRow: {
     flexDirection: "row",
@@ -379,34 +384,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: "#E2E8F0",
-    backgroundColor: "#FFFFFF",
+    borderColor: c.border,
+    backgroundColor: c.surface,
   },
   input: {
     flex: 1,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: c.inputBg,
     borderRadius: 24,
     paddingHorizontal: 18,
     paddingVertical: 11,
-    color: INPUT_COLORS.text,
+    color: c.text,
     fontSize: 15,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: c.border,
   },
   sendBtn: {
-    backgroundColor: "#2563EB",
+    backgroundColor: c.primary,
     width: 46,
     height: 46,
     borderRadius: 23,
     alignItems: "center",
     justifyContent: "center",
     marginLeft: 10,
-    shadowColor: "#2563EB",
+    shadowColor: c.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 4,
   },
   sendBtnDisabled: { opacity: 0.55 },
-  sendIcon: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  sendIcon: { color: c.inverseText, fontSize: 18, fontWeight: "700" },
 });

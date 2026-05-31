@@ -20,4 +20,18 @@ module.exports = {
         otp: req.body.otp,
       })
     ),
+  dropPassenger: async (req, res) =>
+    handle(res, () =>
+      rideVerificationService.markPassengerDropped(req.user, {
+        rideId: req.params.rideId,
+        participantId: req.params.participantId,
+      })
+    ),
+  deliverCourier: async (req, res) =>
+    handle(res, () =>
+      rideVerificationService.markCourierDelivered(req.user, {
+        rideId: req.params.rideId,
+        participantId: req.params.participantId,
+      })
+    ),
 };

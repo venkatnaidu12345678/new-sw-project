@@ -117,7 +117,7 @@ const SignupPage = ({ navigation, triggerAuth }) => {
           await AsyncStorage.setItem("USER_NAME", user.name);
         }
         await requestAppPermissionsOnSignIn();
-        await syncFcmTokenWithBackend();
+        await syncFcmTokenWithBackend({ force: true });
         triggerAuth?.();
       } else {
         setErrors((prev) => ({

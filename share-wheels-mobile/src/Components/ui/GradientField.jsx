@@ -1,39 +1,54 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, StyleSheet } from "react-native";
 import LinearGradient from "react-native-linear-gradient";
 import { LAYOUT } from "../../theme/layout";
+import { useTheme } from "../../context/ThemeContext";
 
-const VARIANTS = {
+const getVariants = (c, isDark) => ({
   from: {
-    border: ["#3B82F6", "#6366F1", "#8B5CF6"],
-    inner: ["#FFFFFF", "#F8FAFF"],
+    border: isDark
+      ? [c.primary, "#6366F1", "#8B5CF6"]
+      : ["#3B82F6", "#6366F1", "#8B5CF6"],
+    inner: isDark
+      ? [c.surface, c.inputBg]
+      : ["#FFFFFF", "#F8FAFF"],
   },
   to: {
-    border: ["#22C55E", "#14B8A6", "#06B6D4"],
-    inner: ["#FFFFFF", "#F0FDF4"],
+    border: isDark
+      ? [c.successText, "#14B8A6", "#06B6D4"]
+      : ["#22C55E", "#14B8A6", "#06B6D4"],
+    inner: isDark
+      ? [c.surface, c.tintGreen]
+      : ["#FFFFFF", "#F0FDF4"],
   },
   date: {
-    border: ["#F59E0B", "#F97316", "#EF4444"],
-    inner: ["#FFFFFF", "#FFFBEB"],
+    border: isDark
+      ? [c.warningText, "#F97316", c.errorText]
+      : ["#F59E0B", "#F97316", "#EF4444"],
+    inner: isDark
+      ? [c.surface, c.tintOrange]
+      : ["#FFFFFF", "#FFFBEB"],
   },
-};
+});
 
 /**
  * Input shell with gradient border (dashboard search fields).
  */
 const GradientField = ({ children, variant = "from", style }) => {
-  const colors = VARIANTS[variant] || VARIANTS.from;
+  const { colors, isDark } = useTheme();
+  const variants = useMemo(() => getVariants(colors, isDark), [colors, isDark]);
+  const fieldColors = variants[variant] || variants.from;
 
   return (
     <View style={[styles.wrap, style]}>
       <LinearGradient
-        colors={colors.border}
+        colors={fieldColors.border}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.border}
       >
         <LinearGradient
-          colors={colors.inner}
+          colors={fieldColors.inner}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={styles.inner}

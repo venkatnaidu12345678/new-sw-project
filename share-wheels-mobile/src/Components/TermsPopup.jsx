@@ -11,13 +11,16 @@ import {
   Pressable,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { userTermsApi } from "../ApiService/AuthApiService"; // ✅ make sure this path is correct
+import { userTermsApi } from "../ApiService/AuthApiService";
 import { getLegalPolicies } from "../ApiService/legalApiService";
+import { useTheme } from "../context/ThemeContext";
+import { useThemedStyles } from "../theme/useThemedStyles";
 
 const TermsPopup = ({ visible = true, onSuccess, setRefresh }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [loading, setLoading] = useState(false);
   const [agreed, setAgreed] = useState(false);
-
   const [termsText, setTermsText] = useState("");
   const [policiesLoading, setPoliciesLoading] = useState(false);
 
@@ -27,14 +30,12 @@ const TermsPopup = ({ visible = true, onSuccess, setRefresh }) => {
       const policies = await getLegalPolicies();
       setTermsText(policies?.terms?.content || policies?.terms?.content || "");
     } catch (e) {
-      // Keep UX stable even if the request fails.
       setTermsText("");
     } finally {
       setPoliciesLoading(false);
     }
   };
 
-  // Load policies when modal becomes visible.
   React.useEffect(() => {
     if (visible) loadTerms();
   }, [visible]);
@@ -58,7 +59,6 @@ const TermsPopup = ({ visible = true, onSuccess, setRefresh }) => {
 
     try {
       setLoading(true);
-
       const token = await AsyncStorage.getItem("token");
 
       if (!token) {
@@ -66,27 +66,16 @@ const TermsPopup = ({ visible = true, onSuccess, setRefresh }) => {
         return;
       }
 
-      // ✅ Correct API call
       const resp = await userTermsApi(token, true);
-
-      console.log("Terms API Response:", resp);
 
       if (resp && resp.success) {
         Alert.alert("Success", "Terms accepted successfully");
-        setRefresh(prev => prev + 1);
-
-        // ✅ notify parent
-        if (onSuccess) {
-          onSuccess();
-        }
+        setRefresh((prev) => prev + 1);
+        if (onSuccess) onSuccess();
       } else {
-        Alert.alert(
-          "Error",
-          resp?.message || "Failed to accept terms. Try again."
-        );
+        Alert.alert("Error", resp?.message || "Failed to accept terms. Try again.");
       }
     } catch (error) {
-      console.log("Terms API Error:", error);
       Alert.alert("Error", "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
@@ -102,7 +91,7 @@ const TermsPopup = ({ visible = true, onSuccess, setRefresh }) => {
           <ScrollView style={styles.scrollContainer}>
             {policiesLoading ? (
               <View style={{ paddingVertical: 20 }}>
-                <ActivityIndicator color="#2563EB" />
+                <ActivityIndicator color={colors.primary} />
               </View>
             ) : (
               renderParagraphs(termsText) || (
@@ -121,11 +110,15 @@ const TermsPopup = ({ visible = true, onSuccess, setRefresh }) => {
           </Pressable>
 
           <TouchableOpacity
-            style={[styles.button, { backgroundColor: agreed ? "#007bff" : "#999" }]}
+            style={[styles.button, !agreed && styles.buttonDisabled]}
             onPress={handleAccept}
             disabled={!agreed || loading}
           >
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Accept & Continue</Text>}
+            {loading ? (
+              <ActivityIndicator color={colors.inverseText} />
+            ) : (
+              <Text style={styles.buttonText}>Accept & Continue</Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -135,18 +128,65 @@ const TermsPopup = ({ visible = true, onSuccess, setRefresh }) => {
 
 export default TermsPopup;
 
-const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
-  container: { width: "90%", height: "75%", backgroundColor: "#fff", borderRadius: 20, padding: 20, justifyContent: "space-between" },
-  heading: { fontSize: 20, fontWeight: "bold", marginBottom: 10, textAlign: "center" },
-  scrollContainer: { flex: 1, marginBottom: 10 },
-  clauseContainer: { marginBottom: 15 },
-  clauseText: { fontSize: 14, color: "#555", lineHeight: 20 },
-  checkboxRow: { flexDirection: "row", alignItems: "center", marginBottom: 15 },
-  checkbox: { width: 22, height: 22, borderWidth: 2, borderColor: "#555", borderRadius: 4, justifyContent: "center", alignItems: "center" },
-  checkboxChecked: { backgroundColor: "#007bff", borderColor: "#007bff" },
-  checkboxTick: { width: 10, height: 10, backgroundColor: "#fff", borderRadius: 2 },
-  checkboxText: { marginLeft: 10, fontSize: 14, color: "#555", flexShrink: 1 },
-  button: { padding: 15, borderRadius: 10, alignItems: "center" },
-  buttonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
-});
+const createStyles = (c) =>
+  StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: c.overlay,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    container: {
+      width: "90%",
+      height: "75%",
+      backgroundColor: c.surface,
+      borderRadius: 20,
+      padding: 20,
+      justifyContent: "space-between",
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    heading: {
+      fontSize: 20,
+      fontWeight: "bold",
+      marginBottom: 10,
+      textAlign: "center",
+      color: c.text,
+    },
+    scrollContainer: { flex: 1, marginBottom: 10 },
+    clauseContainer: { marginBottom: 15 },
+    clauseText: { fontSize: 14, color: c.textSecondary, lineHeight: 20 },
+    checkboxRow: { flexDirection: "row", alignItems: "center", marginBottom: 15 },
+    checkbox: {
+      width: 22,
+      height: 22,
+      borderWidth: 2,
+      borderColor: c.border,
+      borderRadius: 4,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    checkboxChecked: { backgroundColor: c.primary, borderColor: c.primary },
+    checkboxTick: {
+      width: 10,
+      height: 10,
+      backgroundColor: c.inverseText,
+      borderRadius: 2,
+    },
+    checkboxText: {
+      marginLeft: 10,
+      fontSize: 14,
+      color: c.textSecondary,
+      flexShrink: 1,
+    },
+    button: {
+      padding: 15,
+      borderRadius: 10,
+      alignItems: "center",
+      backgroundColor: c.primary,
+    },
+    buttonDisabled: {
+      backgroundColor: c.textMuted,
+    },
+    buttonText: { color: c.inverseText, fontWeight: "bold", fontSize: 16 },
+  });

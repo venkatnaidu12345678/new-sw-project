@@ -5,7 +5,6 @@ import {
   joinRideRoom,
   leaveRideRoom,
 } from "../services/appSocket";
-import { updateRideLocation } from "../ApiService/chatApiServices";
 import {
   startLocationWatch,
   getCachedCoords,
@@ -33,15 +32,13 @@ const emitAndPersist = (rideId, token, latitude, longitude) => {
   const socket = getAppSocket();
   if (socket?.connected) {
     socket.emit("updateLocation", payload);
-  } else {
-    connectAppSocket()
-      .then((s) => {
-        if (s?.connected) s.emit("updateLocation", payload);
-      })
-      .catch(() => {});
+    return;
   }
-
-  updateRideLocation(token, id, latitude, longitude).catch(() => {});
+  connectAppSocket()
+    .then((s) => {
+      if (s?.connected) s.emit("updateLocation", payload);
+    })
+    .catch(() => {});
 };
 
 export const publishLocationOnce = (rideId, token, latitude, longitude) => {

@@ -1,6 +1,10 @@
 /**
  * Normalize fare display across driver rides, passenger seats, and courier deliveries.
  */
+import {
+  passengerCountsTowardEarnings,
+  courierCountsTowardEarnings,
+} from "./participantTripStatus";
 
 export const getPassengerFare = (item) => {
   if (!item) return 0;
@@ -34,17 +38,44 @@ export const getRideDisplayFare = (ride) => {
 
 export const formatRupee = (amount) => `₹${Number(amount ?? 0)}`;
 
-/** Driver earnings from confirmed passengers and couriers on a completed ride */
+/**
+ * Driver earnings: OTP-verified passengers (Dropped) and couriers (Delivered) only.
+ */
 export const getDriverTotalEarnings = (ride) => {
   const passengers = ride?.passengers || [];
   const couriers = ride?.all_deliveries || [];
   const passengerTotal = passengers.reduce(
-    (sum, p) => sum + getPassengerFare(p),
+    (sum, p) =>
+      sum + (passengerCountsTowardEarnings(p) ? getPassengerFare(p) : 0),
     0
   );
   const courierTotal = couriers.reduce(
-    (sum, c) => sum + getCourierFare(c),
+    (sum, c) => sum + (courierCountsTowardEarnings(c) ? getCourierFare(c) : 0),
     0
   );
   return passengerTotal + courierTotal;
+};
+
+/** Pending earnings after OTP but before drop/deliver */
+export const getDriverPendingEarnings = (ride) => {
+  const passengers = ride?.passengers || [];
+  const couriers = ride?.all_deliveries || [];
+  let total = 0;
+  passengers.forEach((p) => {
+    if (
+      p?.isBoardingVerified &&
+      (p?.status || "").toLowerCase() === "picked_up"
+    ) {
+      total += getPassengerFare(p);
+    }
+  });
+  couriers.forEach((c) => {
+    if (
+      c?.isBoardingVerified &&
+      (c?.status || "").toLowerCase() === "picked_up"
+    ) {
+      total += getCourierFare(c);
+    }
+  });
+  return total;
 };

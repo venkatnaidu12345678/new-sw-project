@@ -1,5 +1,6 @@
 import { formatRequestDate, formatSingleDate } from "../Utils";
 import { getPassengerFare } from "./fareUtils";
+import { tripStatusLabel } from "./participantTripStatus";
 
 const fmtDate = (value) => {
   if (!value) return "—";
@@ -27,7 +28,7 @@ export const buildDriverPassengerDetail = (item, rideFrom, rideTo) => ({
   role: "passenger",
   name: item?.userId?.name || "Passenger",
   user: item?.userId,
-  subtitle: [item?.userId?.gender, item?.status].filter(Boolean).join(" · "),
+  subtitle: [item?.userId?.gender, tripStatusLabel(item?.status)].filter(Boolean).join(" · "),
   verified: !!item?.isBoardingVerified,
   route: rideFrom && rideTo ? `${rideFrom} → ${rideTo}` : rideFrom || "",
   status: item?.status || "accepted",
@@ -39,7 +40,7 @@ export const buildDriverPassengerDetail = (item, rideFrom, rideTo) => ({
     { label: "Pickup", value: rideFrom },
     { label: "Drop", value: rideTo },
     { label: "Seats Booked", value: item?.requires_seats || 1 },
-    { label: "Ride Status", value: item?.status },
+    { label: "Trip Status", value: tripStatusLabel(item?.status) },
     { label: "Joined At", value: fmtDateTime(item?.joinedAt) },
     {
       label: "Verification",
@@ -57,7 +58,9 @@ export const buildDriverCourierDetail = (item, rideFrom, rideTo) => {
     role: "courier",
     name: item?.userId?.name || recv?.name || "Courier",
     user: item?.userId,
-    subtitle: [item?.courierNumber, item?.courier_type].filter(Boolean).join(" · "),
+    subtitle: [item?.courierNumber, item?.courier_type, tripStatusLabel(item?.status)]
+      .filter(Boolean)
+      .join(" · "),
     verified: !!item?.isBoardingVerified,
     parcelImage: item?.courier_img,
     route:
@@ -83,6 +86,7 @@ export const buildDriverCourierDetail = (item, rideFrom, rideTo) => {
       { label: "Receiver Alt. Mobile", value: recv?.alternate_mobile },
       { label: "Receiver Address", value: recv?.Address || recv?.address },
       { label: "Assigned At", value: fmtDateTime(item?.assignedAt) },
+      { label: "Trip Status", value: tripStatusLabel(item?.status) },
       {
         label: "Verification",
         value: item?.isBoardingVerified ? "Verified" : "Pending",

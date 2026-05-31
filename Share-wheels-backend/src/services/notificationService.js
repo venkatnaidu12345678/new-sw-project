@@ -50,26 +50,53 @@ const notifyUser = async (userId, { title, body, type = "general", data = {} }) 
     type,
     ...dataPayload,
   };
+
   emitNotificationReceived(uid, socketPayload);
 
   const user = await User.findById(uid).select("fcmToken");
   let pushed = false;
 
+  const pushData = {
+    type,
+    notificationId: doc._id.toString(),
+    ...dataPayload,
+  };
+
   if (user?.fcmToken) {
-    try {
-      const result = await sendPushNotification(user.fcmToken, title, body, {
-        type,
-        notificationId: doc._id.toString(),
-        ...dataPayload,
-      });
-      pushed = !!result?.success;
-      if (result?.invalidToken) {
-        user.fcmToken = undefined;
-        await user.save();
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const result = await sendPushNotification(
+          user.fcmToken,
+          title,
+          body,
+          pushData
+        );
+        if (result?.success) {
+          pushed = true;
+          break;
+        }
+        if (result?.invalidToken) {
+          user.fcmToken = undefined;
+          await user.save();
+          console.warn("[notifyUser] cleared invalid FCM token for user", uid.toString());
+          break;
+        }
+        if (attempt === 0) {
+          await new Promise((r) => setTimeout(r, 300));
+        }
+      } catch (err) {
+        console.warn("[notifyUser] FCM failed:", err.message);
+        if (attempt === 0) {
+          await new Promise((r) => setTimeout(r, 300));
+        }
       }
-    } catch (err) {
-      console.warn("[notifyUser] FCM failed:", err.message);
     }
+  } else {
+    console.warn(
+      "[notifyUser] no FCM token on file for user",
+      uid.toString(),
+      "— in-app + socket only"
+    );
   }
 
   return { saved: true, pushed, notificationId: doc._id };
@@ -104,7 +131,7 @@ const markRead = async (user, notificationId) => {
   const doc = await Notification.findOneAndUpdate(
     { _id: notificationId, userId: user._id },
     { read: true },
-    { new: true }
+    { returnDocument: "after" }
   );
   if (!doc) {
     return { status: 404, body: { success: false, message: "Notification not found" } };

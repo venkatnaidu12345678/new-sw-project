@@ -1,32 +1,68 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { registerFcmTokenApi } from "../ApiService/AuthApiService";
-import { getDeviceToken } from "./FCMService";
+import { getDeviceTokenWithPermission } from "./FCMService";
 
 const FCM_STORAGE_KEY = "FCM_DEVICE_TOKEN";
+const FCM_USER_SYNC_KEY = "FCM_SYNCED_USER_TOKEN";
 
-export async function syncFcmTokenWithBackend() {
+const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const getLoggedInUserId = async () => {
+  try {
+    const raw = await AsyncStorage.getItem("user");
+    if (!raw) return "";
+    const u = JSON.parse(raw);
+    return (u?._id || u?.id || "").toString();
+  } catch {
+    return "";
+  }
+};
+
+/**
+ * Register FCM token with backend — always re-syncs on new user or token change.
+ * @param {{ force?: boolean }} options
+ */
+export async function syncFcmTokenWithBackend(options = {}) {
+  const { force = false } = options;
   const authToken = await AsyncStorage.getItem("token");
   if (!authToken) return null;
 
-  const fcmToken = await getDeviceToken();
-  if (!fcmToken) return null;
+  const userId = await getLoggedInUserId();
+  const fcmToken = await getDeviceTokenWithPermission();
+  if (!fcmToken) {
+    if (__DEV__) console.warn("[FCM] no device token (permission or Firebase)");
+    return null;
+  }
 
-  const cached = await AsyncStorage.getItem(FCM_STORAGE_KEY);
-  if (cached === fcmToken) {
+  const syncKey = `${userId}:${fcmToken}`;
+  const lastSync = await AsyncStorage.getItem(FCM_USER_SYNC_KEY);
+  const cachedToken = await AsyncStorage.getItem(FCM_STORAGE_KEY);
+
+  if (!force && lastSync === syncKey && cachedToken === fcmToken) {
     return fcmToken;
   }
 
-  try {
-    await registerFcmTokenApi(authToken, fcmToken);
-    await AsyncStorage.setItem(FCM_STORAGE_KEY, fcmToken);
-    if (__DEV__) console.log("[FCM] token registered with backend");
-  } catch (e) {
-    console.warn("[FCM] token sync failed:", e.message);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await registerFcmTokenApi(authToken, fcmToken);
+      await AsyncStorage.multiSet([
+        [FCM_STORAGE_KEY, fcmToken],
+        [FCM_USER_SYNC_KEY, syncKey],
+      ]);
+      if (__DEV__) console.log("[FCM] token registered with backend");
+      return fcmToken;
+    } catch (e) {
+      if (attempt === 2) {
+        console.warn("[FCM] token sync failed:", e.message);
+      } else {
+        await delay(400 * (attempt + 1));
+      }
+    }
   }
 
-  return fcmToken;
+  return null;
 }
 
 export async function clearCachedFcmToken() {
-  await AsyncStorage.removeItem(FCM_STORAGE_KEY);
+  await AsyncStorage.multiRemove([FCM_STORAGE_KEY, FCM_USER_SYNC_KEY]);
 }

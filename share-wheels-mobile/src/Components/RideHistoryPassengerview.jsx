@@ -19,8 +19,10 @@ import madhapurIcon from "../assets/madhapuricon.png";
 import kondapurIcon from "../assets/kondapuricon.png";
 import { getRideDisplayFare } from "../Utils/fareUtils";
 import { formatDisplayTime } from "../Utils/dateUtils";
+import { useThemedStyles } from "../theme/useThemedStyles";
 
 const RideHistoryPassengerView = ({ ride, loading }) => {
+  const styles = useThemedStyles(createStyles);
   if (!ride) return null;
 
   const formattedDate =
@@ -53,7 +55,7 @@ const RideHistoryPassengerView = ({ ride, loading }) => {
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 24 }} color="#2563EB" />
+        <ActivityIndicator style={{ marginTop: 24 }} />
       ) : (
       <View style={styles.scrollContent}>
         {/* ROUTE */}
@@ -159,7 +161,8 @@ const InfoCard = ({ icon, label, value, bg, full }) => (
 
 export default RideHistoryPassengerView;
 
-const styles = StyleSheet.create({
+const createStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 4,
@@ -173,25 +176,25 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
+    borderBottomColor: c.border,
     marginBottom: 12,
   },
 
   headerTitle: {
     fontSize: 17,
     fontWeight: "800",
-    color: "#0F172A",
+    color: c.text,
   },
 
   headerSub: {
     fontSize: 12,
-    color: "#64748B",
+    color: c.textMuted,
     marginTop: 2,
     fontWeight: "600",
   },
 
   rolePill: {
-    backgroundColor: "#DCFCE7",
+    backgroundColor: c.successBg,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
@@ -200,16 +203,16 @@ const styles = StyleSheet.create({
   rolePillText: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#166534",
+    color: c.successText,
     textTransform: "capitalize",
   },
 
   routeCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: c.surface,
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#DBEAFE",
+    borderColor: c.border,
     elevation: 2,
     marginBottom: 16,
   },
@@ -228,7 +231,7 @@ const styles = StyleSheet.create({
   routeLine: {
     width: 2,
     height: 32,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: c.border,
     marginLeft: 11,
     marginVertical: 6,
   },
@@ -236,12 +239,12 @@ const styles = StyleSheet.create({
   place: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#111827",
+    color: c.text,
   },
 
   address: {
     fontSize: 12,
-    color: "#6B7280",
+    color: c.textMuted,
     marginTop: 2,
   },
 
@@ -277,29 +280,29 @@ const styles = StyleSheet.create({
 
   infoLabel: {
     fontSize: 12,
-    color: "#6B7280",
+    color: c.textMuted,
     fontWeight: "600",
   },
 
   infoValue: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#111827",
+    color: c.text,
   },
 
   sectionTitle: {
     fontSize: 14,
     fontWeight: "700",
     marginBottom: 10,
-    color: "#111827",
+    color: c.text,
   },
 
   driverCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: c.surface,
     borderWidth: 1,
-    borderColor: "#DBEAFE",
+    borderColor: c.border,
     padding: 14,
     borderRadius: 16,
     marginBottom: 20,
@@ -314,18 +317,18 @@ const styles = StyleSheet.create({
   driverName: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#111827",
+    color: c.text,
   },
 
   driverRole: {
     fontSize: 12,
-    color: "#6B7280",
+    color: c.textMuted,
     marginTop: 2,
   },
 
   driverMeta: {
     fontSize: 12,
-    color: "#475569",
+    color: c.textMuted,
     marginTop: 4,
   },
 
@@ -353,7 +356,7 @@ const styles = StyleSheet.create({
   totalAmount: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: c.inverseText,
     marginTop: 4,
   },
 });

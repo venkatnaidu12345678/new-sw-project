@@ -2,12 +2,21 @@ import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import BackButton from "../BackButton";
 import { LAYOUT } from "../../theme/layout";
+import { useTheme } from "../../context/ThemeContext";
 
 /**
  * Consistent top bar: back button + title.
  * Pass onBack to override navigation.goBack() (e.g. dashboard search mode).
  */
-const ScreenHeader = ({ title, onBack, rightElement, style, backgroundColor }) => {
+const ScreenHeader = ({
+  title,
+  onBack,
+  rightElement,
+  style,
+  backgroundColor,
+  titleColor,
+}) => {
+  const { colors } = useTheme();
   return (
     <View
       style={[
@@ -17,7 +26,10 @@ const ScreenHeader = ({ title, onBack, rightElement, style, backgroundColor }) =
       ]}
     >
       <BackButton onPress={onBack} style={styles.backBtn} />
-      <Text style={styles.title} numberOfLines={1}>
+      <Text
+        style={[styles.title, { color: titleColor || colors.text }]}
+        numberOfLines={1}
+      >
         {title}
       </Text>
       <View style={styles.right}>{rightElement || null}</View>

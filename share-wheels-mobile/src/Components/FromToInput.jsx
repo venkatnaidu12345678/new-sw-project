@@ -17,25 +17,27 @@ import {
 } from "react-native";
 
 import { validateForm, validateLocation } from "../Utils";
-import { INPUT_COLORS } from "../theme/inputTheme";
+import { useTheme } from "../context/ThemeContext";
 import { useLocationSuggestions } from "../hooks/useLocationSuggestions";
 
 const BLUR_HIDE_MS = 280;
 
-const ROUTE_FIELD_STYLE = {
+const getRouteFieldStyle = (c) => ({
   from: {
-    label: { color: "#15803D" },
-    input: { backgroundColor: "#F0FDF4", borderColor: "#BBF7D0" },
-    dot: "#22C55E",
+    label: { color: c.successText },
+    input: { backgroundColor: c.tintGreen, borderColor: c.border },
+    dot: c.successText,
   },
   to: {
-    label: { color: "#C2410C" },
-    input: { backgroundColor: "#FFF7ED", borderColor: "#FED7AA" },
-    dot: "#F97316",
+    label: { color: c.warningText },
+    input: { backgroundColor: c.tintOrange, borderColor: c.border },
+    dot: c.warningText,
   },
-};
+});
 
 const FromToInput = forwardRef(({ fields = [], variant }, ref) => {
+  const { input, colors } = useTheme();
+  const routeFieldStyle = getRouteFieldStyle(colors);
   const isRoute = variant === "route";
   const [dropdownState, setDropdownState] = useState({});
   const [errors, setErrors] = useState({});
@@ -155,7 +157,7 @@ const FromToInput = forwardRef(({ fields = [], variant }, ref) => {
     const state = getFieldState(field.key);
     const error = errors[field.key];
     const showDropdown = state.show && state.data.length > 0;
-    const routeStyle = isRoute ? ROUTE_FIELD_STYLE[field.key] : null;
+    const routeStyle = isRoute ? routeFieldStyle[field.key] : null;
 
     return (
       <View
@@ -166,7 +168,7 @@ const FromToInput = forwardRef(({ fields = [], variant }, ref) => {
           { zIndex: 100 - index },
         ]}
       >
-        <Text style={[styles.label, routeStyle?.label]}>
+        <Text style={[styles.label, { color: colors.text }, routeStyle?.label]}>
           {field.label}
           {field.rules && <Text style={styles.star}> *</Text>}
         </Text>
@@ -177,11 +179,16 @@ const FromToInput = forwardRef(({ fields = [], variant }, ref) => {
           }}
           style={[
             styles.input,
+            {
+              backgroundColor: input.background,
+              borderColor: input.border,
+              color: input.text,
+            },
             routeStyle?.input,
             error && styles.inputError,
           ]}
           placeholder={field.placeholder}
-          placeholderTextColor={INPUT_COLORS.placeholder}
+          placeholderTextColor={input.placeholder}
           value={field.value}
           blurOnSubmit={false}
           onChangeText={(text) => {
@@ -215,7 +222,15 @@ const FromToInput = forwardRef(({ fields = [], variant }, ref) => {
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         {showDropdown ? (
-          <View style={styles.dropdownWrapper}>
+          <View
+            style={[
+              styles.dropdownWrapper,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
+            ]}
+          >
             <ScrollView
               nestedScrollEnabled
               keyboardShouldPersistTaps="always"
@@ -227,13 +242,14 @@ const FromToInput = forwardRef(({ fields = [], variant }, ref) => {
                   key={`${item}-${idx}`}
                   style={({ pressed }) => [
                     styles.item,
-                    pressed && styles.itemPressed,
+                    { borderColor: colors.border },
+                    pressed && { backgroundColor: colors.primaryMuted },
                   ]}
                   onPress={() =>
                     handleSelect(field.key, item, field.onChangeText)
                   }
                 >
-                  <Text style={styles.itemText}>{item}</Text>
+                  <Text style={[styles.itemText, { color: colors.text }]}>{item}</Text>
                 </Pressable>
               ))}
             </ScrollView>
@@ -244,13 +260,13 @@ const FromToInput = forwardRef(({ fields = [], variant }, ref) => {
   };
 
   if (isRoute && fields.length >= 2) {
-    const fromStyle = ROUTE_FIELD_STYLE.from;
-    const toStyle = ROUTE_FIELD_STYLE.to;
+    const fromStyle = routeFieldStyle.from;
+    const toStyle = routeFieldStyle.to;
     return (
       <View style={styles.routeCard}>
         <View style={styles.routeTimeline}>
           <View style={[styles.routeDot, { backgroundColor: fromStyle.dot }]} />
-          <View style={styles.routeLine} />
+          <View style={[styles.routeLine, { backgroundColor: colors.border }]} />
           <View style={[styles.routeDot, { backgroundColor: toStyle.dot }]} />
         </View>
         <View style={styles.routeFields}>
@@ -285,7 +301,6 @@ const styles = StyleSheet.create({
   routeLine: {
     flex: 1,
     width: 2,
-    backgroundColor: "#E2E8F0",
     marginVertical: 6,
     borderRadius: 1,
   },
@@ -302,7 +317,6 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#0b0e13",
     marginBottom: 6,
   },
   star: {
@@ -312,11 +326,8 @@ const styles = StyleSheet.create({
   input: {
     height: 50,
     borderWidth: 1,
-    borderColor: INPUT_COLORS.border,
     borderRadius: 12,
     paddingHorizontal: 14,
-    backgroundColor: INPUT_COLORS.background,
-    color: INPUT_COLORS.text,
     fontSize: 15,
   },
   inputError: {
@@ -332,9 +343,7 @@ const styles = StyleSheet.create({
   dropdownWrapper: {
     marginTop: 4,
     maxHeight: 160,
-    backgroundColor: "#fff",
     borderWidth: 1,
-    borderColor: "#E5E7EB",
     borderRadius: 10,
     elevation: 8,
     shadowColor: "#000",
@@ -348,13 +357,8 @@ const styles = StyleSheet.create({
   item: {
     padding: 14,
     borderBottomWidth: 0.5,
-    borderColor: "#eee",
-  },
-  itemPressed: {
-    backgroundColor: "#F1F5F9",
   },
   itemText: {
     fontSize: 15,
-    color: "#111",
   },
 });

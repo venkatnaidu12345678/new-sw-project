@@ -37,4 +37,45 @@ export const DS = {
   },
 };
 
+/** Map app theme tokens to DS shape for screens that use DS.colors */
+export const themeToDS = (c) => ({
+  ...LAYOUT,
+  colors: {
+    background: c.background,
+    surface: c.surface,
+    text: c.text,
+    textMuted: c.textMuted,
+    border: c.border,
+    primary: c.primary,
+    primaryMuted: c.primaryMuted,
+    success: c.successText,
+    successMuted: c.successBg,
+    warning: c.warningText,
+    warningMuted: c.warningBg,
+    danger: c.errorText,
+    dangerMuted: c.errorBg,
+    driver: c.primary,
+    passenger: c.successText,
+    courier: c.warningText,
+  },
+  font: {
+    ...LAYOUT.font,
+    button: moderateScale(15),
+  },
+  shadow: {
+    card: {
+      shadowColor: c.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.06,
+      shadowRadius: 8,
+      elevation: 2,
+    },
+  },
+  sizes: {
+    ...LAYOUT.sizes,
+    otpBox: scale(48),
+    chipHeight: scale(32),
+  },
+});
+
 export { scale, moderateScale, LAYOUT };

@@ -12,7 +12,10 @@ import {
   registerDeviceForRemoteMessages,
   isDeviceRegisteredForRemoteMessages,
 } from "./firebaseMessaging";
-import { displayForegroundNotification } from "./displayLocalNotification";
+import {
+  displayForegroundNotification,
+  ensureNotificationChannel,
+} from "./displayLocalNotification";
 
 const messaging = () => getFCMMessaging();
 
@@ -81,6 +84,25 @@ export async function getDeviceToken() {
     console.warn("[FCM] getToken failed:", error.message);
     return null;
   }
+}
+
+/** Permission + Android channel, then FCM token (required before backend sync). */
+export async function getDeviceTokenWithPermission() {
+  const permitted = await requestUserPermission();
+  if (!permitted) return null;
+
+  await ensureNotificationChannel();
+
+  if (Platform.OS === "android") {
+    try {
+      const msg = messaging();
+      await registerDeviceForRemoteMessages(msg);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return getDeviceToken();
 }
 
 export function registerForegroundHandler(onMessageCb) {
