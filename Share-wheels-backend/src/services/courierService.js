@@ -13,6 +13,7 @@ const {
 } = require("../utils/socketEmit");
 const { escapeRegex } = require("../utils/rideDateQueryUtils");
 const { expirePendingRideIfStale } = require("./rideExpiryService");
+const { syncLiveTrackingRoster } = require("./rideTrackingService");
 const {
   rejectIfPassengerJoiningAsCourier,
   isUserCourierOnRide,
@@ -395,11 +396,24 @@ const rejectCourier = async (user, { rideId, courierId }) => {
 };
 
 const removeDelivery = async (user, { rideId, courierId }) => {
-  const ride = await Ride.findById(rideId).select("creator");
+  const ride = await Ride.findById(rideId).select("creator all_deliveries");
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
   if (ride.creator.toString() !== user._id.toString()) return { status: 403, body: { success: false, message: "Only driver allowed" } };
-  const result = await Ride.updateOne({ _id: rideId }, { $pull: { all_deliveries: { _id: new mongoose.Types.ObjectId(courierId) } } });
-  if (result.modifiedCount === 0) return { status: 404, body: { success: false, message: "Delivery not found" } };
+  const delivery = ride.all_deliveries?.find(
+    (d) => d._id?.toString() === courierId?.toString()
+  );
+  if (!delivery) return { status: 404, body: { success: false, message: "Delivery not found" } };
+  const courierUserId = delivery.userId?.toString?.() || String(delivery.userId);
+  ride.all_deliveries = ride.all_deliveries.filter(
+    (d) => d._id?.toString() !== courierId.toString()
+  );
+  await ride.save();
+  emitRideParticipantsUpdated(rideId, {
+    action: "courier_removed",
+    courierId: courierId.toString(),
+    userId: courierUserId,
+  });
+  await syncLiveTrackingRoster(rideId);
   return { status: 200, body: { success: true, message: "Removed successfully" } };
 };
 

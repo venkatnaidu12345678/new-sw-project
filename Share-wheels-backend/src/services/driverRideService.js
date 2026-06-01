@@ -23,6 +23,7 @@ const {
   isRidePastStartGracePeriod,
 } = require("../utils/rideScheduleUtils");
 const { expireRide, expirePendingRideIfStale } = require("./rideExpiryService");
+const { syncLiveTrackingRoster } = require("./rideTrackingService");
 const { expireStaleOpenRequests } = require("./requestExpiryService");
 const {
   rejectIfPassengerJoiningAsCourier,
@@ -169,6 +170,11 @@ const removePassenger = async (user, { rideId, passenger_userId }) => {
     type: "ride_removed",
     data: { rideId: ride._id.toString() },
   });
+  emitRideParticipantsUpdated(ride._id, {
+    action: "passenger_removed",
+    userId: passenger_userId.toString(),
+  });
+  await syncLiveTrackingRoster(ride._id);
   return { status: 200, body: { status: true, message: "Passenger removed successfully", availableSeats: ride.availableSeats, passengers: ride.passengers } };
 };
 

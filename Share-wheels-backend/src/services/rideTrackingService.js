@@ -319,6 +319,48 @@ const getTrackingForUser = async (user, rideId) => {
   };
 };
 
+const activeRosterUserIds = (ride) => {
+  const ids = new Set();
+  const add = (ref) => {
+    const s = ref?._id?.toString?.() || ref?.toString?.();
+    if (s) ids.add(s);
+  };
+  add(ride.creator);
+  (ride.passengers || []).forEach((p) => add(p.userId));
+  (ride.all_deliveries || []).forEach((d) => add(d.userId));
+  return ids;
+};
+
+/** After roster change (remove passenger/courier), prune stale map pins and broadcast. */
+const syncLiveTrackingRoster = async (rideId) => {
+  if (!mongoose.Types.ObjectId.isValid(rideId)) return;
+  const ride = await Ride.findById(rideId).select(
+    "creator passengers.userId all_deliveries.userId status liveTracking from to"
+  );
+  if (!ride || ride.status !== "started" || !ride.liveTracking?.isActive) return;
+
+  const allowed = activeRosterUserIds(ride);
+  const pruned = (ride.liveTracking.participantLocations || []).filter((p) => {
+    const uid = p.userId?.toString?.() || String(p.userId || "");
+    return uid && allowed.has(uid);
+  });
+
+  ride.liveTracking.participantLocations = pruned;
+  ride.markModified("liveTracking");
+  await ride.save();
+
+  const payload = {
+    rideId: ride._id.toString(),
+    from: ride.from,
+    to: ride.to,
+    status: ride.status,
+    driverLocation: pickDriverLocation(ride.liveTracking),
+    participantLocations: pruned.map(serializeParticipantRow),
+    path: ride.liveTracking.locationHistory || [],
+  };
+  emitLocation(ride._id, payload);
+};
+
 module.exports = {
   updateDriverLocation: updateParticipantLocation,
   updateParticipantLocation,
@@ -327,4 +369,5 @@ module.exports = {
   getRideTracking,
   getTrackingForUser,
   emitLocation,
+  syncLiveTrackingRoster,
 };
