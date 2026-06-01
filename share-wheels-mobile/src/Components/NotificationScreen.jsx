@@ -132,6 +132,8 @@ const NotificationsScreen = () => {
               {unreadCount > 0
                 ? `${unreadCount} unread update${unreadCount === 1 ? "" : "s"}`
                 : "You're all caught up"}
+              {" · "}
+              Cleared after 24 hours
             </Text>
           </View>
           {unreadCount > 0 ? (
@@ -172,7 +174,10 @@ const NotificationsScreen = () => {
                 />
               </LinearGradient>
               <Text style={styles.emptyTitle}>No notifications yet</Text>
-              <Text style={styles.empty}>Ride updates and alerts will appear here.</Text>
+              <Text style={styles.empty}>
+                Ride updates and alerts will appear here. Older than 24 hours are
+                removed automatically.
+              </Text>
             </View>
           }
           contentContainerStyle={[

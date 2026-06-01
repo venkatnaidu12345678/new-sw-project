@@ -11,6 +11,7 @@ const connectDatabase = () => {
   const { ensureDefaultAdmin } = require("./ensureDefaultAdmin");
   const { ensureUserNos } = require("./ensureUserNos");
   const { startRideExpiryJob } = require("../jobs/rideExpiryJob");
+  const { startNotificationCleanupJob } = require("../jobs/notificationCleanupJob");
 
   mongoose
     .connect(process.env.MONGO_URI)
@@ -20,6 +21,7 @@ const connectDatabase = () => {
         await ensureDefaultAdmin();
         await ensureUserNos();
         startRideExpiryJob();
+        startNotificationCleanupJob();
       } catch (err) {
         console.error("Startup seed error:", err.message);
       }

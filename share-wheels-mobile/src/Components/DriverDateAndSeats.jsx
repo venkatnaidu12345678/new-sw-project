@@ -16,10 +16,13 @@ import {
   formatDisplayDate,
 } from "../Utils/dateUtils";
 import { DS } from "../theme/designSystem";
-import { INPUT_COLORS } from "../theme/inputTheme";
-import { CR } from "../theme/createRideTheme";
+import { getCreateRideTheme } from "../theme/createRideTheme";
+import { useTheme } from "../context/ThemeContext";
 
 const DriverDateAndSeats = ({ rideData, updateRideData, submitted }) => {
+  const { colors, input, isDark } = useTheme();
+  const CR = useMemo(() => getCreateRideTheme(colors), [colors]);
+  const styles = useMemo(() => makeStyles(CR, input), [CR, input]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [touchedDate, setTouchedDate] = useState(false);
   const [touchedSeats, setTouchedSeats] = useState(false);
@@ -158,6 +161,7 @@ const DriverDateAndSeats = ({ rideData, updateRideData, submitted }) => {
           mode="date"
           display={Platform.OS === "ios" ? "spinner" : "calendar"}
           minimumDate={today}
+          themeVariant={isDark ? "dark" : "light"}
           onChange={onDateChange}
         />
       ) : null}
@@ -167,90 +171,91 @@ const DriverDateAndSeats = ({ rideData, updateRideData, submitted }) => {
 
 export default DriverDateAndSeats;
 
-const styles = StyleSheet.create({
-  wrap: {
-    width: "100%",
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: DS.spacing.md,
-  },
-  dateCol: {
-    flex: 1,
-    minWidth: 0,
-  },
-  seatsCol: {
-    width: 118,
-  },
-  blockLabel: {
-    fontSize: DS.font.label,
-    fontWeight: "600",
-    color: CR.text,
-    marginBottom: DS.spacing.sm,
-  },
-  iconWrapDate: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: CR.surface,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dateInput: {
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: DS.sizes.inputHeight,
-    borderWidth: 1,
-    borderColor: CR.date.border,
-    borderRadius: DS.radius.md,
-    paddingHorizontal: DS.spacing.md,
-    paddingVertical: DS.spacing.sm,
-    backgroundColor: CR.date.bg,
-    gap: DS.spacing.sm,
-  },
-  dateText: {
-    flex: 1,
-    fontSize: DS.font.body,
-    fontWeight: "500",
-    color: INPUT_COLORS.text,
-  },
-  placeholder: {
-    color: INPUT_COLORS.placeholder,
-    fontWeight: "400",
-  },
-  seatStepper: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    minHeight: DS.sizes.inputHeight,
-    borderWidth: 1,
-    borderColor: CR.seats.border,
-    borderRadius: DS.radius.md,
-    paddingHorizontal: DS.spacing.sm,
-    backgroundColor: CR.seats.bg,
-  },
-  seatBtn: {
-    padding: 4,
-  },
-  seatCount: {
-    fontSize: DS.font.section,
-    fontWeight: "700",
-    color: CR.seats.icon,
-    minWidth: 28,
-    textAlign: "center",
-  },
-  required: {
-    color: "#EF4444",
-  },
-  errorBorder: {
-    borderColor: "#EF4444",
-    borderWidth: 1.5,
-  },
-  errorText: {
-    color: "#EF4444",
-    fontSize: DS.font.small,
-    marginTop: 6,
-    minHeight: 16,
-  },
-});
+const makeStyles = (CR, input) =>
+  StyleSheet.create({
+    wrap: {
+      width: "100%",
+    },
+    row: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: DS.spacing.md,
+    },
+    dateCol: {
+      flex: 1,
+      minWidth: 0,
+    },
+    seatsCol: {
+      width: 118,
+    },
+    blockLabel: {
+      fontSize: DS.font.label,
+      fontWeight: "600",
+      color: CR.text,
+      marginBottom: DS.spacing.sm,
+    },
+    iconWrapDate: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      backgroundColor: CR.surface,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    dateInput: {
+      flexDirection: "row",
+      alignItems: "center",
+      minHeight: DS.sizes.inputHeight,
+      borderWidth: 1,
+      borderColor: CR.date.border,
+      borderRadius: DS.radius.md,
+      paddingHorizontal: DS.spacing.md,
+      paddingVertical: DS.spacing.sm,
+      backgroundColor: CR.date.bg,
+      gap: DS.spacing.sm,
+    },
+    dateText: {
+      flex: 1,
+      fontSize: DS.font.body,
+      fontWeight: "500",
+      color: input.text,
+    },
+    placeholder: {
+      color: input.placeholder,
+      fontWeight: "400",
+    },
+    seatStepper: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      minHeight: DS.sizes.inputHeight,
+      borderWidth: 1,
+      borderColor: CR.seats.border,
+      borderRadius: DS.radius.md,
+      paddingHorizontal: DS.spacing.sm,
+      backgroundColor: CR.seats.bg,
+    },
+    seatBtn: {
+      padding: 4,
+    },
+    seatCount: {
+      fontSize: DS.font.section,
+      fontWeight: "700",
+      color: CR.text,
+      minWidth: 28,
+      textAlign: "center",
+    },
+    required: {
+      color: "#EF4444",
+    },
+    errorBorder: {
+      borderColor: "#EF4444",
+      borderWidth: 1.5,
+    },
+    errorText: {
+      color: "#EF4444",
+      fontSize: DS.font.small,
+      marginTop: 6,
+      minHeight: 16,
+    },
+  });

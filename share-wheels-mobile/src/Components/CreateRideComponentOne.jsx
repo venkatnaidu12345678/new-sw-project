@@ -18,12 +18,12 @@ import ToggleComponent from "./ToggleComponent";
 import PriceCard from "./PriceCard.jsx";
 import { validators } from "../Utils.js";
 import { DS } from "../theme/designSystem";
-import { INPUT_COLORS } from "../theme/inputTheme";
-import { CR } from "../theme/createRideTheme";
+import { getCreateRideTheme } from "../theme/createRideTheme";
+import { useTheme } from "../context/ThemeContext";
 import { formatDisplayTime } from "../Utils/dateUtils";
 import { assertScheduledStartInFuture } from "../Utils/rideSchedule";
 
-const SectionHeader = ({ icon, iconBg, iconColor, title, subtitle }) => (
+const SectionHeader = ({ icon, iconBg, iconColor, title, subtitle, styles }) => (
   <View style={styles.sectionHeader}>
     <View style={[styles.sectionIconWrap, { backgroundColor: iconBg }]}>
       <Icon name={icon} size={20} color={iconColor} />
@@ -35,7 +35,7 @@ const SectionHeader = ({ icon, iconBg, iconColor, title, subtitle }) => (
   </View>
 );
 
-const FormSection = ({ accent, title, subtitle, children, style }) => (
+const FormSection = ({ accent, title, subtitle, children, style, styles }) => (
   <View style={[styles.section, style]}>
     <SectionHeader
       icon={accent.icon}
@@ -43,6 +43,7 @@ const FormSection = ({ accent, title, subtitle, children, style }) => (
       iconColor={accent.color}
       title={title}
       subtitle={subtitle}
+      styles={styles}
     />
     <View style={[styles.sectionCard, { borderLeftColor: accent.color }]}>
       {children}
@@ -51,8 +52,9 @@ const FormSection = ({ accent, title, subtitle, children, style }) => (
 );
 
 const CreateRideComponentOne = forwardRef(
-  (
+    (
     {
+      theme: themeProp,
       rideData,
       updateRideData,
       submitted,
@@ -62,6 +64,9 @@ const CreateRideComponentOne = forwardRef(
     },
     ref
   ) => {
+    const { colors, input, isDark } = useTheme();
+    const CR = themeProp ?? getCreateRideTheme(colors);
+    const styles = useMemo(() => makeStyles(CR, input), [CR, input]);
     const [showTimePicker, setShowTimePicker] = useState(false);
     const [touchedTime, setTouchedTime] = useState(false);
 
@@ -161,6 +166,7 @@ const CreateRideComponentOne = forwardRef(
             iconColor={CR.sections.vehicle.color}
             title="Your vehicle"
             subtitle="Required before publishing"
+            styles={styles}
           />
           <VehicleInfo
             vehicleInfo={vehicleInfo}
@@ -173,6 +179,7 @@ const CreateRideComponentOne = forwardRef(
           accent={CR.sections.route}
           title="Route"
           subtitle="Where you're travelling"
+          styles={styles}
         >
           <FromToInput ref={ref} fields={fields} variant="route" />
         </FormSection>
@@ -181,6 +188,7 @@ const CreateRideComponentOne = forwardRef(
           accent={CR.sections.schedule}
           title="Schedule"
           subtitle="Date, time, and available seats"
+          styles={styles}
         >
           <Text style={styles.fieldLabel}>
             Start time
@@ -231,6 +239,7 @@ const CreateRideComponentOne = forwardRef(
           accent={CR.sections.pricing}
           title="Pricing"
           subtitle="Amount passengers pay per seat"
+          styles={styles}
         >
           <PriceCard
             rideData={rideData}
@@ -246,6 +255,7 @@ const CreateRideComponentOne = forwardRef(
           title="Extras"
           subtitle="Optional contact & booking settings"
           style={styles.lastSection}
+          styles={styles}
         >
           <Text style={styles.fieldLabel}>Alternate phone</Text>
           <View style={styles.phoneBox}>
@@ -262,7 +272,7 @@ const CreateRideComponentOne = forwardRef(
                 )
               }
               placeholder="Optional 10-digit number"
-              placeholderTextColor={INPUT_COLORS.placeholder}
+              placeholderTextColor={input.placeholder}
               keyboardType="phone-pad"
               maxLength={15}
             />
@@ -273,7 +283,7 @@ const CreateRideComponentOne = forwardRef(
               title="Courier friendly"
               subtitle="Allow small packages on this ride"
               icon={require("../assets/courier.png")}
-              iconBg="#FFF7ED"
+              iconBg={colors.tintOrange}
               value={rideData.CanCarryCourier}
               onChange={(value) => updateRideData("CanCarryCourier", value)}
               compact
@@ -282,7 +292,7 @@ const CreateRideComponentOne = forwardRef(
               title="Quick reserve"
               subtitle="Auto-accept matching seat requests"
               icon={require("../assets/reverse.png")}
-              iconBg="#ECFDF5"
+              iconBg={colors.tintGreen}
               value={rideData.QuickReserve}
               onChange={(value) => updateRideData("QuickReserve", value)}
               compact
@@ -305,6 +315,7 @@ const CreateRideComponentOne = forwardRef(
             })()}
             mode="time"
             display={Platform.OS === "ios" ? "spinner" : "default"}
+            themeVariant={isDark ? "dark" : "light"}
             onChange={onTimeChange}
           />
         ) : null}
@@ -317,7 +328,8 @@ CreateRideComponentOne.displayName = "CreateRideComponentOne";
 
 export default CreateRideComponentOne;
 
-const styles = StyleSheet.create({
+const makeStyles = (CR, input) =>
+  StyleSheet.create({
   root: {
     flex: 1,
   },
@@ -465,10 +477,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     minHeight: DS.sizes.inputHeight,
     borderWidth: 1,
-    borderColor: "#FBCFE8",
+    borderColor: CR.cardBorder,
     borderRadius: DS.radius.md,
     paddingHorizontal: DS.spacing.sm,
-    backgroundColor: "#FDF2F8",
+    backgroundColor: CR.surfaceAlt,
     marginBottom: DS.spacing.md,
   },
   phoneIconWrap: {
@@ -483,7 +495,7 @@ const styles = StyleSheet.create({
   phoneInput: {
     flex: 1,
     fontSize: DS.font.body,
-    color: INPUT_COLORS.text,
+    color: input.text,
     paddingVertical: Platform.OS === "ios" ? 12 : 8,
   },
   toggles: {
@@ -504,4 +516,4 @@ const styles = StyleSheet.create({
     marginTop: 6,
     minHeight: 16,
   },
-});
+  });

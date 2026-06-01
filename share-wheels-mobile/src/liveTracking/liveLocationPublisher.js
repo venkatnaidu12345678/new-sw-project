@@ -29,15 +29,18 @@ const emitAndPersist = (rideId, token, latitude, longitude) => {
     latitude,
     longitude,
   };
+  const tryEmit = (s) => {
+    if (s?.connected) s.emit("updateLocation", payload);
+  };
+
   const socket = getAppSocket();
   if (socket?.connected) {
-    socket.emit("updateLocation", payload);
+    tryEmit(socket);
     return;
   }
+
   connectAppSocket()
-    .then((s) => {
-      if (s?.connected) s.emit("updateLocation", payload);
-    })
+    .then(tryEmit)
     .catch(() => {});
 };
 
@@ -69,6 +72,7 @@ export async function startLiveLocationPublishing({ rideId, token }) {
     emitAndPersist(id, token, coords.latitude, coords.longitude);
   };
 
+  await connectAppSocket();
   await joinRideRoom(id);
 
   watchId = startLocationWatch(publish, () => {});

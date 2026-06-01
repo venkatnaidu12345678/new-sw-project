@@ -4,6 +4,10 @@ const Notification = require("../models/notificationModel");
 const { sendPushNotification } = require("../utils/firebaseAdmin");
 const { emitNotificationReceived } = require("../utils/socketEmit");
 
+const NOTIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
+
+const notificationCutoff = () => new Date(Date.now() - NOTIFICATION_TTL_MS);
+
 const resolveUserId = (userId) => {
   if (!userId) return null;
   if (userId instanceof mongoose.Types.ObjectId) return userId;
@@ -13,6 +17,17 @@ const resolveUserId = (userId) => {
   } catch {
     return null;
   }
+};
+
+/** Delete in-app notifications older than 24 hours (optional per-user scope). */
+const purgeExpiredNotifications = async (userId = null) => {
+  const cutoff = notificationCutoff();
+  const filter = { createdAt: { $lt: cutoff } };
+  if (userId) {
+    filter.userId = resolveUserId(userId) || userId;
+  }
+  const result = await Notification.deleteMany(filter);
+  return result.deletedCount || 0;
 };
 
 /**
@@ -103,14 +118,19 @@ const notifyUser = async (userId, { title, body, type = "general", data = {} }) 
 };
 
 const listForUser = async (user, { limit = 50, skip = 0 } = {}) => {
-  const items = await Notification.find({ userId: user._id })
+  await purgeExpiredNotifications(user._id);
+
+  const cutoff = notificationCutoff();
+  const baseFilter = { userId: user._id, createdAt: { $gte: cutoff } };
+
+  const items = await Notification.find(baseFilter)
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(Math.min(limit, 100))
     .lean();
 
   const unreadCount = await Notification.countDocuments({
-    userId: user._id,
+    ...baseFilter,
     read: false,
   });
 
@@ -156,4 +176,6 @@ module.exports = {
   listForUser,
   markRead,
   markAllRead,
+  purgeExpiredNotifications,
+  NOTIFICATION_TTL_MS,
 };

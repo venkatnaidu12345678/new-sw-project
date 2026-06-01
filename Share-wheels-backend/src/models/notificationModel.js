@@ -19,4 +19,7 @@ const notificationSchema = new mongoose.Schema(
 
 notificationSchema.index({ userId: 1, createdAt: -1 });
 
+/** Auto-remove notifications 24h after creation to limit DB growth */
+notificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 24 * 60 * 60 });
+
 module.exports = mongoose.model("Notification", notificationSchema);

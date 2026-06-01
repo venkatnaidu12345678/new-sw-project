@@ -9,6 +9,8 @@ import {
 } from "react-native";
 import seat from "../assets/seatIcon.png";
 import { LAYOUT } from "../theme/layout";
+import { useTheme } from "../context/ThemeContext";
+import { useThemedStyles } from "../theme/useThemedStyles";
 
 /**
  * Driver control to change total vehicle seats after ride creation.
@@ -20,6 +22,8 @@ const EditableRideSeats = ({
   saving,
   onSave,
 }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const totalCapacity = Math.max(
     1,
     (Number(availableSeats) || 0) + (Number(bookedSeats) || 0)
@@ -47,7 +51,7 @@ const EditableRideSeats = ({
   };
 
   return (
-    <View style={[styles.card, { backgroundColor: "#FFF7ED" }]}>
+    <View style={[styles.card, { backgroundColor: colors.tintOrange }]}>
       <Text style={styles.label}>
         <Image source={seat} style={styles.icon} /> Vehicle seats
       </Text>
@@ -84,7 +88,7 @@ const EditableRideSeats = ({
               disabled={saving}
             >
               {saving ? (
-                <ActivityIndicator color="#fff" size="small" />
+                <ActivityIndicator color={colors.inverseText} size="small" />
               ) : (
                 <Text style={styles.saveText}>Save seats</Text>
               )}
@@ -102,80 +106,81 @@ const EditableRideSeats = ({
 
 export default EditableRideSeats;
 
-const styles = StyleSheet.create({
-  card: {
-    width: "48%",
-    padding: LAYOUT.spacing.md,
-    borderRadius: LAYOUT.radius?.md || 12,
-    minHeight: 120,
-  },
-  label: {
-    fontSize: 13,
-    color: "#64748B",
-    marginBottom: 8,
-  },
-  icon: {
-    width: 14,
-    height: 14,
-    resizeMode: "contain",
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  stepBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stepText: {
-    fontSize: 22,
-    color: "#334155",
-    fontWeight: "600",
-  },
-  countBox: {
-    alignItems: "center",
-    flex: 1,
-  },
-  count: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#0F172A",
-  },
-  countHint: {
-    fontSize: 11,
-    color: "#64748B",
-  },
-  meta: {
-    fontSize: 11,
-    color: "#64748B",
-    marginTop: 8,
-    textAlign: "center",
-  },
-  saveBtn: {
-    marginTop: 10,
-    backgroundColor: "#2563EB",
-    paddingVertical: 8,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  saveBtnDisabled: {
-    opacity: 0.6,
-  },
-  saveText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 13,
-  },
-  value: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#0F172A",
-  },
-});
+const createStyles = (c) =>
+  StyleSheet.create({
+    card: {
+      width: "48%",
+      padding: LAYOUT.spacing.md,
+      borderRadius: LAYOUT.radius?.md || 12,
+      minHeight: 120,
+    },
+    label: {
+      fontSize: 13,
+      color: c.textSecondary,
+      marginBottom: 8,
+    },
+    icon: {
+      width: 14,
+      height: 14,
+      resizeMode: "contain",
+    },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    stepBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 8,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    stepText: {
+      fontSize: 22,
+      color: c.text,
+      fontWeight: "600",
+    },
+    countBox: {
+      alignItems: "center",
+      flex: 1,
+    },
+    count: {
+      fontSize: 22,
+      fontWeight: "700",
+      color: c.text,
+    },
+    countHint: {
+      fontSize: 11,
+      color: c.textMuted,
+    },
+    meta: {
+      fontSize: 11,
+      color: c.textMuted,
+      marginTop: 8,
+      textAlign: "center",
+    },
+    saveBtn: {
+      marginTop: 10,
+      backgroundColor: c.primary,
+      paddingVertical: 8,
+      borderRadius: 8,
+      alignItems: "center",
+    },
+    saveBtnDisabled: {
+      opacity: 0.6,
+    },
+    saveText: {
+      color: c.inverseText,
+      fontWeight: "700",
+      fontSize: 13,
+    },
+    value: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: c.text,
+    },
+  });

@@ -24,7 +24,7 @@ import { LAYOUT, getScrollBottomPadding } from "../theme/layout";
 import { profileData } from "../Navigation/AuthNavigator";
 import { getUpcomingRides, getAllRides } from "../ApiService/ridesApiServices";
 import { getApiErrorMessage } from "../Utils/apiErrors";
-import { RideListSkeleton } from "../Components/ui/Skeleton";
+import { DashboardSkeleton } from "../Components/ui/Skeleton";
 import AnimatedLoad from "../Components/ui/AnimatedLoad";
 import AdPlacement from "../Components/ads/AdPlacement";
 import { useAds } from "../context/AdsContext";
@@ -301,6 +301,10 @@ const DashboardPage = () => {
               currentUserId={myUserId}
             />
           </View>
+        ) : loadingUpcoming && rides.length === 0 ? (
+          <View style={styles.flex}>
+            <DashboardSkeleton />
+          </View>
         ) : (
           <KeyboardAvoidingView
             style={styles.flex}
@@ -314,11 +318,7 @@ const DashboardPage = () => {
               renderItem={renderRide}
               ListHeaderComponent={scrollListHeader}
               ListEmptyComponent={
-                loadingUpcoming ? (
-                  <RideListSkeleton count={2} variant="upcoming" />
-                ) : (
-                  <Text style={styles.emptyRides}>No upcoming rides</Text>
-                )
+                <Text style={styles.emptyRides}>No upcoming rides</Text>
               }
               contentContainerStyle={{
                 paddingBottom: getScrollBottomPadding(insets.bottom, 72),

@@ -1,4 +1,4 @@
-/** Visual tokens for the driver create-ride flow */
+/** Visual tokens for the driver create-ride flow (light defaults). */
 export const CR = {
   gradient: ["#1D4ED8", "#4F46E5", "#7C3AED"],
   gradientSoft: ["#EFF6FF", "#EEF2FF", "#F5F3FF"],
@@ -22,3 +22,38 @@ export const CR = {
   text: "#0F172A",
   textMuted: "#64748B",
 };
+
+/** Theme-aware create-ride tokens. */
+export const getCreateRideTheme = (c) => ({
+  gradient: c.heroGradient,
+  gradientSoft: [c.primaryMuted, c.surfaceAlt, c.background],
+  heroIcon: c.primary,
+  sections: {
+    vehicle: { icon: "car-sport", bg: c.tintBlue, color: c.primary },
+    route: { icon: "navigate", bg: c.tintGreen, color: c.successText },
+    schedule: { icon: "calendar", bg: c.tintBlue, color: c.primaryText },
+    pricing: { icon: "cash", bg: c.warningBg, color: c.warningText },
+    optional: { icon: "options", bg: c.tintPurple, color: "#DB2777" },
+  },
+  from: {
+    dot: c.successText,
+    label: c.successText,
+    inputBg: c.surfaceAlt,
+    border: c.border,
+  },
+  to: {
+    dot: c.warningText,
+    label: c.warningText,
+    inputBg: c.surfaceAlt,
+    border: c.border,
+  },
+  time: { bg: c.surfaceAlt, icon: c.primary, border: c.border },
+  date: { bg: c.surfaceAlt, icon: c.successText, border: c.border },
+  seats: { bg: c.surfaceAlt, icon: c.primaryText, border: c.border },
+  price: { bg: c.warningBg, icon: c.warningText, border: c.warningBorder },
+  surface: c.surface,
+  pageBg: c.background,
+  cardBorder: c.border,
+  text: c.text,
+  textMuted: c.textMuted,
+});

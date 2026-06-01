@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import {
   connectAppSocket,
-  disconnectAppSocket,
+  retainAppSocketSession,
+  releaseAppSocketSession,
   joinRideRoom,
   leaveRideRoom,
   joinEnrouteRoom,
@@ -10,17 +11,15 @@ import {
 } from "../services/appSocket";
 
 /**
- * Keep app socket alive while authenticated.
+ * Keep app socket alive while authenticated. Does not disconnect on screen unmount.
  */
 export function useAppSocketConnection(enabled) {
   useEffect(() => {
-    if (!enabled) {
-      disconnectAppSocket();
-      return undefined;
-    }
-    connectAppSocket();
+    if (!enabled) return undefined;
+    retainAppSocketSession();
+    connectAppSocket().catch(() => {});
     return () => {
-      disconnectAppSocket();
+      releaseAppSocketSession();
     };
   }, [enabled]);
 }

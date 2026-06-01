@@ -65,7 +65,6 @@ import { getRideChatMessages } from "../ApiService/chatApiServices";
 import { profileData } from "../Navigation/AuthNavigator";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LAYOUT, getScrollBottomPadding, scale } from "../theme/layout";
-import { DS, themeToDS } from "../theme/designSystem";
 import { useThemedStyles } from "../theme/useThemedStyles";
 import { useTheme } from "../context/ThemeContext";
 import caricon from "../assets/caricon.png";
@@ -802,31 +801,22 @@ const UpcomingDetailsPage = ({ route }) => {
           </TouchableOpacity>
         )}
 
-        {driverPendingRide && (
-          <TouchableOpacity
-            style={[styles.otpButton, { borderColor: "#DC2626", marginLeft: 8 }]}
-            onPress={openCancelRide}
-          >
-            <Text style={[styles.otpText, { color: "#DC2626" }]}>Cancel ride</Text>
-          </TouchableOpacity>
-        )}
-
         {!isDriver && (
           <TouchableOpacity
-            style={[styles.otpButton, styles.chipWithBadge, { borderColor: "#2563EB", marginLeft: 8 }]}
+            style={[styles.otpButton, styles.chipWithBadge, { borderColor: colors.primary, marginLeft: 8 }]}
             onPress={() => openDirectChat({ userId: rideData?.creator, role: "driver" })}
             disabled={!rideData?.creator}
           >
-            <Text style={[styles.otpText, { color: "#2563EB" }]}>💬 Message</Text>
+            <Text style={[styles.otpText, { color: colors.primary }]}>💬 Message</Text>
             <MessageIndicator count={chatUnread.driver} style={styles.chipBadge} />
           </TouchableOpacity>
         )}
         {isRideStarted && (
           <TouchableOpacity
-            style={[styles.otpButton, { borderColor: "#16A34A", marginLeft: 8 }]}
+            style={[styles.otpButton, { borderColor: colors.successText, marginLeft: 8 }]}
             onPress={openLiveMap}
           >
-            <Text style={[styles.otpText, { color: "#16A34A" }]}>Map</Text>
+            <Text style={[styles.otpText, { color: colors.successText }]}>Map</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -837,35 +827,14 @@ const UpcomingDetailsPage = ({ route }) => {
           padding: 2,
           paddingBottom: getScrollBottomPadding(
             insets.bottom,
-            isDriver ? scale(72) : scale(16)
+            isDriver ? scale(72) : driverPendingRide ? scale(24) : scale(16)
           ),
         }}
         showsVerticalScrollIndicator={false}
       >
 
-        {driverPendingRide && (
-          <View style={styles.driverActionsCard}>
-            <Text style={styles.driverActionsTitle}>Driver actions</Text>
-            <Text style={styles.driverActionsHint}>
-              {canCancelNow
-                ? "You may cancel until 2 hours before the scheduled start."
-                : `Cancel unlocks 2+ hours before start (${formatLeadTimeHint(effectiveRide)}).`}
-            </Text>
-            <TouchableOpacity
-              style={[
-                styles.driverActionBtn,
-                styles.driverActionCancel,
-                !canCancelNow && styles.driverActionMuted,
-              ]}
-              onPress={openCancelRide}
-            >
-              <Text style={styles.driverActionCancelText}>Cancel ride</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
         {isDriver && normalizedRideStatus === "pending" && scheduleEarly && (
-          <View style={[styles.verificationBanner, { backgroundColor: "#EFF6FF" }]}>
+          <View style={[styles.verificationBanner, { backgroundColor: colors.infoBg }]}>
             <Text style={styles.verificationBannerText}>
               Scheduled for {formatScheduledStart(rideData)} — you can start this ride early.
             </Text>
@@ -873,7 +842,7 @@ const UpcomingDetailsPage = ({ route }) => {
         )}
 
         {isDriver && normalizedRideStatus === "pending" && schedulePassed && (
-          <View style={[styles.verificationBanner, { backgroundColor: "#EFF6FF" }]}>
+          <View style={[styles.verificationBanner, { backgroundColor: colors.infoBg }]}>
             <Text style={styles.verificationBannerText}>
               Scheduled time has passed — you can still start this ride now.
             </Text>
@@ -888,8 +857,8 @@ const UpcomingDetailsPage = ({ route }) => {
               styles.verificationBanner,
               {
                 backgroundColor: verification.allVerified
-                  ? DS.colors.successMuted
-                  : DS.colors.warningMuted,
+                  ? colors.successBg
+                  : colors.warningBg,
               },
             ]}
           >
@@ -945,14 +914,14 @@ const UpcomingDetailsPage = ({ route }) => {
         {/* INFO */}
         <View style={styles.infoCards}>
           {!isDriver && displayVehicle ? (
-            <View style={[styles.card, styles.fullWidth, { backgroundColor: "#F3E8FF" }]}>
+            <View style={[styles.card, styles.fullWidth, { backgroundColor: colors.tintPurple }]}>
               <Text style={styles.label}>
                 <Image source={car} style={styles.icon} /> Vehicle
               </Text>
               <VehicleInfoStrip vehicle={displayVehicle} compact />
             </View>
           ) : (
-            <View style={[styles.card, { backgroundColor: "#F3E8FF" }]}>
+            <View style={[styles.card, { backgroundColor: colors.tintPurple }]}>
               <Text style={styles.label}>
                 <Image source={car} style={styles.icon} /> Car Type
               </Text>
@@ -1004,14 +973,14 @@ const UpcomingDetailsPage = ({ route }) => {
             </View>
           )}
 
-          <View style={[styles.card, { backgroundColor: "#F0FDFA" }]}>
+          <View style={[styles.card, { backgroundColor: colors.tintTeal }]}>
             <Text style={styles.label}>
               <Image source={dateIcon} style={styles.icon} /> Date
             </Text>
             <Text style={styles.value}>{convertDate(rideData?.date)}</Text>
           </View>
 
-          <View style={[styles.card, { backgroundColor: "#E0FDF4" }]}>
+          <View style={[styles.card, { backgroundColor: colors.tintGreen }]}>
             <Text style={styles.label}>
               <Image source={priceIcon} style={styles.icon} />{" "}
               {isDriver ? "Price / Seat" : "Your Fare"}
@@ -1020,7 +989,7 @@ const UpcomingDetailsPage = ({ route }) => {
           </View>
 
           <View
-            style={[styles.card, styles.fullWidth, { backgroundColor: "#EFF6FF" }]}
+            style={[styles.card, styles.fullWidth, { backgroundColor: colors.infoBg }]}
           >
             <Text style={styles.label}>
               <Image source={clock} style={styles.icon} /> Start Time
@@ -1045,7 +1014,7 @@ const UpcomingDetailsPage = ({ route }) => {
             <Text style={styles.section}>My Passengers</Text>
 
             {detailsLoading ? (
-              <ActivityIndicator size="large" color="#007AFF" />
+              <ActivityIndicator size="large" color={colors.primary} />
             ) : passengers.length === 0 ? (
               <Text style={styles.emptyList}>No passengers yet</Text>
             ) : (
@@ -1106,7 +1075,7 @@ const UpcomingDetailsPage = ({ route }) => {
             <Text style={styles.section}>My Couriers</Text>
 
             {detailsLoading ? (
-              <ActivityIndicator size="large" color="#007AFF" />
+              <ActivityIndicator size="large" color={colors.primary} />
             ) : couriers.length === 0 ? (
               <Text style={styles.emptyList}>No couriers yet</Text>
             ) : (
@@ -1175,9 +1144,9 @@ const UpcomingDetailsPage = ({ route }) => {
             <Text style={styles.section}>Passenger Requests</Text>
 
             {detailsLoading ? (
-              <ActivityIndicator size="large" color="#007AFF" />
+              <ActivityIndicator size="large" color={colors.primary} />
             ) : passengerRequests.length === 0 ? (
-              <Text style={{ textAlign: "center" }}>No Requests</Text>
+              <Text style={styles.emptyList}>No Requests</Text>
             ) : (
               passengerRequests.map((item, index) => (
                 <View key={index} style={styles.requestCard}>
@@ -1241,9 +1210,9 @@ const UpcomingDetailsPage = ({ route }) => {
             <Text style={styles.section}>Courier Requests</Text>
 
             {detailsLoading ? (
-              <ActivityIndicator size="large" color="#007AFF" />
+              <ActivityIndicator size="large" color={colors.primary} />
             ) : courierRequests.length === 0 ? (
-              <Text style={{ textAlign: "center" }}>
+              <Text style={styles.emptyList}>
                 No Courier Requests
               </Text>
             ) : (
@@ -1353,6 +1322,27 @@ const UpcomingDetailsPage = ({ route }) => {
             ))}
           </>
         )}
+
+        {driverPendingRide ? (
+          <View style={styles.cancelSection}>
+            <Text style={styles.cancelSectionTitle}>Cancel this ride</Text>
+            <Text style={styles.cancelSectionHint}>
+              {canCancelNow
+                ? "You may cancel until 2 hours before the scheduled start. This is a secondary action — use only if you cannot drive."
+                : `Cancel becomes available 2+ hours before start (${formatLeadTimeHint(effectiveRide)}).`}
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.cancelSectionBtn,
+                !canCancelNow && styles.cancelSectionBtnMuted,
+              ]}
+              onPress={openCancelRide}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.cancelSectionBtnText}>Cancel ride</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
       </ScrollView>
 
@@ -1497,7 +1487,6 @@ const UpcomingDetailsPage = ({ route }) => {
 export default UpcomingDetailsPage;
 
 const createStyles = (c) => {
-  const DS = themeToDS(c);
   return StyleSheet.create({
   screen: { flex: 1, backgroundColor: c.background },
 
@@ -1547,6 +1536,41 @@ const createStyles = (c) => {
     fontWeight: "700",
     fontSize: 14,
   },
+  cancelSection: {
+    marginTop: 28,
+    marginBottom: 8,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: c.border,
+  },
+  cancelSectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: c.textMuted,
+    marginBottom: 6,
+  },
+  cancelSectionHint: {
+    fontSize: 12,
+    color: c.textMuted,
+    lineHeight: 18,
+    marginBottom: 14,
+  },
+  cancelSectionBtn: {
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: c.errorBorder,
+    backgroundColor: c.surface,
+  },
+  cancelSectionBtnMuted: {
+    opacity: 0.5,
+  },
+  cancelSectionBtnText: {
+    color: c.errorText,
+    fontWeight: "600",
+    fontSize: 15,
+  },
   chipWithBadge: {
     position: "relative",
     paddingRight: 14,
@@ -1572,11 +1596,11 @@ const createStyles = (c) => {
   },
   verificationBannerText: {
     fontSize: LAYOUT.font.label,
-    color: DS.colors.text,
+    color: c.text,
     lineHeight: scale(20),
   },
   boardingCard: {
-    backgroundColor: DS.colors.primaryMuted,
+    backgroundColor: c.primaryMuted,
     padding: LAYOUT.spacing.md,
     borderRadius: LAYOUT.radius.md,
     marginBottom: LAYOUT.spacing.md,
@@ -1585,30 +1609,30 @@ const createStyles = (c) => {
     fontWeight: "700",
     fontSize: LAYOUT.font.section,
     marginBottom: LAYOUT.spacing.sm,
-    color: DS.colors.text,
+    color: c.text,
   },
   boardingLine: {
     fontSize: LAYOUT.font.body,
-    color: DS.colors.textMuted,
+    color: c.textMuted,
     marginBottom: LAYOUT.spacing.xs,
   },
   boardingHighlight: {
     fontWeight: "700",
-    color: DS.colors.primary,
+    color: c.primary,
     letterSpacing: 1,
   },
   boardingHint: {
     marginTop: LAYOUT.spacing.sm,
     fontSize: LAYOUT.font.small,
-    color: DS.colors.textMuted,
+    color: c.textMuted,
   },
   userNoText: {
     fontSize: LAYOUT.font.small,
-    color: DS.colors.textMuted,
+    color: c.textMuted,
     marginTop: 2,
   },
   verifyChip: {
-    backgroundColor: DS.colors.primary,
+    backgroundColor: c.primary,
     paddingHorizontal: LAYOUT.spacing.sm,
     paddingVertical: 4,
     borderRadius: LAYOUT.radius.sm,
@@ -1627,27 +1651,27 @@ const createStyles = (c) => {
     fontSize: LAYOUT.font.label,
     fontWeight: "600",
     marginBottom: LAYOUT.spacing.sm,
-    color: DS.colors.text,
+    color: c.text,
   },
   participantChip: {
     padding: LAYOUT.spacing.sm,
     borderRadius: LAYOUT.radius.sm,
     borderWidth: 1,
-    borderColor: DS.colors.border,
+    borderColor: c.border,
     marginBottom: LAYOUT.spacing.xs,
-    backgroundColor: DS.colors.surface,
+    backgroundColor: c.surface,
   },
   participantChipActive: {
-    borderColor: DS.colors.primary,
-    backgroundColor: DS.colors.primaryMuted,
+    borderColor: c.primary,
+    backgroundColor: c.primaryMuted,
   },
   participantChipDone: {
-    borderColor: DS.colors.success,
-    backgroundColor: DS.colors.successMuted,
+    borderColor: c.successText,
+    backgroundColor: c.successBg,
   },
   participantChipText: {
     fontSize: LAYOUT.font.small,
-    color: DS.colors.text,
+    color: c.text,
   },
   participantDetailsWrap: {
     paddingTop: 6,
@@ -1720,9 +1744,26 @@ const createStyles = (c) => {
 
   fullWidth: { width: "100%" },
 
-  label: { fontSize: 13, fontWeight: "600", marginBottom: 6 },
+  label: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 6,
+    color: c.textSecondary,
+  },
 
-  value: { fontSize: 15, fontWeight: "700" },
+  value: { fontSize: 15, fontWeight: "700", color: c.text },
+
+  name: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: c.text,
+    marginBottom: 4,
+  },
+
+  pickup: {
+    fontSize: 13,
+    color: c.textMuted,
+  },
   buttonRow: {
     flexDirection: "row",
     marginTop: 10,
@@ -1830,7 +1871,7 @@ const createStyles = (c) => {
 
   carIcon: { width: 20, height: 20, marginBottom: 4 },
 
-  priceText: { fontSize: 15, fontWeight: "600" },
+  priceText: { fontSize: 15, fontWeight: "600", color: c.text },
 
   myActions: { flexDirection: "row", marginTop: 10 },
 
@@ -1891,17 +1932,17 @@ const createStyles = (c) => {
     width: 45,
     height: 45,
     borderRadius: 22,
-    backgroundColor: "#D1D5DB",
+    backgroundColor: c.surfaceAlt,
     marginRight: 10,
   },
 
-  requestName: { fontSize: 15, fontWeight: "600" },
+  requestName: { fontSize: 15, fontWeight: "600", color: c.text },
 
   requestSub: { fontSize: 12, color: c.textMuted, marginTop: 2 },
 
   requestPickup: { fontSize: 11, color: c.textMuted, marginTop: 2 },
 
-  requestPrice: { fontSize: 14, fontWeight: "600" },
+  requestPrice: { fontSize: 14, fontWeight: "600", color: c.text },
 
   requestBtnRow: { flexDirection: "row", marginTop: 12 },
 
@@ -1947,12 +1988,13 @@ const createStyles = (c) => {
     fontSize: 14,
     fontWeight: "600",
     marginLeft: 6,
+    color: c.text,
   },
   participantListScroll: {
     maxHeight: scale(300),
     marginBottom: LAYOUT.spacing.md,
     borderWidth: 1,
-    borderColor: DS.colors.border,
+    borderColor: c.border,
     borderRadius: LAYOUT.radius?.lg || 14,
     backgroundColor: c.surfaceAlt,
   },
@@ -1962,7 +2004,7 @@ const createStyles = (c) => {
   },
   emptyList: {
     textAlign: "center",
-    color: DS.colors.textMuted,
+    color: c.textMuted,
     marginBottom: LAYOUT.spacing.md,
     fontSize: 14,
   },

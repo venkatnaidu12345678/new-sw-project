@@ -1,18 +1,92 @@
+import { AppState } from "react-native";
 import { io } from "socket.io-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { baseUrl } from "../Config";
 
 let socket = null;
 let connectPromise = null;
+/** Keeps socket alive while user is signed in (AuthNavigator). */
+let sessionRetainCount = 0;
 const listeners = new Map();
+/** rideId -> subscriber count */
 const rideRoomRefs = new Map();
-const enrouteRoomRefs = new Map();
+/** enrouteKey -> { count, payload } */
+const enrouteRooms = new Map();
 
 const getSocketUrl = () => baseUrl.replace(/\/$/, "");
+
+let appStateHookInstalled = false;
+
+const ensureAppStateReconnect = () => {
+  if (appStateHookInstalled) return;
+  appStateHookInstalled = true;
+  AppState.addEventListener("change", (state) => {
+    if (state === "active" && socket && !socket.connected) {
+      connectAppSocket().catch(() => {});
+    }
+  });
+};
+
+const rejoinAllRooms = () => {
+  if (!socket?.connected) return;
+
+  rideRoomRefs.forEach((count, id) => {
+    if (count > 0) socket.emit("joinRide", id);
+  });
+
+  enrouteRooms.forEach(({ count, payload }) => {
+    if (count > 0 && payload?.from && payload?.to) {
+      socket.emit("joinEnroute", payload);
+    }
+  });
+};
+
+const attachPersistentHandlers = (s) => {
+  if (s.__swHandlersAttached) return;
+  s.__swHandlersAttached = true;
+
+  s.on("connect", async () => {
+    const t = await AsyncStorage.getItem("token");
+    if (t) s.auth = { token: t };
+    rejoinAllRooms();
+    if (__DEV__) console.log("[socket] connected", s.id);
+  });
+
+  s.on("disconnect", (reason) => {
+    if (__DEV__) console.log("[socket] disconnected", reason);
+  });
+
+  s.on("connect_error", (err) => {
+    if (__DEV__) console.warn("[socket] connect_error", err?.message);
+  });
+
+  s.io?.on("reconnect", async () => {
+    const t = await AsyncStorage.getItem("token");
+    if (t) s.auth = { token: t };
+    rejoinAllRooms();
+    if (__DEV__) console.log("[socket] reconnected");
+  });
+};
+
+const createSocket = (token) => {
+  const s = io(getSocketUrl(), {
+    auth: { token },
+    transports: ["websocket", "polling"],
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 8000,
+    timeout: 25000,
+  });
+  attachPersistentHandlers(s);
+  return s;
+};
 
 export async function connectAppSocket() {
   const token = await AsyncStorage.getItem("token");
   if (!token) return null;
+
+  ensureAppStateReconnect();
 
   if (socket?.connected) return socket;
 
@@ -20,63 +94,57 @@ export async function connectAppSocket() {
 
   connectPromise = new Promise((resolve) => {
     if (!socket) {
-      socket = io(getSocketUrl(), {
-        auth: { token },
-        transports: ["websocket"],
-        reconnection: true,
-        reconnectionAttempts: 10,
-        reconnectionDelay: 1000,
-      });
+      socket = createSocket(token);
+    } else {
+      socket.auth = { token };
+    }
 
-      socket.on("connect", () => {
-        if (__DEV__) console.log("[socket] connected", socket.id);
-      });
+    const finish = (s) => {
+      connectPromise = null;
+      resolve(s);
+    };
 
-      socket.on("disconnect", (reason) => {
-        if (__DEV__) console.log("[socket] disconnected", reason);
-      });
-
-      socket.on("connect_error", (err) => {
-        if (__DEV__) console.warn("[socket] connect_error", err?.message);
-      });
-
-      socket.io.on("reconnect", async () => {
-        const t = await AsyncStorage.getItem("token");
-        if (t && socket) {
-          socket.auth = { token: t };
-        }
-      });
-
-      socket.on("connect", async () => {
-        const t = await AsyncStorage.getItem("token");
-        if (t && socket) socket.auth = { token: t };
-      });
+    if (socket.connected) {
+      finish(socket);
+      return;
     }
 
     const onConnect = () => {
       socket.off("connect", onConnect);
-      connectPromise = null;
-      resolve(socket);
+      finish(socket);
     };
 
-    if (socket.connected) {
-      connectPromise = null;
-      resolve(socket);
-      return;
-    }
-
     socket.on("connect", onConnect);
-    socket.connect();
+    if (!socket.active) {
+      socket.connect();
+    }
   });
 
   return connectPromise;
 }
 
+/**
+ * Call while authenticated so navigation / screen unmount does not tear down the socket.
+ */
+export function retainAppSocketSession() {
+  sessionRetainCount += 1;
+  connectAppSocket().catch(() => {});
+}
+
+export function releaseAppSocketSession() {
+  sessionRetainCount = Math.max(0, sessionRetainCount - 1);
+}
+
+/**
+ * Full teardown — logout only.
+ */
 export function disconnectAppSocket() {
   connectPromise = null;
+  sessionRetainCount = 0;
   rideRoomRefs.clear();
-  enrouteRoomRefs.clear();
+  enrouteRooms.clear();
   if (socket) {
+    socket.__swHandlersAttached = false;
     socket.removeAllListeners();
     socket.disconnect();
     socket = null;
@@ -103,7 +171,7 @@ export async function joinRideRoom(rideId) {
   if (!id) return null;
   bumpRef(rideRoomRefs, id);
   const s = await connectAppSocket();
-  if (s) s.emit("joinRide", id);
+  if (s?.connected) s.emit("joinRide", id);
   return s;
 }
 
@@ -118,25 +186,36 @@ export function leaveRideRoom(rideId) {
 const enrouteKey = ({ from, to, date }) =>
   `${from}|${to}|${date ? new Date(date).toISOString().split("T")[0] : "any"}`;
 
-export async function joinEnrouteRoom({ from, to, date }) {
+export async function joinEnrouteRoom(payload) {
+  const { from, to, date } = payload || {};
   if (!from || !to) return null;
   const key = enrouteKey({ from, to, date });
-  bumpRef(enrouteRoomRefs, key);
+  const existing = enrouteRooms.get(key);
+  if (existing) {
+    existing.count += 1;
+  } else {
+    enrouteRooms.set(key, { count: 1, payload: { from, to, date } });
+  }
   const s = await connectAppSocket();
-  if (s) s.emit("joinEnroute", { from, to, date });
+  if (s?.connected) s.emit("joinEnroute", { from, to, date });
   return s;
 }
 
-export function leaveEnrouteRoom({ from, to, date }) {
+export function leaveEnrouteRoom(payload) {
+  const { from, to, date } = payload || {};
   if (!from || !to || !socket) return;
   const key = enrouteKey({ from, to, date });
-  if (dropRef(enrouteRoomRefs, key)) {
+  const entry = enrouteRooms.get(key);
+  if (!entry) return;
+  entry.count -= 1;
+  if (entry.count <= 0) {
+    enrouteRooms.delete(key);
     socket.emit("leaveEnroute", { from, to, date });
   }
 }
 
 /**
- * Subscribe to a socket event. Returns unsubscribe function.
+ * Subscribe to a socket event. Returns unsubscribe function (does not disconnect socket).
  */
 export async function subscribeSocketEvent(event, handler) {
   const s = await connectAppSocket();
@@ -155,4 +234,8 @@ export async function subscribeSocketEvent(event, handler) {
 
 export function getAppSocket() {
   return socket;
+}
+
+export function isAppSocketConnected() {
+  return !!socket?.connected;
 }

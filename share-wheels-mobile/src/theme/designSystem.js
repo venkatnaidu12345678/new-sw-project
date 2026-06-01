@@ -44,6 +44,7 @@ export const themeToDS = (c) => ({
     background: c.background,
     surface: c.surface,
     text: c.text,
+    textSecondary: c.textSecondary,
     textMuted: c.textMuted,
     border: c.border,
     primary: c.primary,

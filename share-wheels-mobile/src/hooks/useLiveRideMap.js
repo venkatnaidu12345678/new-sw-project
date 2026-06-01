@@ -4,6 +4,7 @@ import { getRideTracking } from "../ApiService/chatApiServices";
 import {
   connectAppSocket,
   joinRideRoom,
+  leaveRideRoom,
   subscribeSocketEvent,
 } from "../services/appSocket";
 import {
@@ -157,6 +158,7 @@ export function useLiveRideMap({
       } catch {
         /* ignore */
       }
+      leaveRideRoom(rid);
       setSocketLive(false);
       bootstrapped.current = false;
       trackingFpRef.current = "";

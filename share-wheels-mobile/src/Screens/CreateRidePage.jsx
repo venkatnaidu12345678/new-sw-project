@@ -14,13 +14,16 @@ import { profileData } from "../Navigation/AuthNavigator";
 import { validatePrice, validateSeats } from "../Utils";
 import { assertScheduledStartInFuture } from "../Utils/rideSchedule";
 import { DS } from "../theme/designSystem";
-import { CR } from "../theme/createRideTheme";
+import { getCreateRideTheme } from "../theme/createRideTheme";
+import { useTheme } from "../context/ThemeContext";
 
 const hasCompleteVehicle = (info) =>
   !!(info?.vehicleCompany?.trim() && info?.vehicleModel?.trim());
 
 const CreateRidePage = () => {
   const navigation = useNavigation();
+  const { colors } = useTheme();
+  const CR = getCreateRideTheme(colors);
   const formRef = useRef(null);
   const { setRefreshUpcomingrides, ProfileDetails, SetProfileDetails } =
     profileData();
@@ -190,6 +193,7 @@ const CreateRidePage = () => {
       >
         <CreateRideComponentOne
           ref={formRef}
+          theme={CR}
           rideData={rideData}
           updateRideData={updateRideData}
           submitted={submitted}
