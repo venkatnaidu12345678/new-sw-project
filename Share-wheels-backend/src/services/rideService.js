@@ -31,6 +31,7 @@ const {
 } = require("../utils/socketEmit");
 const { toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
 const { expireStalePendingRides, expirePendingRideIfStale } = require("./rideExpiryService");
+const { expireStaleOpenRequests } = require("./requestExpiryService");
 const { rejectIfCourierJoiningAsPassenger } = require("../utils/rideParticipantRules");
 const { normalizeStartTimeForStorage } = require("../utils/rideScheduleUtils");
 
@@ -912,6 +913,7 @@ const routeKey = (from, to) =>
   `${String(from || "").trim().toLowerCase()}|${String(to || "").trim().toLowerCase()}`;
 
 const buildMyPassengerRequests = async (user) => {
+  await expireStaleOpenRequests();
   const userId = new mongoose.Types.ObjectId(user._id);
 
   const passengerData = await PassengerRide.find({
@@ -970,6 +972,7 @@ const buildMyPassengerRequests = async (user) => {
 };
 
 const buildMyCourierRequests = async (user) => {
+  await expireStaleOpenRequests();
   const userId = new mongoose.Types.ObjectId(user._id);
 
   const courierRequestsData = await Courier.find({

@@ -14,6 +14,7 @@ const {
   emitEnrouteRequestRemoved,
 } = require("../utils/socketEmit");
 const { rejectIfCourierJoiningAsPassenger } = require("../utils/rideParticipantRules");
+const { expireStalePassengerRequests } = require("./requestExpiryService");
 
 const createPassengerRequest = async (user, { from, to, ride_need_date, seats_needed, date, luggage_included, amount_will }) => {
   if (!from || !to || !ride_need_date || !seats_needed) {
@@ -47,6 +48,7 @@ const createPassengerRequest = async (user, { from, to, ride_need_date, seats_ne
 };
 
 const getOpenRequests = async (user) => {
+  await expireStalePassengerRequests();
   const driverRides = await Ride.find({ creator: user._id });
   if (!driverRides || driverRides.length === 0) return { status: 200, body: [] };
 
@@ -93,6 +95,9 @@ const pickPassenger = async (user, { passenger_rideId, rideId }) => {
   const passengerRide = await PassengerRide.findById(passenger_rideId);
   if (!passengerRide) return { status: 404, body: { message: "Passenger not found" } };
   if (passengerRide.creator.toString() === user._id.toString()) return { status: 400, body: { message: "You cannot pick your own request" } };
+  if (passengerRide.status === "expired") {
+    return { status: 400, body: { message: "This passenger request has expired" } };
+  }
   if (passengerRide.status !== "pending") return { status: 400, body: { message: "Passenger already picked" } };
   const ride = await Ride.findById(rideId);
   if (!ride) return { status: 404, body: { message: "Ride not found" } };

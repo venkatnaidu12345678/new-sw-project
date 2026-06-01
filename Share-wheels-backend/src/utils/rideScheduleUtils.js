@@ -120,7 +120,8 @@ const isRideScheduledTimeFuture = (ride) => {
 const canStartOutsideSchedule = (ride) =>
   isRideScheduledTimePassed(ride) || isRideScheduledTimeFuture(ride);
 
-const RIDE_START_GRACE_MS = 6 * 60 * 60 * 1000;
+/** Pending rides expire if not started within 2 hours of scheduled start. */
+const RIDE_START_GRACE_MS = 2 * 60 * 60 * 1000;
 
 /** Driver cancel/postpone must be requested at least this long before scheduled start. */
 const DRIVER_ACTION_MIN_LEAD_MS = 2 * 60 * 60 * 1000;
@@ -179,7 +180,7 @@ const applyScheduledStartToRide = (ride, scheduledStart) => {
   ride.startTime = formatStartTimeHHmm(scheduledStart);
 };
 
-/** Scheduled start + grace window (default 6h). */
+/** Scheduled start + grace window (default 2h). */
 const getRideStartGraceDeadline = (ride, graceMs = RIDE_START_GRACE_MS) => {
   const start = parseRideScheduledStart(ride);
   if (!start || Number.isNaN(start.getTime())) return null;
@@ -187,7 +188,7 @@ const getRideStartGraceDeadline = (ride, graceMs = RIDE_START_GRACE_MS) => {
 };
 
 /**
- * Pending rides expire only after scheduled start + 6h (never while still in the future).
+ * Pending rides expire only after scheduled start + grace window (never while still in the future).
  */
 const isRidePastStartGracePeriod = (ride, graceMs = RIDE_START_GRACE_MS) => {
   if (ride?.status !== "pending") return false;

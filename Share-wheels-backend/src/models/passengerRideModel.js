@@ -23,7 +23,14 @@ const passengerRideSchema = new mongoose.Schema(
     assigned_to: assignmentSchema,
     status: {
       type: String,
-      enum: ["pending", "aisgned_passenger", "in_car", "ride_finished", "cancelled"],
+      enum: [
+        "pending",
+        "aisgned_passenger",
+        "in_car",
+        "ride_finished",
+        "cancelled",
+        "expired",
+      ],
       default: "pending",
     },
     date: { type: Date, required: true },

@@ -23,6 +23,7 @@ const {
   isRidePastStartGracePeriod,
 } = require("../utils/rideScheduleUtils");
 const { expireRide, expirePendingRideIfStale } = require("./rideExpiryService");
+const { expireStaleOpenRequests } = require("./requestExpiryService");
 const {
   rejectIfPassengerJoiningAsCourier,
   rejectIfCourierJoiningAsPassenger,
@@ -188,7 +189,7 @@ const startRide = async (user, { rideId }) => {
         body: {
           success: false,
           message:
-            "This ride has expired because it was not started within 6 hours of the scheduled time",
+            "This ride has expired because it was not started within 2 hours of the scheduled time",
         },
       };
     }
@@ -285,6 +286,8 @@ const enrouteRequests = async (user, { from, to, date, rideId }) => {
   if (!from || !to || !date) {
     return { status: 400, body: { success: false, message: "from, to and date are required" } };
   }
+
+  await expireStaleOpenRequests();
 
   const bounds = getRideDayBounds(date);
   if (!bounds) {

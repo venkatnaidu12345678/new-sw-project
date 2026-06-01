@@ -30,6 +30,7 @@ const courierRequestSchema = new mongoose.Schema(
         "in_transit",
         "delivered",
         "cancelled",
+        "expired",
       ],
       default: "pending",
     },

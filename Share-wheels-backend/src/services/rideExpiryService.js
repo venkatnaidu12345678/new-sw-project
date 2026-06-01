@@ -5,7 +5,7 @@ const { notifyUser } = require("./notificationService");
 const { emitRideParticipantsUpdated } = require("../utils/socketEmit");
 
 const EXPIRE_REASON =
-  "Ride expired: driver did not start within 6 hours of the scheduled time";
+  "Ride expired: driver did not start within 2 hours of the scheduled time";
 
 const refIdStr = (ref) =>
   ref?._id?.toString?.() || ref?.toString?.() || "";
@@ -57,8 +57,8 @@ const expireRide = async (rideInput) => {
         title: "Ride expired",
         body:
           uid === driverId
-            ? `Your scheduled ride (${route}) expired because it was not started within 6 hours.`
-            : `Ride (${route}) expired because the driver did not start within 6 hours of the scheduled time.`,
+            ? `Your scheduled ride (${route}) expired because it was not started within 2 hours.`
+            : `Ride (${route}) expired because the driver did not start within 2 hours of the scheduled time.`,
         type: "ride_expired",
         data: { rideId: ride._id.toString() },
       })
@@ -73,7 +73,7 @@ const expireRide = async (rideInput) => {
   return true;
 };
 
-/** Mark pending rides as expired when scheduled start + 6h has passed without a start. */
+/** Mark pending rides as expired when scheduled start + grace window has passed without a start. */
 const expireStalePendingRides = async () => {
   const candidates = await Ride.find({ status: "pending" }).lean();
   let expiredCount = 0;
@@ -85,7 +85,7 @@ const expireStalePendingRides = async () => {
   return expiredCount;
 };
 
-/** Expire one pending ride if past the 6h grace window; returns updated status. */
+/** Expire one pending ride if past the grace window; returns updated status. */
 const expirePendingRideIfStale = async (rideInput) => {
   if (!rideInput) return { expired: false, ride: null };
   const ride =
