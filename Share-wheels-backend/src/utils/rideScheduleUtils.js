@@ -14,12 +14,38 @@ const getUtcCalendarParts = (dateValue) => {
   };
 };
 
-const scheduledStartFromParts = (parts, hours, minutes, seconds = 0, millis = 0) =>
-  new Date(parts.year, parts.month, parts.day, hours, minutes, seconds, millis);
+const toFiniteNumber = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+
+/**
+ * Ride-local timezone offset in minutes from UTC.
+ * Default is IST (+05:30) so schedule logic remains stable even if server runs in UTC.
+ * Override via env (e.g. RIDE_TZ_OFFSET_MINUTES=330).
+ */
+const RIDE_TZ_OFFSET_MINUTES = (() => {
+  const configured = toFiniteNumber(process.env.RIDE_TZ_OFFSET_MINUTES);
+  if (configured !== null) return configured;
+  return 330;
+})();
+
+const RIDE_TZ_OFFSET_MS = RIDE_TZ_OFFSET_MINUTES * 60 * 1000;
+
+const shiftToRideTimezone = (date) => new Date(date.getTime() + RIDE_TZ_OFFSET_MS);
+
+const shiftFromRideTimezoneToUtc = (date) =>
+  new Date(date.getTime() - RIDE_TZ_OFFSET_MS);
+
+const scheduledStartFromParts = (parts, hours, minutes, seconds = 0, millis = 0) => {
+  const utcMs = Date.UTC(parts.year, parts.month, parts.day, hours, minutes, seconds, millis);
+  return new Date(utcMs - RIDE_TZ_OFFSET_MS);
+};
 
 const formatStartTimeHHmm = (date) => {
-  const h = date.getHours();
-  const m = date.getMinutes();
+  const rideLocal = shiftToRideTimezone(date);
+  const h = rideLocal.getUTCHours();
+  const m = rideLocal.getUTCMinutes();
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 };
 
@@ -47,7 +73,14 @@ const normalizeStartTimeForStorage = (rideDate, startTime) => {
     ) {
       return formatStartTimeHHmm(iso);
     }
-    return formatStartTimeHHmm(scheduledStartFromParts(parts, iso.getHours(), iso.getMinutes()));
+    const rideLocalIso = shiftToRideTimezone(iso);
+    return formatStartTimeHHmm(
+      scheduledStartFromParts(
+        parts,
+        rideLocalIso.getUTCHours(),
+        rideLocalIso.getUTCMinutes()
+      )
+    );
   }
 
   return raw;
@@ -86,18 +119,24 @@ const parseRideScheduledStart = (ride) => {
       ) {
         return iso;
       }
-      return scheduledStartFromParts(parts, iso.getHours(), iso.getMinutes());
+      const rideLocalIso = shiftToRideTimezone(iso);
+      return scheduledStartFromParts(
+        parts,
+        rideLocalIso.getUTCHours(),
+        rideLocalIso.getUTCMinutes()
+      );
     }
   }
 
   const parsed = new Date(rawStr);
   if (!Number.isNaN(parsed.getTime())) {
+    const rideLocalParsed = shiftToRideTimezone(parsed);
     return scheduledStartFromParts(
       parts,
-      parsed.getHours(),
-      parsed.getMinutes(),
-      parsed.getSeconds(),
-      parsed.getMilliseconds()
+      rideLocalParsed.getUTCHours(),
+      rideLocalParsed.getUTCMinutes(),
+      rideLocalParsed.getUTCSeconds(),
+      rideLocalParsed.getUTCMilliseconds()
     );
   }
 
@@ -159,7 +198,8 @@ const parsePostponedStartTime = (ride, newStartTime) => {
 
   if (/T/.test(raw) || raw.includes("Z")) {
     const iso = new Date(raw);
-    return Number.isNaN(iso.getTime()) ? null : iso;
+    if (Number.isNaN(iso.getTime())) return null;
+    return shiftFromRideTimezoneToUtc(shiftToRideTimezone(iso));
   }
 
   const hhmm = raw.match(/^(\d{1,2}):(\d{2})/);
