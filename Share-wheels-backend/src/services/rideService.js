@@ -78,8 +78,29 @@ const getRidesData = async ({ rideIds }) => {
   return { status: 200, body: { status: true, count: rides.length, rides } };
 };
 
+const normalizeCoordsPayload = (coords, fallbackLabel) => {
+  if (!coords || typeof coords !== "object") return undefined;
+  const lat = Number(coords.lat ?? coords.latitude);
+  const lng = Number(coords.lng ?? coords.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return undefined;
+  const label = String(coords.label || fallbackLabel || "").trim();
+  return { lat, lng, ...(label ? { label } : {}) };
+};
+
 const createRide = async (user, payload) => {
-  const { from, to, availableSeats, ride_amount, date, startTime, AlternatePhoneNumber, CanCarryCourier, QuickReserve } = payload;
+  const {
+    from,
+    to,
+    availableSeats,
+    ride_amount,
+    date,
+    startTime,
+    AlternatePhoneNumber,
+    CanCarryCourier,
+    QuickReserve,
+    fromCoords,
+    toCoords,
+  } = payload;
   if (!from || !to || !date || !startTime || !ride_amount) {
     return { status: 400, body: { error: "All required ride fields are missing" } };
   }
@@ -106,10 +127,15 @@ const createRide = async (user, payload) => {
     return { status: 400, body: { error: scheduleCheck.message } };
   }
 
+  const normalizedFromCoords = normalizeCoordsPayload(fromCoords, from);
+  const normalizedToCoords = normalizeCoordsPayload(toCoords, to);
+
   const ride = await Ride.create({
     creator: user._id,
     from,
     to,
+    ...(normalizedFromCoords ? { fromCoords: normalizedFromCoords } : {}),
+    ...(normalizedToCoords ? { toCoords: normalizedToCoords } : {}),
     availableSeats: availableSeats || 1,
     date: rideDate,
     AlternatePhoneNumber: AlternatePhoneNumber ? String(AlternatePhoneNumber) : undefined,

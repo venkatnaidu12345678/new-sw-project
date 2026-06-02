@@ -265,7 +265,9 @@ const getTrackingForUser = async (user, rideId) => {
     return { status: 400, body: { success: false, message: "Invalid ride ID" } };
   }
   const ride = await Ride.findById(rideId)
-    .select("creator passengers.userId all_deliveries.userId status liveTracking from to")
+    .select(
+      "creator passengers.userId all_deliveries.userId status liveTracking from to fromCoords toCoords"
+    )
     .lean();
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
 
@@ -309,6 +311,8 @@ const getTrackingForUser = async (user, rideId) => {
       status: ride.status,
       from: ride.from,
       to: ride.to,
+      fromCoords: ride.fromCoords || null,
+      toCoords: ride.toCoords || null,
       myUserId: user._id.toString(),
       liveTracking: {
         ...liveTracking,
