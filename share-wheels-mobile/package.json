@@ -9,6 +9,7 @@
     "start": "react-native start",
     "start:reset": "react-native start --reset-cache",
     "dev:ip": "node scripts/print-lan-ip.js",
+    "android:sha": "node scripts/print-android-sha.js",
     "adb:reverse": "adb reverse tcp:8081 tcp:8081 && adb reverse tcp:3001 tcp:3001",
     "android:device": "npm run adb:reverse && react-native run-android",
     "android:clean": "cd android && gradlew.bat clean && cd ..",

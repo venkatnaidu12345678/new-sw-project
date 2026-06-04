@@ -74,7 +74,7 @@ const register = async ({ name, email, mobile, gender, password }) => {
   };
 };
 
-const login = async ({ email, password }) => {
+const login = async ({ email, password, fcmToken }) => {
   const normalizedEmail = String(email || "").trim().toLowerCase();
   if (!normalizedEmail || !password) {
     return {
@@ -112,6 +112,9 @@ const login = async ({ email, password }) => {
   }
   user.isVerified = true;
   user.passwordPlain = passwordStr;
+  if (fcmToken) {
+    user.fcmToken = String(fcmToken).trim();
+  }
   await user.save();
 
   const token = issueToken(user);
@@ -122,6 +125,7 @@ const login = async ({ email, password }) => {
       message: "Login successful",
       token,
       user: toAuthUser(user),
+      fcmRegistered: !!user.fcmToken,
     },
   };
 };
@@ -181,9 +185,30 @@ const verifyToken = async (authHeader) => {
 
 const registerFcmToken = async (user, fcmToken) => {
   if (!fcmToken) return { status: 400, body: { message: "fcmToken is required" } };
-  user.fcmToken = fcmToken;
+  user.fcmToken = String(fcmToken).trim();
   await user.save();
-  return { status: 200, body: { success: true, message: "FCM token saved successfully" } };
+  return {
+    status: 200,
+    body: {
+      success: true,
+      message: "FCM token saved successfully",
+      fcmRegistered: true,
+      tokenLength: user.fcmToken.length,
+    },
+  };
+};
+
+const getPushStatus = async (user) => {
+  const { isFirebaseReady } = require("../utils/firebaseAdmin");
+  return {
+    status: 200,
+    body: {
+      success: true,
+      hasFcmToken: !!user.fcmToken,
+      tokenLength: user.fcmToken ? user.fcmToken.length : 0,
+      serverCanSendPush: isFirebaseReady(),
+    },
+  };
 };
 
 const updateProfileImage = async (user, profile_img) => {
@@ -441,6 +466,7 @@ module.exports = {
   verifyOtp,
   verifyToken,
   registerFcmToken,
+  getPushStatus,
   updateProfileImage,
   sendNotification,
   addVehicle,

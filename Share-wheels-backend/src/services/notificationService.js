@@ -77,7 +77,13 @@ const notifyUser = async (userId, { title, body, type = "general", data = {} }) 
     ...dataPayload,
   };
 
-  if (user?.fcmToken) {
+  const { isFirebaseReady } = require("../utils/firebaseAdmin");
+
+  if (!isFirebaseReady()) {
+    console.warn(
+      "[notifyUser] FCM not configured on server — set FIREBASE_SERVICE_ACCOUNT_JSON on Render"
+    );
+  } else if (user?.fcmToken) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         const result = await sendPushNotification(
@@ -93,9 +99,19 @@ const notifyUser = async (userId, { title, body, type = "general", data = {} }) 
         if (result?.invalidToken) {
           user.fcmToken = undefined;
           await user.save();
-          console.warn("[notifyUser] cleared invalid FCM token for user", uid.toString());
+          console.warn(
+            "[notifyUser] cleared invalid FCM token for user",
+            uid.toString(),
+            "— reinstall app / log in again after adding release SHA in Firebase"
+          );
           break;
         }
+        console.warn(
+          "[notifyUser] FCM send failed:",
+          result?.code || result?.reason || "unknown",
+          "user",
+          uid.toString()
+        );
         if (attempt === 0) {
           await new Promise((r) => setTimeout(r, 300));
         }
@@ -110,7 +126,7 @@ const notifyUser = async (userId, { title, body, type = "general", data = {} }) 
     console.warn(
       "[notifyUser] no FCM token on file for user",
       uid.toString(),
-      "— in-app + socket only"
+      "— open release app, allow notifications, log in again"
     );
   }
 

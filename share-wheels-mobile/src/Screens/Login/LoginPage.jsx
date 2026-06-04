@@ -5,6 +5,7 @@ import AuthButton from "../../Components/AuthButton";
 import AuthTextInput from "../../Components/AuthTextInput";
 import AuthScreenLayout from "../../Components/auth/AuthScreenLayout";
 import { loginApi } from "../../ApiService/AuthApiService";
+import { getDeviceTokenWithPermission } from "../../Notifications/FCMService";
 import { syncFcmTokenWithBackend } from "../../Notifications/registerToken";
 import { requestAppPermissionsOnSignIn } from "../../Utils/locationPermissions";
 import { validateEmail, validatePassword } from "../../Utils";
@@ -28,9 +29,13 @@ const LoginPage = ({ navigation, triggerAuth }) => {
 
     setLoading(true);
     try {
+      await requestAppPermissionsOnSignIn();
+      const fcmToken = await getDeviceTokenWithPermission();
+
       const res = await loginApi({
         email: email.trim().toLowerCase(),
         password,
+        ...(fcmToken ? { fcmToken } : {}),
       });
 
       const token = res?.token || res?.data?.token;
@@ -42,7 +47,6 @@ const LoginPage = ({ navigation, triggerAuth }) => {
         if (user?.name) {
           await AsyncStorage.setItem("USER_NAME", user.name);
         }
-        await requestAppPermissionsOnSignIn();
         await syncFcmTokenWithBackend({ force: true });
         triggerAuth?.();
       } else {

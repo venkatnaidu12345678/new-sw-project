@@ -2,6 +2,7 @@ import { baseUrl, endPoints, getApiConnectionHint } from "../Config";
 import { parseApiResponse } from "../Utils/parseApiResponse";
 import { getApiErrorMessage, apiFail } from "../Utils/apiErrors";
 import { appendImageFile } from "../Utils/imageUpload";
+import { apiRequest } from "../Utils/apiRequest";
 
 async function authRequest(path, { method = "POST", body, token } = {}) {
   const headers = { "Content-Type": "application/json" };
@@ -54,13 +55,21 @@ export const verifyOtpApi = (data) => authRequest(endPoints.verifyOtp, { body: d
 export const verifyTokenApi = (token) =>
   authRequest(endPoints.verifyToken, { method: "POST", token });
 
-export const registerFcmTokenApi = async (token, fcmToken) => {
-  const result = await authRequest(endPoints.registerFcmTokenurl, {
-    body: { fcmToken },
+/** Long timeout — Render Free cold start can take 30–60s on first request. */
+export const registerFcmTokenApi = (token, fcmToken) =>
+  apiRequest(baseUrl + endPoints.registerFcmTokenurl, {
+    method: "POST",
     token,
+    body: { fcmToken },
+    timeoutMs: 90000,
   });
-  return result;
-};
+
+export const getPushStatusApi = (token) =>
+  apiRequest(baseUrl + endPoints.pushStatusurl, {
+    method: "GET",
+    token,
+    timeoutMs: 90000,
+  });
 
 export const userTermsApi = async (token, isAccepted) => {
   if (!token) return apiFail("Session expired. Please sign in again.");

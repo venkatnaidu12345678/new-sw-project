@@ -20,6 +20,7 @@ router.post(
 );
 router.post("/profile/image", auth, authController.updateProfileImage);
 router.post("/register-fcm-token", auth, authController.registerFcmToken);
+router.get("/push-status", auth, authController.getPushStatus);
 router.post("/send-notification", auth, authController.sendNotification);
 router.post("/add-vehicle", auth, vehicleUploadMiddleware, authController.addVehicle);
 router.get("/my-vehicle", auth, authController.getMyVehicle);

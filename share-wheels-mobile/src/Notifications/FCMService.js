@@ -81,7 +81,15 @@ export async function getDeviceToken() {
     }
     return await getToken(msg);
   } catch (error) {
-    console.warn("[FCM] getToken failed:", error.message);
+    const code = error?.code || error?.nativeErrorCode || "";
+    console.warn(
+      "[FCM] getToken failed:",
+      error.message,
+      code ? `(code: ${code})` : "",
+      Platform.OS === "android"
+        ? "— for release APK add release SHA-1/SHA-256 in Firebase and refresh google-services.json"
+        : ""
+    );
     return null;
   }
 }

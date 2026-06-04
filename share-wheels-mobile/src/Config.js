@@ -114,5 +114,6 @@ export const endPoints = {
   feedbackurl: "/feedback",
   notificationsurl: "/notifications",
   registerFcmTokenurl: "/auth/register-fcm-token",
+  pushStatusurl: "/auth/push-status",
   legalPoliciesurl: "/legal/policies",
 };

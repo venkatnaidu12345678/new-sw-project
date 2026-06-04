@@ -8,22 +8,42 @@ function loadServiceAccount() {
   const jsonEnv = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (jsonEnv) {
     try {
-      return typeof jsonEnv === "string" ? JSON.parse(jsonEnv) : jsonEnv;
+      const trimmed = String(jsonEnv).trim();
+      return JSON.parse(trimmed);
     } catch (err) {
       console.error("[FCM] Invalid FIREBASE_SERVICE_ACCOUNT_JSON:", err.message);
       return null;
     }
   }
 
+  const base64Env = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+  if (base64Env) {
+    try {
+      const json = Buffer.from(String(base64Env).trim(), "base64").toString("utf8");
+      return JSON.parse(json);
+    } catch (err) {
+      console.error("[FCM] Invalid FIREBASE_SERVICE_ACCOUNT_BASE64:", err.message);
+      return null;
+    }
+  }
+
   const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
-  if (!serviceAccountPath) return null;
+  const candidates = [];
+  if (serviceAccountPath) {
+    candidates.push(
+      path.isAbsolute(serviceAccountPath)
+        ? serviceAccountPath
+        : path.resolve(process.cwd(), serviceAccountPath)
+    );
+  }
+  candidates.push(path.resolve(process.cwd(), "firebase-service-account.json"));
+  candidates.push(path.resolve(__dirname, "../../firebase-service-account.json"));
 
-  const resolved = path.isAbsolute(serviceAccountPath)
-    ? serviceAccountPath
-    : path.resolve(process.cwd(), serviceAccountPath);
-
-  if (!fs.existsSync(resolved)) {
-    console.warn("[FCM] Service account file not found:", resolved);
+  const resolved = candidates.find((p) => fs.existsSync(p));
+  if (!resolved) {
+    console.warn(
+      "[FCM] No service account file. Set FIREBASE_SERVICE_ACCOUNT_JSON on Render or add firebase-service-account.json"
+    );
     return null;
   }
 
@@ -41,7 +61,7 @@ function getMessaging() {
   const serviceAccount = loadServiceAccount();
   if (!serviceAccount) {
     console.warn(
-      "[FCM] Not configured. Set FIREBASE_SERVICE_ACCOUNT_PATH or FIREBASE_SERVICE_ACCOUNT_JSON in .env"
+      "[FCM] Not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON (or BASE64) on Render — see docs/FCM_RENDER.md"
     );
     return null;
   }
