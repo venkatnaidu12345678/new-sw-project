@@ -25,6 +25,12 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+/** Used by the mobile app to wake Render before FCM token registration. */
+app.get("/health", (_req, res) => {
+  res.status(200).json({ ok: true, service: "share-wheels-backend" });
+});
+
 setupSwagger(app);
 
 app.use("/auth", authRoutes);
@@ -48,6 +54,8 @@ const { server } = createServerWithSocket(app);
 const PORT = process.env.PORT || 3001;
 
 server.listen(PORT, "0.0.0.0", () => {
+  const { isFirebaseReady } = require("./utils/firebaseAdmin");
   console.log(`Server running on http://localhost:${PORT}`);
   console.log(`LAN access: use your PC IP on port ${PORT} (e.g. http://192.168.x.x:${PORT})`);
+  console.log(`FCM push: ${isFirebaseReady() ? "configured" : "NOT configured (set FIREBASE_SERVICE_ACCOUNT_JSON on Render)"}`);
 });
