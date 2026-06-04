@@ -7,12 +7,20 @@ export const isGeolocationReady =
   typeof Geolocation.getCurrentPosition === "function" &&
   !!NativeModules.RNCGeolocation;
 
-if (Geolocation?.setRNConfiguration) {
+let rideTrackingMode = false;
+
+export const setRideGpsMode = (active) => {
+  rideTrackingMode = !!active;
+  if (!Geolocation?.setRNConfiguration) return;
   Geolocation.setRNConfiguration({
     skipPermissionRequests: true,
-    authorizationLevel: "whenInUse",
+    authorizationLevel: rideTrackingMode ? "always" : "whenInUse",
     locationProvider: "auto",
   });
+};
+
+if (Geolocation?.setRNConfiguration) {
+  setRideGpsMode(false);
 }
 
 /** Instant — cached / network fix, does not block UI long */
@@ -144,6 +152,18 @@ export const WATCH_OPTIONS = {
   maximumAge: 30000,
 };
 
+export const WATCH_OPTIONS_ACTIVE_RIDE = {
+  enableHighAccuracy: true,
+  distanceFilter: 10,
+  interval: 5000,
+  fastestInterval: 3000,
+  timeout: 20000,
+  maximumAge: 10000,
+};
+
+export const getLocationWatchOptions = () =>
+  rideTrackingMode ? WATCH_OPTIONS_ACTIVE_RIDE : WATCH_OPTIONS;
+
 export const startLocationWatch = (onPosition, onError) => {
   if (!isGeolocationReady) return null;
   return Geolocation.watchPosition(
@@ -155,7 +175,7 @@ export const startLocationWatch = (onPosition, onError) => {
       }
     },
     onError || (() => {}),
-    WATCH_OPTIONS
+    getLocationWatchOptions()
   );
 };
 

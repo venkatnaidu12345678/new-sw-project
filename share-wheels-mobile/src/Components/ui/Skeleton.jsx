@@ -304,7 +304,9 @@ const HistoryCardSkeleton = () => (
 );
 
 const ChatListSkeleton = () => {
-  const pal = useContext(PaletteContext);
+  const ctxPal = useContext(PaletteContext);
+  const fallbackPal = useSkeletonPalette();
+  const pal = ctxPal || fallbackPal;
   return (
     <View style={styles.chatWrap}>
       <View style={[styles.chatBubble, styles.chatLeft, { borderColor: pal.chatBorder, backgroundColor: pal.chatBubble }]}>
@@ -390,6 +392,13 @@ export const DashboardSkeleton = () => (
       <UpcomingRideSkeleton />
       <UpcomingRideSkeleton />
     </View>
+  </ShimmerProvider>
+);
+
+/** Support chat loading — always wraps shimmer context (safe on ChartBoat). */
+export const SupportChatSkeleton = () => (
+  <ShimmerProvider>
+    <ChatListSkeleton />
   </ShimmerProvider>
 );
 

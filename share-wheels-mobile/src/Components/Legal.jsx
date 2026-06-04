@@ -5,21 +5,23 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
-  StatusBar,
-  PanResponder,
+  ActivityIndicator,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import Ionicons from "react-native-vector-icons/Ionicons";
-import BackButton from "../Components/BackButton";
+import Icon from "react-native-vector-icons/Ionicons";
+import LinearGradient from "react-native-linear-gradient";
+import ScreenContainer from "./ui/ScreenContainer";
+import ScreenHeader from "./ui/ScreenHeader";
 import { getLegalPolicies } from "../ApiService/legalApiService";
+import { navigateRoot } from "../Utils/navigationRoot";
 import { useTheme } from "../context/ThemeContext";
 import { useThemedStyles } from "../theme/useThemedStyles";
+import { LAYOUT } from "../theme/layout";
 
 const TABS = [
-  { key: "terms", label: "Terms of Service", icon: "document-text-outline" },
-  { key: "privacy", label: "Privacy Policy", icon: "shield-checkmark-outline" },
-  { key: "disclaimer", label: "Disclaimer", icon: "alert-circle-outline" },
+  { key: "terms", label: "Terms", icon: "document-text", accent: "#4F46E5" },
+  { key: "privacy", label: "Privacy", icon: "lock-closed", accent: "#0D9488" },
+  { key: "disclaimer", label: "Disclaimer", icon: "information-circle", accent: "#D97706" },
 ];
 
 const stripHtmlToPlain = (html) => {
@@ -35,8 +37,6 @@ const stripHtmlToPlain = (html) => {
     .replace(/<[^>]+>/g, "")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 };
@@ -49,278 +49,323 @@ const splitParagraphs = (text) => {
 
 export default function LegalPage() {
   const navigation = useNavigation();
-  const { colors, isDark } = useTheme();
+  const { isDark, colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [activeKey, setActiveKey] = useState("terms");
   const [policies, setPolicies] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
-  const activePolicy = policies ? policies[activeKey] : null;
-  const paragraphs = useMemo(() => splitParagraphs(activePolicy?.content), [activePolicy]);
+  const activePolicy = policies?.[activeKey] ?? null;
+  const activeTab = TABS.find((t) => t.key === activeKey) || TABS[0];
+  const paragraphs = useMemo(
+    () => splitParagraphs(activePolicy?.content),
+    [activePolicy]
+  );
 
-  const tabKeys = useMemo(() => TABS.map((t) => t.key), []);
-  const currentIndex = tabKeys.indexOf(activeKey);
-
-  const goNext = () => {
-    if (currentIndex < tabKeys.length - 1) {
-      setActiveKey(tabKeys[currentIndex + 1]);
-    }
-  };
-
-  const goPrev = () => {
-    if (currentIndex > 0) {
-      setActiveKey(tabKeys[currentIndex - 1]);
-    }
-  };
+  const heroColors = isDark
+    ? ["#0F172A", "#1E3A8A", "#312E81"]
+    : ["#1E1B4B", "#3730A3", "#4F46E5"];
 
   useEffect(() => {
     let mounted = true;
     setLoading(true);
+    setLoadError("");
     getLegalPolicies()
       .then((data) => {
-        // backend returns: {terms, privacy, disclaimer}
         if (!mounted) return;
-        setPolicies(data?.terms ? data : data?.policies || data);
+        const normalized = data?.terms
+          ? data
+          : data?.policies || data;
+        setPolicies(normalized);
       })
-      .catch(() => {
+      .catch((err) => {
         if (!mounted) return;
         setPolicies(null);
+        setLoadError(err?.message || "Could not load policies");
       })
-      .finally(() => mounted && setLoading(false));
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
     return () => {
       mounted = false;
     };
   }, []);
 
-  const panResponder = PanResponder.create({
-    onMoveShouldSetPanResponder: (_, gestureState) => {
-      return Math.abs(gestureState.dx) > 20;
-    },
-    onPanResponderRelease: (_, gestureState) => {
-      if (gestureState.dx > 50) {
-        goPrev();
-      } else if (gestureState.dx < -50) {
-        goNext();
-      }
-    },
-  });
-
-  const activeLabel = TABS.find((t) => t.key === activeKey)?.label || "Legal";
-
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+    <ScreenContainer style={styles.root} edges={["top", "bottom"]}>
+      <ScreenHeader title="Legal" />
 
-      {/* Header */}
-     <View style={styles.header}>
-  <BackButton />
+      <LinearGradient colors={heroColors} style={styles.hero}>
+        <View style={styles.heroBadge}>
+          <Icon name="shield-checkmark" size={22} color="#E0E7FF" />
+        </View>
+        <Text style={styles.heroTitle}>Legal & policies</Text>
+        <Text style={styles.heroSub}>
+          Clear terms for rides, payments, courier, and your account data.
+        </Text>
+      </LinearGradient>
 
-  <Text style={styles.headerTitle}>Legal</Text>
-
-  <View style={{ width: 40 }} /> 
-</View>
-
-      {/* Tabs */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.tabs}
-      >
+      <View style={styles.tabBar}>
         {TABS.map((tab) => {
-          const active = activeKey === tab.key;
-
+          const active = tab.key === activeKey;
           return (
             <TouchableOpacity
               key={tab.key}
-              style={styles.tabItem}
+              style={[
+                styles.tabBtn,
+                active && { borderColor: tab.accent, backgroundColor: `${tab.accent}18` },
+              ]}
               onPress={() => setActiveKey(tab.key)}
+              activeOpacity={0.88}
             >
-              <View style={styles.tabContent}>
-                <Ionicons
-                  name={tab.icon}
-                  size={16}
-                  color={active ? colors.primary : colors.textMuted}
-                />
-
-                <Text
-                  style={[
-                    styles.tabText,
-                    active && styles.activeTabText,
-                  ]}
-                >
-                  {tab.label}
-                </Text>
-              </View>
-
-              {active && <View style={styles.activeLine} />}
+              <Icon
+                name={tab.icon}
+                size={18}
+                color={active ? tab.accent : colors.textMuted}
+              />
+              <Text
+                style={[
+                  styles.tabLabel,
+                  active && { color: tab.accent, fontWeight: "800" },
+                ]}
+              >
+                {tab.label}
+              </Text>
             </TouchableOpacity>
           );
         })}
-      </ScrollView>
+      </View>
 
-      {/* Content */}
-      <ScrollView style={styles.content} {...panResponder.panHandlers}>
-        <View style={styles.card}>
-          <Text style={styles.pageTitle}>{activeLabel}</Text>
-
-          <Text style={styles.updated}>
-            {activePolicy?.updatedAt
-              ? `Last Updated: ${new Date(activePolicy.updatedAt).toLocaleDateString()}`
-              : "Last Updated: —"}
-          </Text>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={[styles.docCard, { borderLeftColor: activeTab.accent }]}>
+          <View style={styles.docHeader}>
+            <View style={[styles.docIcon, { backgroundColor: `${activeTab.accent}22` }]}>
+              <Icon name={activeTab.icon} size={20} color={activeTab.accent} />
+            </View>
+            <View style={styles.docHeaderText}>
+              <Text style={styles.docTitle}>{activeTab.label}</Text>
+              <Text style={styles.docUpdated}>
+                {activePolicy?.updatedAt
+                  ? `Last updated ${new Date(activePolicy.updatedAt).toLocaleDateString()}`
+                  : "Last updated —"}
+              </Text>
+            </View>
+          </View>
 
           {loading ? (
-            <Text style={styles.body}>Loading…</Text>
-          ) : paragraphs.length ? (
+            <View style={styles.centerBox}>
+              <ActivityIndicator size="small" color={activeTab.accent} />
+              <Text style={styles.muted}>Loading…</Text>
+            </View>
+          ) : loadError ? (
+            <Text style={styles.error}>{loadError}</Text>
+          ) : paragraphs.length > 0 ? (
             paragraphs.map((p, i) => (
-              <View key={i} style={styles.block}>
-                <Text style={styles.body}>{p}</Text>
-              </View>
+              <Text key={`p-${i}`} style={styles.paragraph}>
+                {p}
+              </Text>
             ))
           ) : (
-            <Text style={styles.body}>
-              No content available. Please check back later.
+            <Text style={styles.paragraph}>
+              No content available right now. Please check back later.
             </Text>
           )}
         </View>
 
-        {/* Support Box */}
-        <View style={styles.supportBox}>
-          <Text style={styles.supportTitle}>Questions?</Text>
-
-          <Text style={styles.supportText}>
-            If you have any questions about our legal policies,
-            please contact our support team.
-          </Text>
-
-          {/* UPDATED BUTTON */}
+        <LinearGradient
+          colors={isDark ? ["#1E293B", "#0F172A"] : ["#EEF2FF", "#F8FAFC"]}
+          style={styles.supportCard}
+        >
+          <View style={styles.supportRow}>
+            <View style={styles.supportIcon}>
+              <Icon name="chatbubbles" size={22} color="#4F46E5" />
+            </View>
+            <View style={styles.supportCopy}>
+              <Text style={styles.supportTitle}>Questions about these policies?</Text>
+              <Text style={styles.supportSub}>
+                Chat with our support assistant for rides, payments, and account help.
+              </Text>
+            </View>
+          </View>
           <TouchableOpacity
-            style={styles.supportButton}
-            onPress={() => navigation.navigate("ChartBoat")}
+            style={styles.supportBtn}
+            onPress={() => navigateRoot(navigation, "ChartBoat")}
+            activeOpacity={0.9}
           >
-            <Text style={styles.supportButtonText}>
-              Contact Support
-            </Text>
+            <Text style={styles.supportBtnText}>Open Help & support</Text>
+            <Icon name="arrow-forward" size={18} color="#FFFFFF" />
           </TouchableOpacity>
-        </View>
+        </LinearGradient>
       </ScrollView>
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }
 
 const createStyles = (c) =>
   StyleSheet.create({
-    container: {
+    root: {
       flex: 1,
-      backgroundColor: c.background,
+      paddingHorizontal: LAYOUT.spacing.screen,
     },
-    header: {
-      flexDirection: "row",
-      alignItems: "center",
-      paddingHorizontal: 14,
-      paddingVertical: 14,
-      backgroundColor: c.surface,
-      borderBottomWidth: 1,
-      borderBottomColor: c.border,
-    },
-    headerTitle: {
-      flex: 1,
-      textAlign: "center",
-      fontSize: 18,
-      fontWeight: "600",
-      color: c.text,
-    },
-    tabs: {
-      backgroundColor: c.surface,
-      borderBottomWidth: 1,
-      borderBottomColor: c.border,
-    },
-    tabItem: {
-      marginHorizontal: 10,
-      paddingVertical: 12,
-    },
-    tabContent: {
-      flexDirection: "row",
-      alignItems: "center",
-    },
-    tabText: {
-      fontSize: 13,
-      marginLeft: 5,
-      color: c.textMuted,
-    },
-    activeTabText: {
-      color: c.primary,
-      fontWeight: "600",
-    },
-    activeLine: {
-      height: 2,
-      backgroundColor: c.primary,
-      marginTop: 6,
-    },
-    content: {
-      padding: 16,
-    },
-    card: {
-      backgroundColor: c.surface,
-      borderRadius: 10,
-      padding: 18,
-      borderWidth: 1,
-      borderColor: c.border,
-    },
-    pageTitle: {
-      fontSize: 18,
-      fontWeight: "700",
-      marginBottom: 6,
-      color: c.text,
-    },
-    updated: {
-      fontSize: 12,
-      color: c.textMuted,
-      marginBottom: 18,
-    },
-    block: {
+    hero: {
+      borderRadius: 20,
+      padding: 20,
       marginBottom: 16,
     },
-    heading: {
+    heroBadge: {
+      width: 44,
+      height: 44,
+      borderRadius: 14,
+      backgroundColor: "rgba(255,255,255,0.15)",
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 12,
+    },
+    heroTitle: {
+      fontSize: 22,
+      fontWeight: "800",
+      color: "#FFFFFF",
+      letterSpacing: 0.2,
+    },
+    heroSub: {
       fontSize: 14,
+      color: "rgba(255,255,255,0.88)",
+      marginTop: 6,
+      lineHeight: 21,
+    },
+    tabBar: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginBottom: 14,
+    },
+    tabBtn: {
+      minWidth: "31%",
+      alignItems: "center",
+      paddingVertical: 12,
+      paddingHorizontal: 8,
+      borderRadius: 14,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      backgroundColor: c.surface,
+      gap: 4,
+    },
+    tabLabel: {
+      fontSize: 12,
       fontWeight: "600",
-      marginBottom: 4,
+      color: c.textMuted,
+    },
+    scroll: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingBottom: 28,
+    },
+    docCard: {
+      backgroundColor: c.surface,
+      borderRadius: 18,
+      padding: 18,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderLeftWidth: 4,
+      marginBottom: 16,
+    },
+    docHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 16,
+      gap: 12,
+    },
+    docIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    docHeaderText: {
+      flex: 1,
+    },
+    docTitle: {
+      fontSize: 18,
+      fontWeight: "800",
       color: c.text,
     },
-    body: {
-      fontSize: 13,
-      color: c.textSecondary,
-      lineHeight: 19,
+    docUpdated: {
+      fontSize: 12,
+      color: c.textMuted,
+      marginTop: 2,
     },
-    supportBox: {
-      backgroundColor: c.primaryMuted,
-      padding: 18,
-      borderRadius: 10,
-      marginTop: 18,
+    centerBox: {
+      alignItems: "center",
+      paddingVertical: 28,
+      gap: 10,
+    },
+    muted: {
+      fontSize: 13,
+      color: c.textMuted,
+    },
+    error: {
+      fontSize: 14,
+      color: c.errorText,
+      lineHeight: 22,
+    },
+    paragraph: {
+      fontSize: 15,
+      lineHeight: 24,
+      color: c.text,
+      marginBottom: 14,
+    },
+    supportCard: {
+      borderRadius: 18,
+      padding: 16,
       borderWidth: 1,
       borderColor: c.border,
     },
+    supportRow: {
+      flexDirection: "row",
+      gap: 12,
+      marginBottom: 14,
+    },
+    supportIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: 12,
+      backgroundColor: c.surface,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    supportCopy: {
+      flex: 1,
+    },
     supportTitle: {
+      fontSize: 15,
       fontWeight: "700",
-      fontSize: 14,
-      marginBottom: 4,
       color: c.text,
     },
-    supportText: {
+    supportSub: {
       fontSize: 13,
-      color: c.textSecondary,
-      marginBottom: 12,
+      color: c.textMuted,
+      marginTop: 4,
+      lineHeight: 19,
     },
-    supportButton: {
-      backgroundColor: c.primary,
-      paddingVertical: 10,
-      paddingHorizontal: 16,
-      borderRadius: 6,
-      alignSelf: "flex-start",
+    supportBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      backgroundColor: "#4F46E5",
+      paddingVertical: 13,
+      borderRadius: 12,
     },
-    supportButtonText: {
-      color: c.inverseText,
-      fontSize: 13,
-      fontWeight: "600",
+    supportBtnText: {
+      color: "#FFFFFF",
+      fontSize: 15,
+      fontWeight: "700",
     },
   });

@@ -10,9 +10,12 @@ import {
   getCachedCoords,
   acquireGpsInstant,
   isGeolocationReady,
+  setRideGpsMode,
 } from "../Utils/gpsService";
+import { requestBackgroundLocationForActiveRide } from "../Utils/locationPermissions";
 import { hasLocationPermission } from "../Utils/locationPermissions";
 import { normalizeRideId } from "./liveTrackingState";
+import { getActiveRideTracking } from "../Utils/activeRideTracking";
 
 const SEND_INTERVAL_MS = 4000;
 
@@ -59,6 +62,9 @@ export async function startLiveLocationPublishing({ rideId, token }) {
 
   if (!(await hasLocationPermission())) return false;
 
+  setRideGpsMode(true);
+  requestBackgroundLocationForActiveRide().catch(() => {});
+
   let watchId = null;
   let intervalId = null;
   let lastSent = 0;
@@ -84,7 +90,10 @@ export async function startLiveLocationPublishing({ rideId, token }) {
   intervalId = setInterval(() => {
     const c = getCachedCoords();
     if (c) publish(c);
-  }, 20000);
+    if (!getAppSocket()?.connected) {
+      connectAppSocket().catch(() => {});
+    }
+  }, 15000);
 
   session = {
     rideId: id,
@@ -108,6 +117,9 @@ export function stopLiveLocationPublishing() {
     }
     session = null;
   }
+  getActiveRideTracking().then((active) => {
+    if (!active?.rideId) setRideGpsMode(false);
+  });
 }
 
 export function getPublishingRideId() {

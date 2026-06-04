@@ -22,6 +22,7 @@ import {
 } from "../Utils/participantTripStatus";
 
 const TAB_SHORT = {
+  All: "All",
   Passengers: "Passengers",
   Couriers: "Couriers",
   "Pax requests": "Pax req.",
@@ -29,6 +30,7 @@ const TAB_SHORT = {
 };
 
 const TAB_ICON = {
+  All: "layers",
   Passengers: "people",
   Couriers: "cube",
   "Pax requests": "person-add",
@@ -39,6 +41,8 @@ const getUser = (item) => item?.userId || item?.user || item;
 
 const tabCount = (tab, passengers, couriers, passengerRequests, courierRequests) => {
   switch (tab) {
+    case "All":
+      return passengers.length + couriers.length;
     case "Passengers":
       return passengers.length;
     case "Couriers":
@@ -234,6 +238,22 @@ const DriverParticipantsSliderContent = ({
   const listData = useMemo(() => {
     if (detailsLoading) return [{ key: "loading", type: "loading" }];
     switch (activeTab) {
+      case "All": {
+        const merged = [
+          ...passengers.map((item, i) => ({
+            key: item._id || item.userId?._id || `p-${i}`,
+            type: "passenger",
+            item,
+          })),
+          ...couriers.map((item, i) => ({
+            key: item._id || item.userId?._id || `c-${i}`,
+            type: "courier",
+            item,
+          })),
+        ];
+        if (!merged.length) return [{ key: "empty", type: "empty" }];
+        return merged;
+      }
       case "Passengers":
         if (!passengers.length) return [{ key: "empty", type: "empty" }];
         return passengers.map((item, i) => ({
@@ -276,6 +296,12 @@ const DriverParticipantsSliderContent = ({
 
   const emptyCopy = useMemo(() => {
     switch (activeTab) {
+      case "All":
+        return {
+          icon: "layers-outline",
+          title: "No participants yet",
+          sub: "Accepted passengers and couriers appear here.",
+        };
       case "Passengers":
         return {
           icon: "people-outline",
@@ -348,6 +374,7 @@ const DriverParticipantsSliderContent = ({
                 ? () => onDropPassenger(item)
                 : undefined
             }
+            highlightDrop={canDropPassenger(item)}
             onCall={() => onCall(item?.userId?.mobile, "passenger")}
             onMessage={() => onMessage(item, "passenger")}
             onRemove={() => onRemovePassenger(item)}
@@ -380,6 +407,7 @@ const DriverParticipantsSliderContent = ({
                 ? () => onDeliverCourier(item)
                 : undefined
             }
+            highlightDeliver={canDeliverCourier(item)}
             onCall={() => onCall(item?.userId?.mobile, "courier")}
             onMessage={() => onMessage(item, "courier")}
             onRemove={() => onRemoveCourier(item._id)}

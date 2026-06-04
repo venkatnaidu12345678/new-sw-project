@@ -61,6 +61,7 @@ const CreateRideComponentOne = forwardRef(
       vehicleInfo,
       userName,
       onPressAddVehicle,
+      onPlaceSelect,
     },
     ref
   ) => {
@@ -181,7 +182,12 @@ const CreateRideComponentOne = forwardRef(
           subtitle="Where you're travelling"
           styles={styles}
         >
-          <FromToInput ref={ref} fields={fields} variant="route" />
+          <FromToInput
+            ref={ref}
+            fields={fields}
+            variant="route"
+            onPlaceSelect={onPlaceSelect}
+          />
         </FormSection>
 
         <FormSection

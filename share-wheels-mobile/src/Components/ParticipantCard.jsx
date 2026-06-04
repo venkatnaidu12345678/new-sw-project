@@ -26,20 +26,33 @@ const CHIP_COLORS = {
   remove: (c) => ({ icon: c.errorText, text: c.errorText }),
 };
 
-const ActionChip = ({ icon, label, onPress, variant = "default", styles, colors }) => {
+const ActionChip = ({
+  icon,
+  label,
+  onPress,
+  variant = "default",
+  highlighted = false,
+  styles,
+  colors,
+}) => {
   const variantStyle =
     variant === "verify"
       ? styles.verifyBtn
       : variant === "drop"
-        ? styles.dropBtn
+        ? highlighted
+          ? styles.dropBtnHighlight
+          : styles.dropBtn
         : variant === "deliver"
-          ? styles.deliverBtn
+          ? highlighted
+            ? styles.deliverBtnHighlight
+            : styles.deliverBtn
           : variant === "remove"
             ? styles.removeBtn
             : styles.actionBtn;
 
-  const { icon: iconColor, text: textColor } =
-    CHIP_COLORS[variant]?.(colors) || CHIP_COLORS.default(colors);
+  const { icon: iconColor, text: textColor } = highlighted
+    ? { icon: colors.inverseText, text: colors.inverseText }
+    : CHIP_COLORS[variant]?.(colors) || CHIP_COLORS.default(colors);
 
   return (
     <TouchableOpacity
@@ -68,6 +81,8 @@ const ParticipantCard = ({
   onRemove,
   onDrop,
   onDeliver,
+  highlightDrop = false,
+  highlightDeliver = false,
   onPress,
 }) => {
   const { colors } = useTheme();
@@ -133,20 +148,22 @@ const ParticipantCard = ({
         ) : null}
         {onDrop ? (
           <ActionChip
-            icon="flag-outline"
+            icon="flag"
             label="Drop"
             onPress={onDrop}
             variant="drop"
+            highlighted={highlightDrop}
             styles={styles}
             colors={colors}
           />
         ) : null}
         {onDeliver ? (
           <ActionChip
-            icon="cube-outline"
+            icon="cube"
             label="Delivered"
             onPress={onDeliver}
             variant="deliver"
+            highlighted={highlightDeliver}
             styles={styles}
             colors={colors}
           />
@@ -319,9 +336,27 @@ const createStyles = (c) =>
       backgroundColor: c.infoBg,
       borderColor: c.border,
     },
+    dropBtnHighlight: {
+      backgroundColor: c.primary,
+      borderColor: c.primary,
+      shadowColor: c.primary,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.35,
+      shadowRadius: 4,
+      elevation: 4,
+    },
     deliverBtn: {
       backgroundColor: c.warningBg,
       borderColor: c.warningBorder,
+    },
+    deliverBtnHighlight: {
+      backgroundColor: "#EA580C",
+      borderColor: "#C2410C",
+      shadowColor: "#EA580C",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.35,
+      shadowRadius: 4,
+      elevation: 4,
     },
     removeBtn: {
       backgroundColor: c.errorBg,

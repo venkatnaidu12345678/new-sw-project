@@ -12,23 +12,18 @@ import {
 } from "react-native";
 import UserAvatar from "./UserAvatar";
 import RemoteImage from "./RemoteImage";
-import { DS } from "../../theme/designSystem";
+import { useTheme } from "../../context/ThemeContext";
+import { useThemedStyles } from "../../theme/useThemedStyles";
+import { getParticipantPopoverRoleTheme } from "../../theme/appTheme";
 
 const MAX_CARD_HEIGHT = Dimensions.get("window").height * 0.78;
-
-const roleTheme = {
-  passenger: { bg: "#16A34A", chip: "#DCFCE7", text: "#166534", label: "Passenger" },
-  courier: { bg: "#F97316", chip: "#FFEDD5", text: "#C2410C", label: "Courier" },
-  Passenger: { bg: "#16A34A", chip: "#DCFCE7", text: "#166534", label: "Passenger" },
-  Courier: { bg: "#F97316", chip: "#FFEDD5", text: "#C2410C", label: "Courier" },
-};
 
 const displayValue = (value) => {
   if (value == null || value === "") return "—";
   return String(value);
 };
 
-const DetailRow = ({ label, value }) => (
+const DetailRow = ({ label, value, styles }) => (
   <View style={styles.detailRow}>
     <Text style={styles.detailLabel}>{label}</Text>
     <Text style={styles.detailValue}>{displayValue(value)}</Text>
@@ -41,6 +36,8 @@ const DriverParticipantPopover = ({
   loading = false,
   onClose,
 }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const scale = useRef(new Animated.Value(0.92)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -68,7 +65,7 @@ const DriverParticipantPopover = ({
   if (!visible) return null;
 
   const role = detail?.role || "passenger";
-  const theme = roleTheme[role] || roleTheme.passenger;
+  const theme = getParticipantPopoverRoleTheme(colors, role);
 
   return (
     <Modal
@@ -96,7 +93,7 @@ const DriverParticipantPopover = ({
 
             {loading ? (
               <View style={styles.loadingWrap}>
-                <ActivityIndicator size="large" color={DS.colors.primary} />
+                <ActivityIndicator size="large" color={colors.primary} />
                 <Text style={styles.loadingText}>Loading details…</Text>
               </View>
             ) : (
@@ -150,6 +147,7 @@ const DriverParticipantPopover = ({
                       key={`${row.label}-${index}`}
                       label={row.label}
                       value={row.value}
+                      styles={styles}
                     />
                   ))}
                 </View>
@@ -181,10 +179,11 @@ const DriverParticipantPopover = ({
 
 export default DriverParticipantPopover;
 
-const styles = StyleSheet.create({
+const createStyles = (c) =>
+  StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    backgroundColor: c.overlay,
     justifyContent: "center",
     paddingHorizontal: 24,
   },
@@ -193,12 +192,17 @@ const styles = StyleSheet.create({
     maxHeight: MAX_CARD_HEIGHT,
   },
   card: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: c.surface,
     borderRadius: 20,
     padding: 20,
     maxHeight: MAX_CARD_HEIGHT,
     overflow: "hidden",
-    ...DS.shadow.card,
+    borderWidth: 1,
+    borderColor: c.border,
+    shadowColor: c.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
     elevation: 8,
   },
   scroll: {
@@ -219,13 +223,13 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   roleBadgeText: {
-    color: "#FFFFFF",
+    color: c.inverseText,
     fontSize: 12,
     fontWeight: "700",
   },
   closeBtn: {
     fontSize: 20,
-    color: "#64748B",
+    color: c.textMuted,
     fontWeight: "700",
   },
   loadingWrap: {
@@ -234,7 +238,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   loadingText: {
-    color: "#64748B",
+    color: c.textMuted,
     fontSize: 13,
   },
   profileRow: {
@@ -249,31 +253,31 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#0F172A",
+    color: c.text,
   },
   subtitle: {
     fontSize: 13,
-    color: "#64748B",
+    color: c.textMuted,
     marginTop: 2,
   },
   verified: {
     fontSize: 12,
-    color: "#16A34A",
+    color: c.successText,
     fontWeight: "600",
     marginTop: 4,
   },
   routeBlock: {
-    backgroundColor: "#F8FAFC",
+    backgroundColor: c.surfaceAlt,
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: c.border,
   },
   routeText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#0F172A",
+    color: c.text,
   },
   parcelSection: {
     marginBottom: 12,
@@ -281,25 +285,25 @@ const styles = StyleSheet.create({
   parcelSectionTitle: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#64748B",
+    color: c.textMuted,
     marginBottom: 6,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   parcelMissing: {
     fontSize: 13,
-    color: "#94A3B8",
+    color: c.textMuted,
     fontStyle: "italic",
-    backgroundColor: "#F8FAFC",
+    backgroundColor: c.surfaceAlt,
     padding: 12,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: c.border,
   },
   parcelImageWrap: {
     borderRadius: 12,
     overflow: "hidden",
-    backgroundColor: "#F1F5F9",
+    backgroundColor: c.chipBg,
   },
   parcelImage: {
     width: "100%",
@@ -310,21 +314,21 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   detailRow: {
-    backgroundColor: "#F8FAFC",
+    backgroundColor: c.surfaceAlt,
     borderRadius: 10,
     padding: 10,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: c.border,
   },
   detailLabel: {
     fontSize: 11,
-    color: "#64748B",
+    color: c.textMuted,
     fontWeight: "600",
     marginBottom: 2,
   },
   detailValue: {
     fontSize: 14,
-    color: "#0F172A",
+    color: c.text,
     fontWeight: "600",
   },
   footerRow: {
@@ -332,19 +336,19 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     borderTopWidth: 1,
-    borderTopColor: "#E2E8F0",
+    borderTopColor: c.border,
     paddingTop: 14,
     marginBottom: 10,
   },
   priceLabel: {
     fontSize: 13,
-    color: "#64748B",
+    color: c.textMuted,
     fontWeight: "600",
   },
   priceText: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#0F172A",
+    color: c.text,
   },
   statusPill: {
     alignSelf: "flex-start",

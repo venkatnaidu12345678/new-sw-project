@@ -23,10 +23,17 @@ import {
   tripStatusLabel,
 } from "../Utils/participantTripStatus";
 import { formatDisplayTime } from "../Utils/dateUtils";
+import { useTheme } from "../context/ThemeContext";
 import { useThemedStyles } from "../theme/useThemedStyles";
+import {
+  getHistoryTotalGradient,
+  getOnPrimaryGradientText,
+} from "../theme/appTheme";
 
 const RideHistoryDriverview = ({ ride, loading }) => {
+  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const totalGradient = getHistoryTotalGradient(colors);
   const passengers = ride?.passengers || [];
   const couriers = ride?.all_deliveries || [];
   const totalEarnings = getDriverTotalEarnings(ride);
@@ -52,7 +59,7 @@ const RideHistoryDriverview = ({ ride, loading }) => {
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 24 }} color="#2563EB" />
+        <ActivityIndicator style={{ marginTop: 24 }} color={colors.primary} />
       ) : (
         <View style={styles.scrollContent}>
           <View style={styles.routeCard}>
@@ -156,7 +163,7 @@ const RideHistoryDriverview = ({ ride, loading }) => {
             })
           )}
 
-          <LinearGradient colors={["#1D4ED8", "#2563EB"]} style={styles.totalCard}>
+          <LinearGradient colors={totalGradient} style={styles.totalCard}>
             <View>
               <Text style={styles.totalLabel}>Total Earnings (OTP verified)</Text>
               <Text style={styles.totalAmount}>₹{totalEarnings}</Text>
@@ -308,17 +315,17 @@ const createStyles = (c) =>
   },
   totalLabel: {
     fontSize: 12,
-    color: "#DBEAFE",
+    color: getOnPrimaryGradientText(c),
   },
   totalAmount: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: c.inverseText,
     marginTop: 4,
   },
   pendingNote: {
     fontSize: 11,
-    color: "#DBEAFE",
+    color: getOnPrimaryGradientText(c),
     marginTop: 6,
     fontWeight: "600",
   },

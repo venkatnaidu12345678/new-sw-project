@@ -12,6 +12,7 @@ import {
 import { ROLE_MAP_ICONS } from "../Components/maps/RideMapMarkerIcon";
 import Icon from "react-native-vector-icons/Ionicons";
 import { useLiveRideMap } from "../hooks/useLiveRideMap";
+import { usePlannedRoute } from "../hooks/usePlannedRoute";
 import { setActiveRideTracking } from "../Utils/activeRideTracking";
 import { normalizeRideId } from "../liveTracking/liveTrackingState";
 import { useTheme } from "../context/ThemeContext";
@@ -56,6 +57,12 @@ const RideLiveMap = () => {
     myUserId,
     myName,
   });
+
+  const { route: plannedRoute } = usePlannedRoute(
+    tracking?.fromCoords,
+    tracking?.toCoords,
+    isStarted
+  );
 
   const effectiveRole = myRole || tracking?.role;
   const isDriver = effectiveRole === "driver";
@@ -110,6 +117,9 @@ const RideLiveMap = () => {
           showMyLocation={isStarted && permission}
           gpsStatusText={mapGpsHint}
           fullscreenTitle={rideTitle || "Live map"}
+          plannedRoute={plannedRoute}
+          fromCoords={tracking?.fromCoords}
+          toCoords={tracking?.toCoords}
         />
       </View>
 

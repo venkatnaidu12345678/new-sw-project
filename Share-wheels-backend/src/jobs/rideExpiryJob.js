@@ -1,5 +1,6 @@
 const { expireStalePendingRides } = require("../services/rideExpiryService");
 const { expireStaleOpenRequests } = require("../services/requestExpiryService");
+const { processScheduledRideStartReminders } = require("../services/rideStartReminderService");
 
 const INTERVAL_MS = 5 * 60 * 1000;
 
@@ -10,12 +11,13 @@ const startRideExpiryJob = () => {
 
   const run = async () => {
     try {
+      const startReminders = await processScheduledRideStartReminders();
       const ridesExpired = await expireStalePendingRides();
       const requestResult = await expireStaleOpenRequests();
       const requestsExpired = requestResult.total || 0;
-      if (ridesExpired > 0 || requestsExpired > 0) {
+      if (startReminders > 0 || ridesExpired > 0 || requestsExpired > 0) {
         console.log(
-          `Expiry job: ${ridesExpired} ride(s), ${requestsExpired} open request(s) marked expired`
+          `Scheduled ride job: ${startReminders} start reminder(s), ${ridesExpired} ride(s) expired, ${requestsExpired} open request(s) expired`
         );
       }
     } catch (err) {
@@ -26,7 +28,7 @@ const startRideExpiryJob = () => {
   run();
   timer = setInterval(run, INTERVAL_MS);
   console.log(
-    "Scheduled expiry job started (every 5 min: rides after 2h grace, requests after date range, notifications via TTL)"
+    "Scheduled ride job started (every 5 min: start reminders, ride expiry, request expiry)"
   );
 };
 

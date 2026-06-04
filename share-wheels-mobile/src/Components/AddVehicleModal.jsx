@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Image,
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -22,10 +21,14 @@ import LinearGradient from "react-native-linear-gradient";
 
 import { AddVehicle } from "../ApiService/ridesApiServices";
 import AppTextInput from "./ui/AppTextInput";
+import { StyledPicker } from "./ui/RequestFormUI";
+import { useLookupOptions } from "../hooks/useLookupOptions";
+import { alertError, alertValidation } from "../Utils/appAlert";
 import { CR } from "../theme/createRideTheme";
 import { DS } from "../theme/designSystem";
 import { INPUT_COLORS } from "../theme/inputTheme";
 import { isRemoteImageUrl, pickImageAsset } from "../Utils/imageUpload";
+import { useTheme } from "../context/ThemeContext";
 
 const SHEET_MAX_HEIGHT = Dimensions.get("window").height * 0.92;
 
@@ -58,15 +61,31 @@ const mapProfileToImages = (info) => ({
   rc_image: info?.rcImage || null,
 });
 
-const SectionCard = ({ title, subtitle, icon, iconBg, iconColor, children }) => (
-  <View style={styles.sectionCard}>
+const SectionCard = ({
+  title,
+  subtitle,
+  icon,
+  iconBg,
+  iconColor,
+  children,
+  cardStyle,
+  titleColor,
+  subtitleColor,
+}) => (
+  <View style={[styles.sectionCard, cardStyle]}>
     <View style={styles.sectionHead}>
       <View style={[styles.sectionIcon, { backgroundColor: iconBg }]}>
         <Icon name={icon} size={20} color={iconColor} />
       </View>
       <View style={styles.sectionHeadText}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
+        <Text style={[styles.sectionTitle, titleColor ? { color: titleColor } : null]}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text style={[styles.sectionSubtitle, subtitleColor ? { color: subtitleColor } : null]}>
+            {subtitle}
+          </Text>
+        ) : null}
       </View>
     </View>
     {children}
@@ -78,7 +97,7 @@ const ImageUploadField = ({ label, required, image, onPick, accent }) => {
 
   return (
     <View style={styles.imageField}>
-      <Text style={styles.fieldLabel}>
+      <Text style={[styles.fieldLabel, { color: accent.labelColor || CR.text }]}>
         {label}
         {required ? <Text style={styles.required}> *</Text> : null}
       </Text>
@@ -115,6 +134,28 @@ const AddVehicleModal = ({
   existingVehicle,
 }) => {
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useTheme();
+  const { pickerItems: vehicleTypeItems } = useLookupOptions(
+    "vehicle_type",
+    "Select vehicle type"
+  );
+  const pickerTheme = useMemo(
+    () => ({
+      text: colors.text,
+      textMuted: colors.textMuted,
+      surface: colors.surface,
+      cardBorder: colors.border,
+    }),
+    [colors]
+  );
+  const pickerAccent = useMemo(
+    () => ({
+      bg: colors.inputBg,
+      border: colors.border,
+      icon: colors.primary,
+    }),
+    [colors]
+  );
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [images, setImages] = useState({
@@ -141,7 +182,7 @@ const AddVehicleModal = ({
       const asset = await pickImageAsset();
       if (asset) setImages((prev) => ({ ...prev, [field]: asset }));
     } catch (err) {
-      Alert.alert("Error", err?.message || "Could not select image");
+      alertError(err?.message || "Could not select image");
     }
   };
 
@@ -169,7 +210,7 @@ const AddVehicleModal = ({
   const handleAddVehicle = async () => {
     const token = await AsyncStorage.getItem("token");
     if (!token) {
-      Alert.alert("Error", "User not authenticated");
+      alertError("User not authenticated", "Sign in required");
       return;
     }
 
@@ -179,22 +220,21 @@ const AddVehicleModal = ({
       !form.type?.trim() ||
       !form.license_number?.trim()
     ) {
-      Alert.alert(
-        "Required fields",
-        "Company, model, type, and license number are required."
+      alertValidation(
+        "Company, model, vehicle type, and license number are required."
       );
       return;
     }
     if (!form.car_no?.trim()) {
-      Alert.alert("Required field", "Vehicle registration number is required.");
+      alertValidation("Vehicle registration number is required.");
       return;
     }
     if (!hasImage("license_image")) {
-      Alert.alert("Required", "Please upload your driving license image.");
+      alertValidation("Please upload your driving license image.");
       return;
     }
     if (!hasImage("rc_image")) {
-      Alert.alert("Required", "Please upload your RC (registration certificate) image.");
+      alertValidation("Please upload your RC (registration certificate) image.");
       return;
     }
 
@@ -206,10 +246,10 @@ const AddVehicleModal = ({
         onVehicleAdded?.(res.vehicle);
         onClose?.();
       } else {
-        Alert.alert("Error", res?.message || "Something went wrong");
+        alertError(res?.message || "Something went wrong");
       }
     } catch (err) {
-      Alert.alert("Error", err?.message || "Error adding vehicle");
+      alertError(err?.message || "Error adding vehicle");
     } finally {
       setLoading(false);
     }
@@ -225,8 +265,36 @@ const AddVehicleModal = ({
     !hasImage("rc_image");
 
   const isUpdate = !!existingVehicle?.vehicleCompany;
-  const docAccent = { bg: "#EFF6FF", border: "#BFDBFE", icon: "#2563EB", iconBg: "#DBEAFE" };
-  const carAccent = { bg: "#F0FDF4", border: "#BBF7D0", icon: "#059669", iconBg: "#D1FAE5" };
+  const docAccent = isDark
+    ? {
+        bg: "#1E3A8A33",
+        border: colors.border,
+        icon: colors.primary,
+        iconBg: colors.surfaceAlt,
+        labelColor: colors.text,
+      }
+    : {
+        bg: "#EFF6FF",
+        border: "#BFDBFE",
+        icon: "#2563EB",
+        iconBg: "#DBEAFE",
+        labelColor: CR.text,
+      };
+  const carAccent = isDark
+    ? {
+        bg: "#14532D33",
+        border: colors.border,
+        icon: "#34D399",
+        iconBg: colors.surfaceAlt,
+        labelColor: colors.text,
+      }
+    : {
+        bg: "#F0FDF4",
+        border: "#BBF7D0",
+        icon: "#059669",
+        iconBg: "#D1FAE5",
+        labelColor: CR.text,
+      };
 
   return (
     <Modal
@@ -236,18 +304,23 @@ const AddVehicleModal = ({
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
 
         <KeyboardAvoidingView
           style={[styles.sheetWrap, { maxHeight: SHEET_MAX_HEIGHT }]}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-            <View style={styles.handle} />
+          <View
+            style={[
+              styles.sheet,
+              { paddingBottom: Math.max(insets.bottom, 12), backgroundColor: colors.surface },
+            ]}
+          >
+            <View style={[styles.handle, { backgroundColor: colors.border }]} />
 
             <LinearGradient
-              colors={CR.gradient}
+              colors={isDark ? [colors.surfaceAlt, colors.surface, "#1E3A8A"] : CR.gradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.hero}
@@ -288,36 +361,42 @@ const AddVehicleModal = ({
                 icon="information-circle-outline"
                 iconBg={CR.sections.vehicle.bg}
                 iconColor={CR.sections.vehicle.color}
+                cardStyle={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                titleColor={colors.text}
+                subtitleColor={colors.textMuted}
               >
-                <Text style={styles.fieldLabel}>Company *</Text>
+                <Text style={[styles.fieldLabel, { color: colors.text }]}>Company *</Text>
                 <AppTextInput
                   placeholder="e.g. Toyota, Hyundai"
                   value={form.company}
                   onChangeText={(t) => updateForm("company", t)}
                 />
 
-                <Text style={styles.fieldLabel}>Model *</Text>
+                <Text style={[styles.fieldLabel, { color: colors.text }]}>Model *</Text>
                 <AppTextInput
                   placeholder="e.g. Innova, Swift"
                   value={form.model}
                   onChangeText={(t) => updateForm("model", t)}
                 />
 
-                <Text style={styles.fieldLabel}>Vehicle type *</Text>
-                <AppTextInput
-                  placeholder="e.g. car, suv"
-                  value={form.type}
-                  onChangeText={(t) => updateForm("type", t)}
+                <StyledPicker
+                  theme={pickerTheme}
+                  accent={pickerAccent}
+                  label="Vehicle type"
+                  icon="car-outline"
+                  selectedValue={form.type}
+                  onValueChange={(v) => updateForm("type", v)}
+                  items={vehicleTypeItems}
                 />
 
-                <Text style={styles.fieldLabel}>License number *</Text>
+                <Text style={[styles.fieldLabel, { color: colors.text }]}>License number *</Text>
                 <AppTextInput
                   placeholder="Driving license number"
                   value={form.license_number}
                   onChangeText={(t) => updateForm("license_number", t)}
                 />
 
-                <Text style={styles.fieldLabel}>Registration number (RC) *</Text>
+                <Text style={[styles.fieldLabel, { color: colors.text }]}>Registration number (RC) *</Text>
                 <AppTextInput
                   placeholder="Vehicle plate number"
                   value={form.car_no}
@@ -332,6 +411,9 @@ const AddVehicleModal = ({
                 icon="document-text-outline"
                 iconBg={CR.sections.schedule.bg}
                 iconColor={CR.sections.schedule.color}
+                cardStyle={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                titleColor={colors.text}
+                subtitleColor={colors.textMuted}
               >
                 <ImageUploadField
                   label="Driving license photo"
@@ -362,14 +444,20 @@ const AddVehicleModal = ({
                 icon="calendar-outline"
                 iconBg={CR.sections.pricing.bg}
                 iconColor={CR.sections.pricing.color}
+                cardStyle={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                titleColor={colors.text}
+                subtitleColor={colors.textMuted}
               >
-                <Text style={styles.fieldLabel}>Issue date</Text>
+                <Text style={[styles.fieldLabel, { color: colors.text }]}>Issue date</Text>
                 <Pressable
-                  style={styles.dateButton}
+                  style={[
+                    styles.dateButton,
+                    { borderColor: colors.border, backgroundColor: colors.inputBg },
+                  ]}
                   onPress={() => setShowIssuePicker(true)}
                 >
                   <Icon name="calendar-outline" size={18} color={CR.sections.schedule.color} />
-                  <Text style={styles.dateButtonText}>
+                  <Text style={[styles.dateButtonText, { color: colors.text }]}>
                     {form.issue_date || "Select issue date"}
                   </Text>
                 </Pressable>
@@ -381,13 +469,16 @@ const AddVehicleModal = ({
                   />
                 ) : null}
 
-                <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Expiry date</Text>
+                <Text style={[styles.fieldLabel, { marginTop: 12, color: colors.text }]}>Expiry date</Text>
                 <Pressable
-                  style={styles.dateButton}
+                  style={[
+                    styles.dateButton,
+                    { borderColor: colors.border, backgroundColor: colors.inputBg },
+                  ]}
                   onPress={() => setShowExpiryPicker(true)}
                 >
                   <Icon name="calendar-outline" size={18} color={CR.sections.schedule.color} />
-                  <Text style={styles.dateButtonText}>
+                  <Text style={[styles.dateButtonText, { color: colors.text }]}>
                     {form.expiry_date || "Select expiry date"}
                   </Text>
                 </Pressable>
@@ -403,7 +494,12 @@ const AddVehicleModal = ({
               </SectionCard>
             </ScrollView>
 
-            <View style={styles.footer}>
+            <View
+              style={[
+                styles.footer,
+                { backgroundColor: colors.surface, borderTopColor: colors.border },
+              ]}
+            >
               <TouchableOpacity
                 onPress={handleAddVehicle}
                 disabled={loading || isDisabled}
@@ -430,7 +526,7 @@ const AddVehicleModal = ({
                 </LinearGradient>
               </TouchableOpacity>
               <TouchableOpacity onPress={onClose} style={styles.cancelBtn}>
-                <Text style={styles.cancelText}>Not now</Text>
+                <Text style={[styles.cancelText, { color: colors.textMuted }]}>Not now</Text>
               </TouchableOpacity>
             </View>
           </View>

@@ -101,6 +101,39 @@ export const buildMarkersFromTracking = (tracking, myRole) => {
   return { markers, path, loading };
 };
 
+/** Start/end pins from stored ride route coordinates. */
+export const buildRouteEndpointMarkers = (fromCoords, toCoords) => {
+  const markers = [];
+  const from = toPoint(fromCoords);
+  const to = toPoint(toCoords);
+
+  if (from) {
+    markers.push({
+      id: "route-from",
+      latitude: from.lat,
+      longitude: from.lng,
+      role: "route-from",
+      title: fromCoords?.label || "Pickup",
+      description: "Route start",
+      isMe: false,
+    });
+  }
+
+  if (to) {
+    markers.push({
+      id: "route-to",
+      latitude: to.lat,
+      longitude: to.lng,
+      role: "route-to",
+      title: toCoords?.label || "Destination",
+      description: "Route end",
+      isMe: false,
+    });
+  }
+
+  return markers;
+};
+
 /** All coordinates to include when auto-fitting the map camera. */
 export const getMapFocusCoordinates = (markers, path = []) => {
   const fromMarkers = markers.map((m) => ({

@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useRef } from "react";
-import { Alert } from "react-native";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -16,6 +15,13 @@ import { assertScheduledStartInFuture } from "../Utils/rideSchedule";
 import { DS } from "../theme/designSystem";
 import { getCreateRideTheme } from "../theme/createRideTheme";
 import { useTheme } from "../context/ThemeContext";
+import { toCoordsPayload } from "../Utils/placeSuggestions";
+import {
+  alertError,
+  alertSuccess,
+  alertValidation,
+  showAppAlert,
+} from "../Utils/appAlert";
 
 const hasCompleteVehicle = (info) =>
   !!(info?.vehicleCompany?.trim() && info?.vehicleModel?.trim());
@@ -31,6 +37,9 @@ const CreateRidePage = () => {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showVehicleForm, setShowVehicleForm] = useState(false);
+
+  const [fromCoords, setFromCoords] = useState(null);
+  const [toCoords, setToCoords] = useState(null);
 
   const [rideData, setRideData] = useState({
     from: "",
@@ -91,13 +100,14 @@ const CreateRidePage = () => {
     setSubmitted(true);
 
     if (!hasCompleteVehicle(vehicleInfo)) {
-      Alert.alert(
+      showAppAlert(
         "Vehicle required",
         "Add your vehicle details before creating a ride.",
         [
           { text: "Cancel", style: "cancel" },
           { text: "Add vehicle", onPress: openVehicleForm },
-        ]
+        ],
+        "warning"
       );
       return;
     }
@@ -105,10 +115,7 @@ const CreateRidePage = () => {
     const formOk = formRef.current?.validate?.() ?? true;
     const scheduleErr = validateSchedule();
     if (!formOk || scheduleErr) {
-      Alert.alert(
-        "Check your details",
-        scheduleErr || "Please fill in all required fields."
-      );
+      alertValidation(scheduleErr || "Please fill in all required fields.");
       return;
     }
 
@@ -116,13 +123,15 @@ const CreateRidePage = () => {
       setLoading(true);
       const token = await AsyncStorage.getItem("token");
       if (!token) {
-        Alert.alert("Error", "User not authenticated");
+        alertError("User not authenticated", "Sign in required");
         return;
       }
 
       const payload = {
         from: rideData.from.trim(),
         to: rideData.to.trim(),
+        fromCoords: toCoordsPayload(fromCoords, rideData.from.trim()),
+        toCoords: toCoordsPayload(toCoords, rideData.to.trim()),
         date: rideData.date,
         startTime: rideData.startTime,
         availableSeats: Number(rideData.availableSeats) || 1,
@@ -136,26 +145,31 @@ const CreateRidePage = () => {
       const response = await createRideApi(token, payload);
 
       if (response?.success) {
-        Alert.alert("Ride published", "Your ride is live. Passengers can now find and join it.", [
-          {
-            text: "OK",
-            onPress: () => {
-              setRefreshUpcomingrides((prev) => !prev);
-              navigation.navigate("Navigator", { screen: "Home" });
+        showAppAlert(
+          "Ride published",
+          "Your ride is live. Passengers can now find and join it.",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                setRefreshUpcomingrides((prev) => !prev);
+                navigation.navigate("Navigator", { screen: "Home" });
+              },
             },
-          },
-        ]);
+          ],
+          "success"
+        );
       } else {
         const msg = (response?.message || response?.error || "").toLowerCase();
         if (msg.includes("vehicle")) {
           openVehicleForm();
         } else {
-          Alert.alert("Error", response?.message || "Failed to create ride");
+          alertError(response?.message || "Failed to create ride");
         }
       }
     } catch (error) {
       console.log("Create Ride Error:", error);
-      Alert.alert("Error", "Something went wrong while creating the ride");
+      alertError("Something went wrong while creating the ride");
     } finally {
       setLoading(false);
     }
@@ -163,7 +177,7 @@ const CreateRidePage = () => {
 
   const handleVehicleAdded = async () => {
     await refreshProfile();
-    Alert.alert("Success", "Vehicle saved. You can create your ride now.");
+    alertSuccess("Vehicle saved. You can create your ride now.");
   };
 
   return (
@@ -200,6 +214,10 @@ const CreateRidePage = () => {
           vehicleInfo={vehicleInfo}
           userName={userName}
           onPressAddVehicle={openVehicleForm}
+          onPlaceSelect={(field, place) => {
+            if (field === "from") setFromCoords(place);
+            if (field === "to") setToCoords(place);
+          }}
         />
       </KeyboardAwareScreen>
 

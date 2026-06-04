@@ -1,5 +1,4 @@
 import React, { useState, useRef, useMemo } from "react";
-import { Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
 
@@ -21,6 +20,11 @@ import { validateLocation, validatePrice } from "../Utils";
 import { getPassengerTheme } from "../theme/requestFormTheme";
 import { DS } from "../theme/designSystem";
 import { useTheme } from "../context/ThemeContext";
+import {
+  alertError,
+  alertValidation,
+  showAppToast,
+} from "../Utils/appAlert";
 
 const EMPTY_PASSENGER_PAYLOAD = {
   from: "",
@@ -76,23 +80,23 @@ const PassengerRequest = () => {
   const handleCreateRequest = async () => {
     const isValid = formRef.current?.validate?.();
     if (!isValid) {
-      Alert.alert("Check your details", "Please fill in From and To locations.");
+      alertValidation("Please fill in From and To locations.");
       return;
     }
 
     if (!payload.dateStart || !payload.dateEnd) {
-      Alert.alert("Check your details", "Please select a date range.");
+      alertValidation("Please select a date range.");
       return;
     }
 
     if (!payload.seats_needed) {
-      Alert.alert("Check your details", "Seats required.");
+      alertValidation("Seats required.");
       return;
     }
 
     const priceError = validatePrice(payload.amount_will);
     if (priceError) {
-      Alert.alert("Validation", priceError);
+      alertValidation(priceError);
       return;
     }
 
@@ -100,7 +104,7 @@ const PassengerRequest = () => {
       setSubmitting(true);
       const token = await AsyncStorage.getItem("token");
       if (!token) {
-        Alert.alert("Error", "User not authenticated");
+        alertError("User not authenticated", "Sign in required");
         return;
       }
 
@@ -120,13 +124,13 @@ const PassengerRequest = () => {
       setFormResetKey((k) => k + 1);
       goToMyRequestsTab(navigation, "Passenger");
 
-      Alert.alert(
-        "Request posted",
-        response?.message || "Passenger request created successfully."
+      showAppToast(
+        response?.message || "Passenger request created successfully.",
+        "success"
       );
     } catch (error) {
       console.log("Passenger Request Error:", error);
-      Alert.alert("Error", error?.message || "Failed to create request");
+      alertError(error?.message || "Failed to create request");
     } finally {
       setSubmitting(false);
     }

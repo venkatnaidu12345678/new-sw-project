@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Platform,
   Animated,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import KeyboardAwareScreen from "../Components/ui/KeyboardAwareScreen";
@@ -17,10 +18,11 @@ import {
   getSupportContext,
   sendSupportMessage,
 } from "../ApiService/supportApiService";
-import { ChatListSkeleton } from "../Components/ui/Skeleton";
+import { SupportChatSkeleton } from "../Components/ui/Skeleton";
 import AnimatedLoad from "../Components/ui/AnimatedLoad";
 import ChatMessage from "../Components/ui/ChatMessage";
 import TypingIndicator from "../Components/ui/TypingIndicator";
+import { useNavigation } from "@react-navigation/native";
 import { useTheme } from "../context/ThemeContext";
 import { useThemedStyles } from "../theme/useThemedStyles";
 
@@ -71,6 +73,7 @@ const QuickChip = ({ label, onPress, disabled, index }) => {
 };
 
 const ChartBoat = () => {
+  const navigation = useNavigation();
   const { input: inputColors, colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
@@ -105,7 +108,12 @@ const ChartBoat = () => {
     const init = async () => {
       try {
         const token = await AsyncStorage.getItem("token");
-        if (!token) throw new Error("Not logged in");
+        if (!token) {
+          Alert.alert("Sign in required", "Please log in to use Help & support.", [
+            { text: "OK", onPress: () => navigation.goBack() },
+          ]);
+          return;
+        }
 
         const ctx = await getSupportContext(token);
         if (!mounted) return;
@@ -169,6 +177,10 @@ const ChartBoat = () => {
 
     try {
       const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        Alert.alert("Sign in required", "Please log in to send messages.");
+        return;
+      }
       const res = await sendSupportMessage(token, {
         message: trimmed,
         history: toHistory(nextMessages),
@@ -230,7 +242,7 @@ const ChartBoat = () => {
         loading={loading}
         skeleton={
           <View style={styles.centered}>
-            <ChatListSkeleton />
+            <SupportChatSkeleton />
             <Text style={styles.loadingText}>
               Reading your rides, requests & platform data...
             </Text>

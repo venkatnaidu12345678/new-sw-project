@@ -1,5 +1,4 @@
 import React, { useState, useRef, useMemo } from "react";
-import { Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
 
@@ -24,13 +23,12 @@ import { validateLocation, validatePrice } from "../Utils";
 import { getCourierTheme } from "../theme/requestFormTheme";
 import { DS } from "../theme/designSystem";
 import { useTheme } from "../context/ThemeContext";
-
-const COURIER_TYPES = [
-  { label: "Select courier type", value: "" },
-  { label: "Document", value: "document" },
-  { label: "Parcel", value: "parcel" },
-  { label: "Package", value: "package" },
-];
+import { useLookupOptions } from "../hooks/useLookupOptions";
+import {
+  alertError,
+  alertValidation,
+  showAppToast,
+} from "../Utils/appAlert";
 
 const EMPTY_COURIER_PAYLOAD = {
   from: "",
@@ -58,6 +56,10 @@ const CourierRequest = () => {
   const navigation = useNavigation();
   const { colors } = useTheme();
   const T = useMemo(() => getCourierTheme(colors), [colors]);
+  const { pickerItems: courierTypeItems } = useLookupOptions(
+    "courier_type",
+    "Select courier type"
+  );
   const fromToRef = useRef();
   const [formResetKey, setFormResetKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -90,43 +92,43 @@ const CourierRequest = () => {
   const handleCreateRequest = async () => {
     const routeValid = fromToRef.current?.validate?.() ?? true;
     if (!routeValid) {
-      Alert.alert("Check your details", "Please fill in From and To locations.");
+      alertValidation("Please fill in From and To locations.");
       return;
     }
 
     if (!payload.receiver_name?.trim() || !payload.receiver_mobile?.trim()) {
-      Alert.alert("Validation", "Receiver name and mobile are required.");
+      alertValidation("Receiver name and mobile are required.");
       return;
     }
 
     if (!payload.dateStart || !payload.dateEnd) {
-      Alert.alert("Validation", "Please select a date range.");
+      alertValidation("Please select a date range.");
       return;
     }
 
     if (!payload.courier_type) {
-      Alert.alert("Validation", "Please select courier type.");
+      alertValidation("Please select courier type.");
       return;
     }
 
     if (!payload.what_to_deliver?.trim()) {
-      Alert.alert("Validation", "Please describe what you are sending.");
+      alertValidation("Please describe what you are sending.");
       return;
     }
 
     if (!payload.receiver_address?.trim()) {
-      Alert.alert("Validation", "Receiver delivery address is required.");
+      alertValidation("Receiver delivery address is required.");
       return;
     }
 
     const priceError = validatePrice(payload.amount_will);
     if (priceError) {
-      Alert.alert("Validation", priceError);
+      alertValidation(priceError);
       return;
     }
 
     if (!payload.courier_img) {
-      Alert.alert("Required", "Please upload a photo of the parcel.");
+      alertValidation("Please upload a photo of the parcel.");
       return;
     }
 
@@ -134,7 +136,7 @@ const CourierRequest = () => {
       setSubmitting(true);
       const token = await AsyncStorage.getItem("token");
       if (!token) {
-        Alert.alert("Error", "User not authenticated");
+        alertError("User not authenticated", "Sign in required");
         return;
       }
 
@@ -163,14 +165,13 @@ const CourierRequest = () => {
       setFormResetKey((k) => k + 1);
       goToMyRequestsTab(navigation, "Courier");
 
-      Alert.alert(
-        "Request posted",
-        response?.message || "Courier request created successfully."
+      showAppToast(
+        response?.message || "Courier request created successfully.",
+        "success"
       );
     } catch (error) {
       console.log("Courier Request Error:", error);
-      Alert.alert(
-        "Error",
+      alertError(
         getApiErrorMessage(error, "Failed to create courier request")
       );
     } finally {
@@ -268,7 +269,7 @@ const CourierRequest = () => {
             icon="layers-outline"
             selectedValue={payload.courier_type}
             onValueChange={(v) => updatePayload("courier_type", v)}
-            items={COURIER_TYPES}
+            items={courierTypeItems}
           />
 
           <ImagePicker

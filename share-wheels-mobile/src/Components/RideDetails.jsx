@@ -1,232 +1,145 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  Image,
   ScrollView,
-  TextInput,
   TouchableOpacity,
-  Platform,
-  UIManager,
-  LayoutAnimation,
+  ActivityIndicator,
   Alert,
 } from "react-native";
-
+import Icon from "react-native-vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTheme } from "../context/ThemeContext";
 import { useThemedStyles } from "../theme/useThemedStyles";
 import { getApiErrorMessage } from "../Utils/apiErrors";
-import { launchCamera } from "react-native-image-picker";
-import { courierSendRequestApi,
+import {
+  courierSendRequestApi,
   passengerSendRequestApi,
- } from "../ApiService/ridesApiServices";
-/* 🔹 ICON IMPORTS */
-import backIcon from "../assets/backicon.png";
-import calendarIcon from "../assets/calender.png";
-import startIcon from "../assets/locationstart.png";
-import endIcon from "../assets/locationend.png";
-import passengerIcon from "../assets/toicon.png";
-import seatsicon from "../assets/person.png";
-import person from "../assets/upcomingperson.png"
-import courierIcon from "../assets/courier.png";
-import noSmokingIcon from "../assets/nosmokingicon.png";
-import noPetsIcon from "../assets/nowithpets.png";
-import bookingInfoIcon from "../assets/yourbookingicon.png";
-import verifiedProfileIcon from "../assets/verifiedprofile.png";
-import neverCancelIcon from "../assets/nevercancelrideicon.png";
+  rideDetails,
+} from "../ApiService/ridesApiServices";
 import UserAvatar from "./ui/UserAvatar";
 import VehicleInfoStrip from "./VehicleInfoStrip";
 import KeyboardAwareScreen from "./ui/KeyboardAwareScreen";
 import ScreenContainer from "./ui/ScreenContainer";
 import ScreenHeader from "./ui/ScreenHeader";
+import BookSeatPopover from "./ui/BookSeatPopover";
+import BookCourierPopover from "./ui/BookCourierPopover";
 import { formatDisplayTime } from "../Utils/dateUtils";
 import { LAYOUT } from "../theme/layout";
 import { profileData } from "../Navigation/AuthNavigator";
-
-// LayoutAnimation on Android New Architecture does not need this (no-op when enabled).
-const isBridgeless =
-  typeof global !== "undefined" &&
-  (global.RN$Bridgeless === true || global.__turboModuleProxy != null);
-
-if (
-  Platform.OS === "android" &&
-  !isBridgeless &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
-
-const refUserId = (ref) =>
-  ref?._id?.toString?.() || ref?.toString?.() || "";
+import {
+  refUserId,
+  getPassengerBookingBlockReason,
+  getCourierBookingBlockReason,
+  isUserPassengerOnRide,
+  isUserCourierOnRide,
+} from "../Utils/rideParticipantRole";
 
 const RideDetails = ({ navigation, route }) => {
-  const { ride } = route.params || {};
-  const { input } = useTheme();
+  const initialRide = route.params?.ride;
+  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { ProfileDetails } = profileData();
+
+  const [rideInfo, setRideInfo] = useState(initialRide);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [seatPopoverOpen, setSeatPopoverOpen] = useState(false);
+  const [courierPopoverOpen, setCourierPopoverOpen] = useState(false);
+  const [bookingPassenger, setBookingPassenger] = useState(false);
+  const [bookingCourier, setBookingCourier] = useState(false);
+
   const myUserId = refUserId(
     ProfileDetails?._id ||
       ProfileDetails?.id ||
       ProfileDetails?.data?.personalInfo?._id ||
       ProfileDetails?.data?.personalInfo?.id
   );
+
+  const refreshRideDetails = useCallback(async () => {
+    const rideId = initialRide?._id;
+    if (!rideId) return;
+    try {
+      setDetailsLoading(true);
+      const token = await AsyncStorage.getItem("token");
+      if (!token) return;
+      const res = await rideDetails(token, rideId);
+      if (res?.success && res.data) {
+        setRideInfo((prev) => ({ ...prev, ...res.data }));
+      }
+    } catch (e) {
+      if (__DEV__) console.warn("[RideDetails] refresh:", e?.message);
+    } finally {
+      setDetailsLoading(false);
+    }
+  }, [initialRide?._id]);
+
+  useEffect(() => {
+    refreshRideDetails();
+  }, [refreshRideDetails]);
+
+  const ride = rideInfo;
   const isOwnRide =
     !!myUserId && !!ride?.creator && refUserId(ride.creator) === myUserId;
-
-  const userOnRideAsPassenger =
-    !!myUserId &&
-    ((ride?.passengers || []).some((p) => refUserId(p.userId) === myUserId) ||
-      (ride?.passenger_requested_ride || []).some(
-        (p) => refUserId(p.userId) === myUserId
-      ));
-
-  const userOnRideAsCourier =
-    !!myUserId &&
-    ((ride?.all_deliveries || []).some((c) => refUserId(c.userId) === myUserId) ||
-      (ride?.users_request_Couriers || []).some(
-        (c) => refUserId(c.userId) === myUserId
-      ));
-
-  /* 🔹 ACCORDION */
-  const [showPassenger, setShowPassenger] = useState(true);
-  const [showCourier, setShowCourier] = useState(true);
-
-  /* 🔹 PASSENGER */
-  const [date, setDate] = useState(new Date());
-  const [time, setTime] = useState(new Date());
-  const [showDate, setShowDate] = useState(false);
-  const [showTime, setShowTime] = useState(false);
-  const [seats, setSeats] = useState(1);
-  const [booking, setBooking] = useState(false);
-
-  const maxSeats = Math.max(0, Number(ride?.availableSeats) || 0);
-  const seatFare = Number(ride?.ride_amount) || 0;
-  const totalFare = seatFare * seats;
   const quickReserve = !!ride?.QuickReserve;
   const canCarryCourier = !!ride?.CanCarryCourier;
+  const maxSeats = Math.max(0, Number(ride?.availableSeats) || 0);
+  const seatFare = Number(ride?.ride_amount) || 0;
 
-  /* 🔹 COURIER */
-  const [courierData, setCourierData] = useState({
-    courier_type: "",
-    what_to_deliver: "",
-    courier_img: "",
-    amount_will: "",
-    startDate: "",
-    endDate: "",
-    timeSlot: "",
-    receiver_name: "",
-    receiver_mobile: "",
-    receiver_alternate_mobile: "",
-    receiver_address: "",
-  });
+  const passengerBlockReason = useMemo(
+    () => getPassengerBookingBlockReason(ride, myUserId, { isOwnRide }),
+    [ride, myUserId, isOwnRide]
+  );
 
-  const [startDate, setStartDate] = useState(new Date());
-  const [endDate, setEndDate] = useState(new Date());
-  const [timeSlot, setTimeSlot] = useState(new Date());
+  const courierBlockReason = useMemo(
+    () =>
+      getCourierBookingBlockReason(ride, myUserId, {
+        isOwnRide,
+        canCarryCourier,
+      }),
+    [ride, myUserId, isOwnRide, canCarryCourier]
+  );
 
-  const [showStartDate, setShowStartDate] = useState(false);
-  const [showEndDate, setShowEndDate] = useState(false);
-  const [showTimeSlot, setShowTimeSlot] = useState(false);
+  const onRideAsPassenger = isUserPassengerOnRide(ride, myUserId);
+  const onRideAsCourier = isUserCourierOnRide(ride, myUserId);
 
   if (!ride) {
     return (
       <View style={styles.center}>
-        <Text>No ride data found</Text>
+        <Text style={styles.centerText}>No ride data found</Text>
       </View>
     );
   }
 
   const rideDate = ride?.date ? new Date(ride.date) : null;
   const formattedRideDate = rideDate
-    ? rideDate.toDateString()
+    ? rideDate.toLocaleDateString(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      })
     : "Date not available";
+  const formattedRideTime =
+    formatDisplayTime(ride?.startTime || rideDate) || "N/A";
 
-  const formattedRideTime = formatDisplayTime(ride?.startTime || rideDate) || "N/A";
-
-  const formattedTime = formatDisplayTime(time) || "N/A";
-
-  /* 🔹 TOGGLE */
-  const togglePassenger = () => {
-    LayoutAnimation.easeInEaseOut();
-    setShowPassenger(!showPassenger);
-  };
-
-  const toggleCourier = () => {
-    LayoutAnimation.easeInEaseOut();
-    setShowCourier(!showCourier);
-  };
-
-  /* 🔹 SEATS */
-  const increaseSeats = () => {
-    if (seats < maxSeats) setSeats(seats + 1);
-  };
-
-  const decreaseSeats = () => {
-    if (seats > 1) setSeats(seats - 1);
-  };
-
-  useEffect(() => {
-    if (maxSeats > 0 && seats > maxSeats) setSeats(maxSeats);
-  }, [maxSeats, seats]);
-
-  /* 🔹 INPUT */
-  const handleCourierChange = (key, value) => {
-    setCourierData((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-  };
-
-  /* 🔹 CAMERA */
-  const openCamera = () => {
-    launchCamera(
-      { mediaType: "photo", quality: 0.8, includeBase64: false },
-      (res) => {
-        if (res.didCancel || res.errorCode) return;
-        const asset = res.assets?.[0];
-        if (!asset?.uri) return;
-        setCourierData((prev) => ({
-          ...prev,
-          courier_img: {
-            uri: asset.uri,
-            type: asset.type || "image/jpeg",
-            name: asset.fileName || "courier.jpg",
-          },
-        }));
-      }
-    );
-  };
-  const handleBookPassenger = async () => {
-    if (booking) return;
-    if (isOwnRide) {
-      Alert.alert(
-        "Your ride",
-        "You are the driver for this ride. You cannot book as a passenger on your own trip."
-      );
-      return;
-    }
-    if (userOnRideAsCourier) {
-      Alert.alert(
-        "Already a courier",
-        "You are already a courier on this ride. You cannot also book a passenger seat on the same trip."
-      );
+  const handleBookPassenger = async (seats) => {
+    if (bookingPassenger) return;
+    if (passengerBlockReason) {
+      Alert.alert("Cannot book", passengerBlockReason);
       return;
     }
     try {
       const token = await AsyncStorage.getItem("token");
-
       if (!token) {
         Alert.alert("Sign in required", "Please log in to book a seat.");
         return;
       }
-
       if (maxSeats < 1) {
         Alert.alert("No seats", "This ride has no seats available.");
         return;
       }
 
-      setBooking(true);
+      setBookingPassenger(true);
       const response = await passengerSendRequestApi(token, {
         rideId: ride._id,
         requires_seats: seats,
@@ -234,15 +147,20 @@ const RideDetails = ({ navigation, route }) => {
 
       if (response?.success) {
         const title =
-          response.bookingStatus === "confirmed" ? "Booking confirmed" : "Request sent";
+          response.bookingStatus === "confirmed"
+            ? "Booking confirmed"
+            : "Request sent";
+        setSeatPopoverOpen(false);
+        await refreshRideDetails();
         Alert.alert(
           title,
           response.message ||
-            `Your request for ${seats} seat(s) (₹${response.calculated_amount ?? totalFare}) was sent to the driver.`,
+            `Your request for ${seats} seat(s) was sent to the driver.`,
           [
             {
               text: "OK",
-              onPress: () => navigation.navigate("Navigator", { screen: "Home" }),
+              onPress: () =>
+                navigation.navigate("Navigator", { screen: "Home" }),
             },
           ],
           { cancelable: false }
@@ -256,101 +174,80 @@ const RideDetails = ({ navigation, route }) => {
     } catch (error) {
       Alert.alert("Booking failed", getApiErrorMessage(error));
     } finally {
-      setBooking(false);
+      setBookingPassenger(false);
     }
   };
-  const handleBookCourier = async () => {
-    if (isOwnRide) {
-      Alert.alert(
-        "Your ride",
-        "You are the driver for this ride. Couriers cannot be added by the driver on the same trip."
-      );
-      return;
-    }
-    if (userOnRideAsPassenger) {
-      Alert.alert(
-        "Already a passenger",
-        "You are already a passenger on this ride. You cannot also join as a courier on the same trip."
-      );
+
+  const handleBookCourier = async (courierForm) => {
+    if (bookingCourier) return;
+    if (courierBlockReason) {
+      Alert.alert("Cannot book courier", courierBlockReason);
       return;
     }
     try {
       const token = await AsyncStorage.getItem("token");
-
       if (!token) {
-        Alert.alert("Error", "User not logged in");
+        Alert.alert("Sign in required", "Please log in to continue.");
         return;
       }
 
-      // ✅ validation
       if (
-        !courierData.courier_type ||
-        !courierData.what_to_deliver ||
-        !courierData.amount_will ||
-        !courierData.receiver_name ||
-        !courierData.receiver_mobile ||
-        !courierData.receiver_alternate_mobile ||
-        !courierData.receiver_address
+        !courierForm.courier_type ||
+        !courierForm.what_to_deliver ||
+        !courierForm.amount_will ||
+        !courierForm.receiver_name ||
+        !courierForm.receiver_mobile ||
+        !courierForm.receiver_alternate_mobile ||
+        !courierForm.receiver_address
       ) {
-        Alert.alert("Error", "Please fill all fields");
+        Alert.alert("Missing fields", "Please fill all courier fields.");
         return;
       }
 
-      if (!courierData.courier_img) {
-        Alert.alert("Error", "Upload image first");
+      if (!courierForm.courier_img) {
+        Alert.alert("Photo required", "Upload a parcel photo first.");
         return;
       }
 
+      setBookingCourier(true);
+      const now = new Date();
       const payload = {
-        rideId: ride?._id,
-        from: ride?.from,
-        to: ride?.to,
-        courier_type: courierData.courier_type,
-        what_to_deliver: courierData.what_to_deliver,
-        courier_img: courierData.courier_img,
-        amount_will: courierData.amount_will,
-        date: startDate.toISOString(),
-        timeSlot: timeSlot.toISOString(),
-        receiver_name: courierData.receiver_name,
-        receiver_mobile: courierData.receiver_mobile,
-        receiver_alternate_mobile:
-          courierData.receiver_alternate_mobile,
-        receiver_address: courierData.receiver_address,
+        rideId: ride._id,
+        from: ride.from,
+        to: ride.to,
+        courier_type: courierForm.courier_type,
+        what_to_deliver: courierForm.what_to_deliver,
+        courier_img: courierForm.courier_img,
+        amount_will: courierForm.amount_will,
+        date: now.toISOString(),
+        timeSlot: now.toISOString(),
+        receiver_name: courierForm.receiver_name,
+        receiver_mobile: courierForm.receiver_mobile,
+        receiver_alternate_mobile: courierForm.receiver_alternate_mobile,
+        receiver_address: courierForm.receiver_address,
       };
-
-      console.log("📦 Payload:", payload);
 
       const response = await courierSendRequestApi(token, payload);
 
-      console.log("📦 Response:", response);
-
       if (response?.success) {
-      const courierTitle =
-        response.bookingStatus === "confirmed" ? "Booking confirmed" : "Request sent";
-      Alert.alert(
-        courierTitle,
-        response.message || "Courier booked successfully",
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              navigation.navigate("Navigator", { screen: "Home" });
+        const title =
+          response.bookingStatus === "confirmed"
+            ? "Booking confirmed"
+            : "Request sent";
+        setCourierPopoverOpen(false);
+        await refreshRideDetails();
+        Alert.alert(
+          title,
+          response.message || "Courier request sent successfully.",
+          [
+            {
+              text: "OK",
+              onPress: () =>
+                navigation.navigate("Navigator", { screen: "Home" }),
             },
-          },
-        ],
-        { cancelable: false }
-      );
-        // reset form
-        setCourierData({
-          courier_type: "",
-          what_to_deliver: "",
-          courier_img: "",
-          amount_will: "",
-          receiver_name: "",
-          receiver_mobile: "",
-          receiver_alternate_mobile: "",
-          receiver_address: "",
-        });
+          ],
+          { cancelable: false }
+        );
       } else {
         Alert.alert(
           "Booking failed",
@@ -359,275 +256,242 @@ const RideDetails = ({ navigation, route }) => {
       }
     } catch (error) {
       Alert.alert("Booking failed", getApiErrorMessage(error));
+    } finally {
+      setBookingCourier(false);
     }
+  };
+
+  const openSeatPopover = () => {
+    if (passengerBlockReason) {
+      Alert.alert("Cannot book", passengerBlockReason);
+      return;
+    }
+    setSeatPopoverOpen(true);
+  };
+
+  const openCourierPopover = () => {
+    if (courierBlockReason) {
+      Alert.alert("Cannot book courier", courierBlockReason);
+      return;
+    }
+    setCourierPopoverOpen(true);
   };
 
   return (
     <ScreenContainer edges={["top", "bottom"]}>
-      <ScreenHeader title="Ride Details " style={styles.fixedHeader} />
+      <ScreenHeader title="Ride details" style={styles.fixedHeader} />
       <KeyboardAwareScreen style={styles.container}>
-      <ScrollView
-        style={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.scrollContent}
-      >
-
-        {/* DATE */}
-        <View style={styles.dateRow}>
-          <Image source={calendarIcon} style={styles.smallIcon} />
-          <Text style={styles.dateText}>{formattedRideDate}</Text>
-        </View>
-
-        {/* ROUTE */}
-        <View style={styles.card}>
-          <View style={styles.routeRow}>
-            <Image source={startIcon} style={styles.routeIcon} />
-            <Text style={styles.city}>{ride.from || "N/A"}</Text>
-            <Text style={styles.time}>{formattedRideTime}</Text>
-          </View>
-
-          <View style={styles.verticalLine} />
-
-          <View style={styles.routeRow}>
-            <Image source={endIcon} style={styles.routeIcon} />
-            <Text style={styles.city}>{ride.to || "N/A"}</Text>
-          </View>
-        </View>
-
-        {/* PRICE */}
-        <View style={styles.priceRow}>
-          <View style={styles.passengerRow}>
-            <Image source={passengerIcon} style={styles.passengerIcon} />
-            <Text style={styles.passengerText}>
-              {maxSeats} seat{maxSeats !== 1 ? "s" : ""} available
-            </Text>
-          </View>
-          <Text style={styles.price}>₹{seatFare}/seat</Text>
-        </View>
-
-        {/* DRIVER */}
-        <View style={styles.card}>
-          <View style={styles.driverRow}>
-            <UserAvatar user={ride?.creator} size={48} style={styles.avatar} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.driverName}>
-                {ride?.creator?.name || "Driver"}
-              </Text>
-              <Text style={styles.verified}>Verified</Text>
+        <ScrollView
+          style={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.scrollContent}
+        >
+          {detailsLoading ? (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.loadingText}>Updating ride info…</Text>
             </View>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Image source={verifiedProfileIcon} style={styles.infoIcon} />
-            <Text style={styles.infoText}>Verified Profile</Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Image source={neverCancelIcon} style={styles.infoIcon} />
-            <Text style={styles.infoText}>Never cancels rides</Text>
-          </View>
-
-          {ride?.vehicle ? (
-            <VehicleInfoStrip vehicle={ride.vehicle} compact />
           ) : null}
-        </View>
 
-        {isOwnRide ? (
-          <View style={[styles.warningBox, styles.ownRideBox]}>
-            <Image source={bookingInfoIcon} style={styles.infoIcon} />
-            <Text style={styles.ownRideText}>
-              This is your ride as the driver. Manage passengers from Upcoming Rides — you cannot book yourself as a passenger.
-            </Text>
-          </View>
-        ) : quickReserve ? (
-          <View style={[styles.warningBox, styles.quickReserveBox]}>
-            <Image source={bookingInfoIcon} style={styles.infoIcon} />
-            <Text style={styles.quickReserveText}>
-              Quick Reserve — your booking is confirmed instantly (no driver approval needed).
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.warningBox}>
-            <Image source={bookingInfoIcon} style={styles.infoIcon} />
-            <Text style={styles.warningText}>
-              Driver must approve your booking before you are on the ride.
-            </Text>
-          </View>
-        )}
-
-        {/* PREFERENCES */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Ride Preferences</Text>
-          <View style={styles.prefRow}>
-            <Image source={noSmokingIcon} style={styles.prefIcon} />
-            <Text>No smoking</Text>
-          </View>
-          <View style={styles.prefRow}>
-            <Image source={noPetsIcon} style={styles.prefIcon} />
-            <Text>No pets</Text>
-          </View>
-        </View>
-
-        {!isOwnRide && (
-        <>
-        {/* PASSENGER */}
-        <TouchableOpacity style={styles.accordionHeader} onPress={togglePassenger}>
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <Image source={person} style={styles.courierIcon} />
-          <Text style={styles.accordionTitle}>Passenger Booking</Text>
-             </View>
-          <Text>{showPassenger ? "−" : "+"}</Text>
-        
-        </TouchableOpacity>
-
-        {showPassenger && (
-          <View style={styles.accordionContent}>
-            {userOnRideAsCourier ? (
-              <Text style={styles.roleConflictText}>
-                You are already a courier on this ride and cannot book a passenger seat on the same trip.
-              </Text>
-            ) : null}
-            <View style={styles.seatBox}>
-              <Image source={seatsicon} style={styles.courierIcon} />
-              <TouchableOpacity onPress={decreaseSeats} disabled={seats <= 1}>
-                <Text style={[styles.seatBtn, seats <= 1 && styles.seatBtnDisabled]}>−</Text>
-              </TouchableOpacity>
-
-              <Text style={styles.seatCount}>
-                {maxSeats < 1
-                  ? "No seats left"
-                  : `${seats} / ${maxSeats} seat${maxSeats !== 1 ? "s" : ""}`}
-              </Text>
-
-              <TouchableOpacity onPress={increaseSeats} disabled={seats >= maxSeats}>
-                <Text style={[styles.seatBtn, seats >= maxSeats && styles.seatBtnDisabled]}>+</Text>
-              </TouchableOpacity>
+          {/* Route hero */}
+          <View style={styles.routeCard}>
+            <View style={styles.routeDateRow}>
+              <Icon name="calendar-outline" size={16} color={colors.primary} />
+              <Text style={styles.routeDate}>{formattedRideDate}</Text>
+              <View style={styles.timePill}>
+                <Icon name="time-outline" size={14} color={colors.primary} />
+                <Text style={styles.timePillText}>{formattedRideTime}</Text>
+              </View>
             </View>
-            <Text style={styles.fareHint}>
-              Total: ₹{totalFare} ({seats} × ₹{seatFare})
-            </Text>
-
-            <TouchableOpacity
-              style={[styles.primaryBtn, booking && styles.primaryBtnDisabled]}
-              onPress={handleBookPassenger}
-              disabled={booking || maxSeats < 1 || userOnRideAsCourier}
-            >
-              <Text style={styles.btnText}>
-                {booking ? "Sending…" : "Book Passenger"}
-              </Text>
-            </TouchableOpacity>
-            
+            <View style={styles.routeStop}>
+              <View style={[styles.routeDot, { backgroundColor: colors.successText }]} />
+              <Text style={styles.routeCity}>{ride.from || "N/A"}</Text>
+            </View>
+            <View style={styles.routeLine} />
+            <View style={styles.routeStop}>
+              <View style={[styles.routeDot, { backgroundColor: colors.errorText }]} />
+              <Text style={styles.routeCity}>{ride.to || "N/A"}</Text>
+            </View>
           </View>
-        )}
 
-        {canCarryCourier && (
-        <>
-        <TouchableOpacity style={styles.accordionHeader} onPress={toggleCourier}>
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Image source={courierIcon} style={styles.courierIcon} />
-            <Text style={styles.accordionTitle}>Courier Booking</Text>
-          </View>
-          <Text>{showCourier ? "−" : "+"}</Text>
-        </TouchableOpacity>
-
-        {showCourier && (
-          <View style={styles.accordionContent}>
-            {userOnRideAsPassenger ? (
-              <Text style={styles.roleConflictText}>
-                You are already a passenger on this ride and cannot also book courier delivery on the same trip.
-              </Text>
+          {/* Stats */}
+          <View style={styles.statsRow}>
+            <View style={styles.statChip}>
+              <Icon name="people-outline" size={18} color={colors.primary} />
+              <Text style={styles.statValue}>{maxSeats}</Text>
+              <Text style={styles.statLabel}>seats left</Text>
+            </View>
+            <View style={styles.statChip}>
+              <Icon name="cash-outline" size={18} color={colors.primary} />
+              <Text style={styles.statValue}>₹{seatFare}</Text>
+              <Text style={styles.statLabel}>per seat</Text>
+            </View>
+            {canCarryCourier ? (
+              <View style={[styles.statChip, styles.statChipCourier]}>
+                <Icon name="cube-outline" size={18} color={colors.warningText} />
+                <Text style={[styles.statValue, styles.statValueCourier]}>Yes</Text>
+                <Text style={styles.statLabel}>courier</Text>
+              </View>
             ) : null}
-
-            <TextInput
-              placeholder="Courier type (e.g. document, parcel)"
-              placeholderTextColor={input.placeholder}
-              style={styles.input}
-              onChangeText={(v) => handleCourierChange("courier_type", v)}
-            />
-
-            <TextInput
-              placeholder="What to deliver"
-              placeholderTextColor={input.placeholder}
-              style={styles.input}
-              onChangeText={(v) => handleCourierChange("what_to_deliver", v)}
-            />
-
-            <TextInput
-              placeholder="Declared value (₹)"
-              placeholderTextColor={input.placeholder}
-              keyboardType="numeric"
-              style={styles.input}
-              onChangeText={(v) => handleCourierChange("amount_will", v)}
-            />
-
-            <TouchableOpacity style={styles.imageUpload} onPress={openCamera}>
-              <Text style={styles.imageUploadText}>📸 Upload Image</Text>
-            </TouchableOpacity>
-
-            {courierData.courier_img && (
-              <Image
-                source={{
-                  uri:
-                    courierData.courier_img?.uri ||
-                    courierData.courier_img,
-                }}
-                style={styles.previewImage}
-              />
-            )}
-
-            <TextInput
-              placeholder="Receiver full name"
-              placeholderTextColor={input.placeholder}
-              style={styles.input}
-              onChangeText={(v) => handleCourierChange("receiver_name", v)}
-            />
-
-            <TextInput
-              placeholder="Receiver mobile"
-              placeholderTextColor={input.placeholder}
-              keyboardType="phone-pad"
-              style={styles.input}
-              onChangeText={(v) => handleCourierChange("receiver_mobile", v)}
-            />
-
-            <TextInput
-              placeholder="Alternate mobile"
-              placeholderTextColor={input.placeholder}
-              keyboardType="phone-pad"
-              style={styles.input}
-              onChangeText={(v) => handleCourierChange("receiver_alternate_mobile", v)}
-            />
-
-            <TextInput
-              placeholder="Full delivery address"
-              placeholderTextColor={input.placeholder}
-              multiline
-              style={styles.input}
-              onChangeText={(v) => handleCourierChange("receiver_address", v)}
-            />
-
-            <TouchableOpacity
-              style={[
-                styles.primaryBtn,
-                userOnRideAsPassenger && styles.primaryBtnDisabled,
-              ]}
-              onPress={handleBookCourier}
-              disabled={userOnRideAsPassenger}
-            >
-              <Text style={styles.btnText}>Book Courier</Text>
-            </TouchableOpacity>
-            
-
           </View>
-        )}
-        </>
-        )}
-        </>
-        )}
 
-      </ScrollView>
-    </KeyboardAwareScreen>
+          {/* Driver */}
+          <View style={styles.card}>
+            <View style={styles.driverRow}>
+              <UserAvatar user={ride.creator} size={52} />
+              <View style={styles.driverCol}>
+                <Text style={styles.driverName}>
+                  {ride.creator?.name || "Driver"}
+                </Text>
+                <View style={styles.verifiedRow}>
+                  <Icon
+                    name="shield-checkmark"
+                    size={14}
+                    color={colors.successText}
+                  />
+                  <Text style={styles.verified}>Verified profile</Text>
+                </View>
+              </View>
+            </View>
+            {ride.vehicle ? (
+              <VehicleInfoStrip vehicle={ride.vehicle} compact />
+            ) : null}
+          </View>
+
+          {/* Status banner */}
+          {isOwnRide ? (
+            <View style={[styles.banner, styles.bannerInfo]}>
+              <Icon name="car" size={20} color={colors.infoText} />
+              <Text style={styles.bannerInfoText}>
+                This is your ride. Manage passengers from Upcoming Rides.
+              </Text>
+            </View>
+          ) : onRideAsPassenger ? (
+            <View style={[styles.banner, styles.bannerSuccess]}>
+              <Icon name="checkmark-circle" size={20} color={colors.successText} />
+              <Text style={styles.bannerSuccessText}>
+                You are on this ride as a passenger.
+              </Text>
+            </View>
+          ) : onRideAsCourier ? (
+            <View style={[styles.banner, styles.bannerCourier]}>
+              <Icon name="cube" size={20} color={colors.warningText} />
+              <Text style={styles.bannerCourierText}>
+                You are on this ride as a courier.
+              </Text>
+            </View>
+          ) : quickReserve ? (
+            <View style={[styles.banner, styles.bannerSuccess]}>
+              <Icon name="flash" size={20} color={colors.successText} />
+              <Text style={styles.bannerSuccessText}>
+                Quick Reserve — booking is confirmed instantly.
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.banner, styles.bannerWarn]}>
+              <Icon name="hourglass-outline" size={20} color={colors.warningText} />
+              <Text style={styles.bannerWarnText}>
+                Driver must approve your booking before you join the ride.
+              </Text>
+            </View>
+          )}
+
+          {/* Preferences */}
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Ride preferences</Text>
+            <View style={styles.prefChips}>
+              <View style={styles.prefChip}>
+                <Icon name="ban-outline" size={16} color={colors.textMuted} />
+                <Text style={styles.prefChipText}>No smoking</Text>
+              </View>
+              <View style={styles.prefChip}>
+                <Icon name="paw-outline" size={16} color={colors.textMuted} />
+                <Text style={styles.prefChipText}>No pets</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Booking actions */}
+          {!isOwnRide ? (
+            <View style={styles.actionsBlock}>
+              <Text style={styles.actionsTitle}>Join this ride</Text>
+
+              <TouchableOpacity
+                style={[
+                  styles.actionCard,
+                  passengerBlockReason && styles.actionCardDisabled,
+                ]}
+                onPress={openSeatPopover}
+                activeOpacity={0.88}
+              >
+                <View style={[styles.actionIcon, { backgroundColor: colors.successBg }]}>
+                  <Icon name="person-add" size={22} color={colors.successText} />
+                </View>
+                <View style={styles.actionTextCol}>
+                  <Text style={styles.actionTitle}>Book a seat</Text>
+                  <Text style={styles.actionSub} numberOfLines={2}>
+                    {passengerBlockReason ||
+                      `${maxSeats} seat${maxSeats !== 1 ? "s" : ""} · ₹${seatFare} each`}
+                  </Text>
+                </View>
+                <Icon
+                  name="chevron-forward"
+                  size={20}
+                  color={passengerBlockReason ? colors.textMuted : colors.primary}
+                />
+              </TouchableOpacity>
+
+              {canCarryCourier ? (
+                <TouchableOpacity
+                  style={[
+                    styles.actionCard,
+                    courierBlockReason && styles.actionCardDisabled,
+                  ]}
+                  onPress={openCourierPopover}
+                  activeOpacity={0.88}
+                >
+                  <View style={[styles.actionIcon, styles.actionIconCourier]}>
+                    <Icon name="cube" size={22} color={colors.warningText} />
+                  </View>
+                  <View style={styles.actionTextCol}>
+                    <Text style={styles.actionTitle}>Send a parcel</Text>
+                    <Text style={styles.actionSub} numberOfLines={2}>
+                      {courierBlockReason || "Courier delivery on this route"}
+                    </Text>
+                  </View>
+                  <Icon
+                    name="chevron-forward"
+                    size={20}
+                    color={courierBlockReason ? colors.textMuted : colors.warningText}
+                  />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : null}
+        </ScrollView>
+      </KeyboardAwareScreen>
+
+      <BookSeatPopover
+        visible={seatPopoverOpen}
+        onClose={() => !bookingPassenger && setSeatPopoverOpen(false)}
+        maxSeats={maxSeats}
+        seatFare={seatFare}
+        quickReserve={quickReserve}
+        blockReason={passengerBlockReason}
+        booking={bookingPassenger}
+        onBook={handleBookPassenger}
+      />
+
+      <BookCourierPopover
+        visible={courierPopoverOpen}
+        onClose={() => !bookingCourier && setCourierPopoverOpen(false)}
+        rideFrom={ride.from}
+        rideTo={ride.to}
+        blockReason={courierBlockReason}
+        booking={bookingCourier}
+        onBook={handleBookCourier}
+      />
     </ScreenContainer>
   );
 };
@@ -636,117 +500,214 @@ export default RideDetails;
 
 const createStyles = (c) =>
   StyleSheet.create({
-  container: { flex: 1, backgroundColor: c.background },
-  fixedHeader: {
-    paddingHorizontal: LAYOUT.spacing.screen,
-    paddingTop: LAYOUT.spacing.xs,
-    marginBottom: LAYOUT.spacing.xs,
-  },
-  scroll: { flex: 1 },
-  scrollContent: {
-    paddingHorizontal: LAYOUT.spacing.screen,
-    paddingBottom: 32,
-  },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: { flexDirection: "row", alignItems: "center", padding: 14, paddingTop: 8 },
-  backIcon: { width: 24, height: 24 },
-  headerTitle: { flex: 1, fontSize: 20, fontWeight: "600", marginLeft: 10 },
-  dateRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16 },
-  smallIcon: { width: 16, height: 16, marginRight: 6 },
-  dateText: { color: c.textSecondary },
-  card: { backgroundColor: c.card, margin: 16, padding: 16, borderRadius: 16 },
-  routeRow: { flexDirection: "row", alignItems: "center" },
-  routeIcon: { width: 16, height: 16, marginRight: 10 },
-  verticalLine: { height: 40, width: 2, backgroundColor: c.border, marginLeft: 7, marginVertical: 6 },
-  city: { fontWeight: "600", flex: 1, color: c.text },
-  time: { color: c.primary },
-  priceRow: { flexDirection: "row", justifyContent: "space-between", backgroundColor: c.primaryMuted, marginHorizontal: 16, padding: 16, borderRadius: 14 },
-  passengerRow: { flexDirection: "row", alignItems: "center" },
-  passengerIcon: { width: 20, height: 20, marginRight: 8 },
-  passengerText: { fontWeight: "600", color: c.text },
-  price: { fontSize: LAYOUT.font.title, fontWeight: "700", color: c.primary },
-  driverRow: { flexDirection: "row", alignItems: "center" },
-  avatar: { width: 48, height: 48, borderRadius: 24, marginRight: 10 },
-  driverName: { fontWeight: "600", color: c.text },
-  verified: { color: "green", fontSize: 12 },
-  infoRow: { flexDirection: "row", alignItems: "center", marginTop: 10 },
-  infoIcon: { width: 22, height: 22, marginRight: 8 },
-  infoText: { color: c.textSecondary },
-  warningBox: { flexDirection: "row", backgroundColor: c.warningBg, marginHorizontal: 16, padding: 12, borderRadius: 12, alignItems: "center" },
-  warningText: { flex: 1, marginLeft: 10, color: c.warningText },
-  roleConflictText: {
-    color: c.warningText,
-    marginBottom: 12,
-    fontWeight: "600",
-    lineHeight: 20,
-  },
-  quickReserveBox: { backgroundColor: c.successBg },
-  quickReserveText: { flex: 1, marginLeft: 10, color: c.successText, fontWeight: "600" },
-  ownRideBox: { backgroundColor: c.infoBg },
-  ownRideText: { flex: 1, marginLeft: 10, color: c.infoText, fontWeight: "600" },
-  sectionTitle: { fontSize: 16, fontWeight: "600", marginBottom: 10, color: c.text },
-  prefRow: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
-  prefIcon: { width: 22, height: 22, marginRight: 8 },
- accordionHeader: {
-  flexDirection: "row",
-  justifyContent: "space-between",
-  alignItems: "center",
-  backgroundColor: c.surface,
-  padding: 14,
-  marginHorizontal: 16,
-  borderRadius: 14,
-  marginBottom: 8,
-
-  // 🔹 SHADOW (iOS)
-  shadowColor: c.shadow,
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.08,
-  shadowRadius: 4,
-
-  // 🔹 ELEVATION (Android)
-  elevation: 3,
-},
-  accordionTitle: { fontWeight: "600", fontSize: 16, color: c.text },
-  accordionContent: {
-  marginHorizontal: 16,
-  marginBottom: 12,
-  backgroundColor: c.surface,
-  borderRadius: 14,
-  padding: 14,
-
-  // 🔹 SHADOW
-  shadowColor: c.shadow,
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.05,
-  shadowRadius: 3,
-  elevation: 2,
-},
-  input: {
-    backgroundColor: c.inputBg,
-    padding: 14,
-    borderRadius: 10,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    color: c.text,
-    fontSize: 15,
-  },
-  seatBox: { flexDirection: "row", justifyContent: "center", alignItems: "center", backgroundColor: c.card, padding: 10, borderRadius: 10, marginBottom: 20,marginTop:10 },
-  seatBtn: { fontSize: 22, paddingHorizontal: 10 },
-  seatCount: { fontSize: 16, fontWeight: "600", minWidth: 100, textAlign: "center" },
-  seatBtnDisabled: { opacity: 0.35 },
-  fareHint: {
-    textAlign: "center",
-    color: c.textMuted,
-    marginBottom: 14,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  primaryBtnDisabled: { opacity: 0.6 },
-  courierIcon: { width: 20, height: 20, marginRight: 8 },
-  imageUpload: { backgroundColor: c.primaryMuted, padding: 12, borderRadius: 10, alignItems: "center", marginBottom: 12 },
-  imageUploadText: { color: c.primary, fontWeight: "600" },
-  previewImage: { width: "100%", height: 150, borderRadius: 10, marginBottom: 12 },
-  primaryBtn: { backgroundColor: c.primary, padding: 14, borderRadius: 12, alignItems: "center" },
-  btnText: { color: c.inverseText, fontWeight: "600" },
-});
+    container: { flex: 1, backgroundColor: c.background },
+    fixedHeader: {
+      paddingHorizontal: LAYOUT.spacing.screen,
+      paddingTop: LAYOUT.spacing.xs,
+      marginBottom: LAYOUT.spacing.xs,
+    },
+    scroll: { flex: 1 },
+    scrollContent: {
+      paddingHorizontal: LAYOUT.spacing.screen,
+      paddingBottom: 32,
+    },
+    center: { flex: 1, justifyContent: "center", alignItems: "center" },
+    centerText: { color: c.textMuted },
+    loadingRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 12,
+    },
+    loadingText: { fontSize: 13, color: c.textMuted },
+    routeCard: {
+      backgroundColor: c.surface,
+      borderRadius: 18,
+      padding: 16,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    routeDateRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 14,
+      flexWrap: "wrap",
+    },
+    routeDate: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: c.textSecondary,
+      flex: 1,
+    },
+    timePill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      backgroundColor: c.primaryMuted,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 999,
+    },
+    timePillText: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: c.primary,
+    },
+    routeStop: { flexDirection: "row", alignItems: "center", gap: 10 },
+    routeDot: { width: 10, height: 10, borderRadius: 5 },
+    routeCity: { fontSize: 17, fontWeight: "800", color: c.text, flex: 1 },
+    routeLine: {
+      width: 2,
+      height: 20,
+      backgroundColor: c.border,
+      marginLeft: 4,
+      marginVertical: 4,
+    },
+    statsRow: {
+      flexDirection: "row",
+      gap: 8,
+      marginBottom: 12,
+    },
+    statChip: {
+      flex: 1,
+      backgroundColor: c.surface,
+      borderRadius: 14,
+      padding: 12,
+      alignItems: "center",
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    statChipCourier: {
+      backgroundColor: c.tintOrange,
+      borderColor: c.warningBorder,
+    },
+    statValueCourier: {
+      color: c.warningText,
+    },
+    statValue: {
+      fontSize: 16,
+      fontWeight: "800",
+      color: c.text,
+      marginTop: 4,
+    },
+    statLabel: {
+      fontSize: 11,
+      color: c.textMuted,
+      fontWeight: "600",
+      marginTop: 2,
+    },
+    card: {
+      backgroundColor: c.surface,
+      borderRadius: 16,
+      padding: 16,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    driverRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+    driverCol: { flex: 1 },
+    driverName: { fontSize: 17, fontWeight: "800", color: c.text },
+    verifiedRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      marginTop: 4,
+    },
+    verified: { fontSize: 12, fontWeight: "600", color: c.successText },
+    banner: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 10,
+      padding: 14,
+      borderRadius: 14,
+      marginBottom: 12,
+    },
+    bannerWarn: { backgroundColor: c.warningBg },
+    bannerWarnText: {
+      flex: 1,
+      color: c.warningText,
+      fontWeight: "600",
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    bannerSuccess: { backgroundColor: c.successBg },
+    bannerSuccessText: {
+      flex: 1,
+      color: c.successText,
+      fontWeight: "600",
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    bannerInfo: { backgroundColor: c.infoBg },
+    bannerInfoText: {
+      flex: 1,
+      color: c.infoText,
+      fontWeight: "600",
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    bannerCourier: { backgroundColor: c.warningBg },
+    bannerCourierText: {
+      flex: 1,
+      color: c.warningText,
+      fontWeight: "600",
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    sectionTitle: {
+      fontSize: 15,
+      fontWeight: "800",
+      color: c.text,
+      marginBottom: 10,
+    },
+    prefChips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    prefChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      backgroundColor: c.chipBg,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
+    },
+    prefChipText: { fontSize: 13, fontWeight: "600", color: c.textMuted },
+    actionsBlock: { marginTop: 4 },
+    actionsTitle: {
+      fontSize: 15,
+      fontWeight: "800",
+      color: c.text,
+      marginBottom: 10,
+    },
+    actionCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: c.surface,
+      borderRadius: 16,
+      padding: 14,
+      marginBottom: 10,
+      borderWidth: 1,
+      borderColor: c.border,
+      gap: 12,
+    },
+    actionCardDisabled: { opacity: 0.72 },
+    actionIcon: {
+      width: 48,
+      height: 48,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    actionIconCourier: {
+      backgroundColor: c.tintOrange,
+    },
+    actionTextCol: { flex: 1 },
+    actionTitle: { fontSize: 16, fontWeight: "800", color: c.text },
+    actionSub: {
+      fontSize: 12,
+      color: c.textMuted,
+      marginTop: 4,
+      lineHeight: 16,
+    },
+  });

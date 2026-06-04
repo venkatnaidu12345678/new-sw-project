@@ -12,6 +12,7 @@ import { useNavigation } from "@react-navigation/native";
 import { navigateToRootScreen } from "../Utils/mainTabNavigation";
 import { useTheme } from "../context/ThemeContext";
 import { useThemedStyles } from "../theme/useThemedStyles";
+import CoachMarkAnchor from "./coachMarks/CoachMarkAnchor";
 
 import rideIcon from "../assets/ride.png";
 import passengerIcon from "../assets/passenger.png";
@@ -92,14 +93,16 @@ const CreateOptionsCard = ({ visible: fabEnabled = true }) => {
         </View>
       )}
 
-      <TouchableOpacity
-        style={[styles.fab, { backgroundColor: colors.primary }, !fabEnabled && styles.fabDisabled]}
-        onPress={() => fabEnabled && setVisible(!visible)}
-        activeOpacity={0.8}
-        disabled={!fabEnabled}
-      >
-        <Text style={styles.plus}>+</Text>
-      </TouchableOpacity>
+      <CoachMarkAnchor id="fab_create" style={styles.fabAnchor}>
+        <TouchableOpacity
+          style={[styles.fab, { backgroundColor: colors.primary }, !fabEnabled && styles.fabDisabled]}
+          onPress={() => fabEnabled && setVisible(!visible)}
+          activeOpacity={0.8}
+          disabled={!fabEnabled}
+        >
+          <Text style={styles.plus}>+</Text>
+        </TouchableOpacity>
+      </CoachMarkAnchor>
     </View>
   );
 };
@@ -174,10 +177,12 @@ const createStyles = (c) =>
       color: c.textMuted,
       marginTop: 2,
     },
-    fab: {
+    fabAnchor: {
       position: "absolute",
       bottom: 0,
       right: scale(20),
+    },
+    fab: {
       width: LAYOUT.sizes.fabSize,
       height: LAYOUT.sizes.fabSize,
       borderRadius: LAYOUT.sizes.fabSize / 2,

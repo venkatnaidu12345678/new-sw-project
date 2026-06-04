@@ -10,7 +10,9 @@ import {
   startLiveLocationPublishing,
   stopLiveLocationPublishing,
   publishLocationOnce,
+  getPublishingRideId,
 } from "../liveTracking/liveLocationPublisher";
+import { getActiveRideTracking } from "../Utils/activeRideTracking";
 
 const REBUILD_HINT =
   "Location module missing. Rebuild: cd share-wheels-mobile && npm run android";
@@ -70,8 +72,17 @@ export const useParticipantLocation = ({ enabled, rideId, token }) => {
 
   useEffect(() => {
     if (!enabled || !rideId || !token) {
-      stopLiveLocationPublishing();
-      setSharing(false);
+      (async () => {
+        const active = await getActiveRideTracking();
+        const activeId = active?.rideId?.toString?.() || active?.rideId;
+        const currentId = rideId?.toString?.() || rideId;
+        if (activeId && currentId && activeId === currentId) {
+          return;
+        }
+        if (getPublishingRideId() && activeId) return;
+        stopLiveLocationPublishing();
+        setSharing(false);
+      })();
       return undefined;
     }
 

@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Config from "react-native-config";
 import {
   buildMarkersFromTracking,
+  buildRouteEndpointMarkers,
   getMapFocusCoordinates,
   regionForCoordinates,
   DEFAULT_MAP_CENTER,
@@ -75,6 +76,9 @@ const GoogleRideMap = ({
   gpsStatusText,
   allowFullscreen = true,
   fullscreenTitle = "Live map",
+  plannedRoute = [],
+  fromCoords = null,
+  toCoords = null,
 }) => {
   const mapRef = useRef(null);
   const [mapReady, setMapReady] = useState(false);
@@ -88,15 +92,25 @@ const GoogleRideMap = ({
 
   const { markers, path, hasRemoteMarkers } = useMemo(() => {
     const built = buildMarkersFromTracking(tracking, myRole);
+    const routeMarkers = buildRouteEndpointMarkers(fromCoords, toCoords);
+    const liveIds = new Set(built.markers.map((m) => m.id));
+    const mergedRouteMarkers = routeMarkers.filter((m) => !liveIds.has(m.id));
+
     return {
       ...built,
+      markers: [...built.markers, ...mergedRouteMarkers],
       hasRemoteMarkers: built.markers.length > 0,
     };
-  }, [tracking, myRole]);
+  }, [tracking, myRole, fromCoords, toCoords]);
+
+  const plannedPath = useMemo(
+    () => (Array.isArray(plannedRoute) ? plannedRoute.filter(Boolean) : []),
+    [plannedRoute]
+  );
 
   const focusCoordinates = useMemo(
-    () => getMapFocusCoordinates(markers, path),
-    [markers, path]
+    () => getMapFocusCoordinates(markers, [...path, ...plannedPath]),
+    [markers, path, plannedPath]
   );
 
   /** Refit camera when participants join/leave — not on every GPS tick. */
@@ -279,26 +293,50 @@ const GoogleRideMap = ({
       loadingEnabled={false}
       moveOnMarkerPress={false}
     >
+      {plannedPath.length > 1 ? (
+        <Polyline
+          coordinates={plannedPath}
+          strokeColor={colors.textMuted}
+          strokeWidth={4}
+          lineDashPattern={[12, 8]}
+        />
+      ) : null}
+
       {path.length > 1 ? (
         <Polyline coordinates={path} strokeColor={colors.primary} strokeWidth={4} />
       ) : null}
 
-      {markers.map((m) => (
-        <Marker
-          key={m.id}
-          coordinate={{
-            latitude: m.latitude,
-            longitude: m.longitude,
-          }}
-          title={m.title}
-          description={m.description}
-          anchor={{ x: 0.5, y: 1 }}
-          tracksViewChanges={false}
-          zIndex={m.isMe ? 10 : m.role === "driver" ? 5 : 3}
-        >
-          <RideMapMarkerIcon role={m.role} isMe={m.isMe} />
-        </Marker>
-      ))}
+      {markers.map((m) => {
+        const isRoutePin = m.role === "route-from" || m.role === "route-to";
+        return (
+          <Marker
+            key={m.id}
+            coordinate={{
+              latitude: m.latitude,
+              longitude: m.longitude,
+            }}
+            title={m.title}
+            description={m.description}
+            anchor={{ x: 0.5, y: isRoutePin ? 0.5 : 1 }}
+            tracksViewChanges={false}
+            zIndex={m.isMe ? 10 : m.role === "driver" ? 5 : isRoutePin ? 2 : 3}
+          >
+            {isRoutePin ? (
+              <View
+                style={[
+                  styles.routePin,
+                  {
+                    backgroundColor:
+                      m.role === "route-from" ? colors.successText : colors.warningText,
+                  },
+                ]}
+              />
+            ) : (
+              <RideMapMarkerIcon role={m.role} isMe={m.isMe} />
+            )}
+          </Marker>
+        );
+      })}
     </MapView>
   );
 
@@ -506,6 +544,13 @@ const createStyles = (c) =>
       borderColor: c.border,
     },
     legendLabel: { fontSize: 11, color: c.textSecondary, fontWeight: "600" },
+    routePin: {
+      width: 14,
+      height: 14,
+      borderRadius: 7,
+      borderWidth: 2,
+      borderColor: "#FFFFFF",
+    },
     fullscreenBtn: {
       position: "absolute",
       top: 8,

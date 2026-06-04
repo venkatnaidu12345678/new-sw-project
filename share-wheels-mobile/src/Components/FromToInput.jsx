@@ -10,7 +10,6 @@ import {
   TextInput,
   ScrollView,
   Text,
-  TouchableOpacity,
   StyleSheet,
   Pressable,
   Keyboard,
@@ -19,6 +18,7 @@ import {
 import { validateForm, validateLocation } from "../Utils";
 import { useTheme } from "../context/ThemeContext";
 import { useLocationSuggestions } from "../hooks/useLocationSuggestions";
+import { getSuggestionKey, getSuggestionLabel } from "../Utils/placeSuggestions";
 
 const BLUR_HIDE_MS = 280;
 
@@ -35,7 +35,7 @@ const getRouteFieldStyle = (c) => ({
   },
 });
 
-const FromToInput = forwardRef(({ fields = [], variant }, ref) => {
+const FromToInput = forwardRef(({ fields = [], variant, onPlaceSelect }, ref) => {
   const { input, colors } = useTheme();
   const routeFieldStyle = getRouteFieldStyle(colors);
   const isRoute = variant === "route";
@@ -44,7 +44,7 @@ const FromToInput = forwardRef(({ fields = [], variant }, ref) => {
   const blurTimers = useRef({});
   const inputRefs = useRef({});
   const selectingRef = useRef(false);
-  const { filterLocations } = useLocationSuggestions();
+  const { searchPlaces, resolvePlace } = useLocationSuggestions();
 
   const validateField = (field) => {
     if (!field.rules) return;
@@ -92,6 +92,7 @@ const FromToInput = forwardRef(({ fields = [], variant }, ref) => {
       return {
         show: Boolean(raw?.show),
         data: Array.isArray(raw?.data) ? raw.data : [],
+        loading: Boolean(raw?.loading),
       };
     },
     [dropdownState]
@@ -108,55 +109,72 @@ const FromToInput = forwardRef(({ fields = [], variant }, ref) => {
           [key]: {
             show: false,
             data: Array.isArray(current?.data) ? current.data : [],
+            loading: false,
           },
         };
       });
     }, BLUR_HIDE_MS);
   };
 
-  const handleSearch = useCallback((key, text, onChangeText) => {
-    onChangeText(text);
-    clearBlurTimer(key);
+  const runSearch = useCallback(
+    async (key, text, onChangeText) => {
+      onChangeText(text);
+      clearBlurTimer(key);
 
-    if (!text || text.trim() === "") {
+      if (!text || text.trim() === "") {
+        setDropdownState((prev) => ({
+          ...prev,
+          [key]: { show: false, data: [], loading: false },
+        }));
+        return;
+      }
+
       setDropdownState((prev) => ({
         ...prev,
-        [key]: { show: false, data: [] },
+        [key]: { show: true, data: prev[key]?.data || [], loading: true },
       }));
-      return;
-    }
 
-    const filtered = filterLocations(text);
+      const filtered = await searchPlaces(text);
+      setDropdownState((prev) => ({
+        ...prev,
+        [key]: {
+          show: filtered.length > 0,
+          data: filtered,
+          loading: false,
+        },
+      }));
+    },
+    [searchPlaces]
+  );
 
-    setDropdownState((prev) => ({
-      ...prev,
-      [key]: {
-        show: filtered.length > 0,
-        data: filtered,
-      },
-    }));
-  }, [filterLocations]);
+  const handleSelect = useCallback(
+    async (key, item, onChangeText) => {
+      selectingRef.current = true;
+      clearBlurTimer(key);
 
-  const handleSelect = useCallback((key, item, onChangeText) => {
-    selectingRef.current = true;
-    clearBlurTimer(key);
-    onChangeText(item);
-    setDropdownState((prev) => ({
-      ...prev,
-      [key]: { show: false, data: [] },
-    }));
-    setErrors((prev) => ({ ...prev, [key]: "" }));
-    inputRefs.current[key]?.blur?.();
-    Keyboard.dismiss();
-    setTimeout(() => {
-      selectingRef.current = false;
-    }, 100);
-  }, []);
+      const resolved = await resolvePlace(item);
+      const label = getSuggestionLabel(resolved || item);
+      onChangeText(label);
+      onPlaceSelect?.(key, resolved || { label });
+
+      setDropdownState((prev) => ({
+        ...prev,
+        [key]: { show: false, data: [], loading: false },
+      }));
+      setErrors((prev) => ({ ...prev, [key]: "" }));
+      inputRefs.current[key]?.blur?.();
+      Keyboard.dismiss();
+      setTimeout(() => {
+        selectingRef.current = false;
+      }, 100);
+    },
+    [onPlaceSelect, resolvePlace]
+  );
 
   const renderField = (field, index) => {
     const state = getFieldState(field.key);
     const error = errors[field.key];
-    const showDropdown = state.show && state.data.length > 0;
+    const showDropdown = state.show && (state.data.length > 0 || state.loading);
     const routeStyle = isRoute ? routeFieldStyle[field.key] : null;
 
     return (
@@ -192,7 +210,7 @@ const FromToInput = forwardRef(({ fields = [], variant }, ref) => {
           value={field.value}
           blurOnSubmit={false}
           onChangeText={(text) => {
-            handleSearch(field.key, text, field.onChangeText);
+            runSearch(field.key, text, field.onChangeText);
             if (error) {
               setErrors((prev) => ({ ...prev, [field.key]: "" }));
             }
@@ -200,17 +218,8 @@ const FromToInput = forwardRef(({ fields = [], variant }, ref) => {
           onFocus={() => {
             clearBlurTimer(field.key);
             const text = String(field.value || "").trim();
-            const data =
-              state.data.length > 0
-                ? state.data
-                : text
-                  ? filterLocations(text)
-                  : [];
-            if (data.length > 0) {
-              setDropdownState((prev) => ({
-                ...prev,
-                [field.key]: { show: true, data },
-              }));
+            if (text.length >= 2) {
+              runSearch(field.key, text, field.onChangeText);
             }
           }}
           onBlur={() => {
@@ -237,9 +246,14 @@ const FromToInput = forwardRef(({ fields = [], variant }, ref) => {
               keyboardDismissMode="none"
               style={styles.dropdownScroll}
             >
+              {state.loading && state.data.length === 0 ? (
+                <Text style={[styles.loadingText, { color: colors.textMuted }]}>
+                  Searching places…
+                </Text>
+              ) : null}
               {state.data.map((item, idx) => (
                 <Pressable
-                  key={`${item}-${idx}`}
+                  key={getSuggestionKey(item, idx)}
                   style={({ pressed }) => [
                     styles.item,
                     { borderColor: colors.border },
@@ -249,7 +263,17 @@ const FromToInput = forwardRef(({ fields = [], variant }, ref) => {
                     handleSelect(field.key, item, field.onChangeText)
                   }
                 >
-                  <Text style={[styles.itemText, { color: colors.text }]}>{item}</Text>
+                  <Text style={[styles.itemText, { color: colors.text }]}>
+                    {getSuggestionLabel(item)}
+                  </Text>
+                  {item?.description ? (
+                    <Text
+                      style={[styles.itemSubtext, { color: colors.textMuted }]}
+                      numberOfLines={1}
+                    >
+                      {item.description}
+                    </Text>
+                  ) : null}
                 </Pressable>
               ))}
             </ScrollView>
@@ -342,7 +366,7 @@ const styles = StyleSheet.create({
   },
   dropdownWrapper: {
     marginTop: 4,
-    maxHeight: 160,
+    maxHeight: 200,
     borderWidth: 1,
     borderRadius: 10,
     elevation: 8,
@@ -352,7 +376,11 @@ const styles = StyleSheet.create({
     zIndex: 999,
   },
   dropdownScroll: {
-    maxHeight: 160,
+    maxHeight: 200,
+  },
+  loadingText: {
+    padding: 14,
+    fontSize: 13,
   },
   item: {
     padding: 14,
@@ -360,5 +388,10 @@ const styles = StyleSheet.create({
   },
   itemText: {
     fontSize: 15,
+    fontWeight: "600",
+  },
+  itemSubtext: {
+    fontSize: 12,
+    marginTop: 2,
   },
 });

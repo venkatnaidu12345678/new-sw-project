@@ -4,6 +4,7 @@ import RemoteImage from "./ui/RemoteImage";
 import ImagePreviewModal from "./ui/ImagePreviewModal";
 import caricon from "../assets/caricon.png";
 import { LAYOUT } from "../theme/layout";
+import { useThemedStyles } from "../theme/useThemedStyles";
 
 export const formatVehicleLabel = (vehicle) => {
   if (!vehicle) return "";
@@ -17,6 +18,7 @@ export const formatVehicleLabel = (vehicle) => {
  * Vehicle summary with optional photo — tap image for full-screen preview.
  */
 const VehicleInfoStrip = ({ vehicle, compact = false }) => {
+  const styles = useThemedStyles(createStyles);
   const [previewOpen, setPreviewOpen] = useState(false);
 
   if (!vehicle) return null;
@@ -72,63 +74,64 @@ const VehicleInfoStrip = ({ vehicle, compact = false }) => {
 
 export default VehicleInfoStrip;
 
-const styles = StyleSheet.create({
-  wrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F8FAFC",
-    borderRadius: LAYOUT.radius?.md || 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    marginTop: 8,
-  },
-  wrapCompact: {
-    padding: 10,
-  },
-  image: {
-    width: 88,
-    height: 66,
-    borderRadius: 10,
-    backgroundColor: "#E2E8F0",
-  },
-  imageCompact: {
-    width: 72,
-    height: 54,
-  },
-  imagePlaceholder: {
-    width: 88,
-    height: 66,
-    borderRadius: 10,
-    backgroundColor: "#EFF6FF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  placeholderIcon: {
-    width: 28,
-    height: 28,
-    opacity: 0.7,
-  },
-  textCol: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  title: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#64748B",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-    marginBottom: 4,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#0F172A",
-  },
-  plate: {
-    fontSize: 13,
-    color: "#475569",
-    marginTop: 4,
-  },
-});
+const createStyles = (c) =>
+  StyleSheet.create({
+    wrap: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: c.surfaceAlt,
+      borderRadius: LAYOUT.radius?.md || 12,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: c.border,
+      marginTop: 8,
+    },
+    wrapCompact: {
+      padding: 10,
+    },
+    image: {
+      width: 88,
+      height: 66,
+      borderRadius: 10,
+      backgroundColor: c.chipBg,
+    },
+    imageCompact: {
+      width: 72,
+      height: 54,
+    },
+    imagePlaceholder: {
+      width: 88,
+      height: 66,
+      borderRadius: 10,
+      backgroundColor: c.primaryMuted,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    placeholderIcon: {
+      width: 28,
+      height: 28,
+      opacity: 0.7,
+    },
+    textCol: {
+      flex: 1,
+      marginLeft: 12,
+    },
+    title: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: c.textMuted,
+      textTransform: "uppercase",
+      letterSpacing: 0.4,
+      marginBottom: 4,
+    },
+    label: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: c.text,
+    },
+    plate: {
+      fontSize: 13,
+      color: c.textSecondary,
+      marginTop: 4,
+    },
+  });

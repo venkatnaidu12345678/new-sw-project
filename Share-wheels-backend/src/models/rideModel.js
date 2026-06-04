@@ -47,6 +47,8 @@ const rideSchema = new mongoose.Schema(
     postponeReason: { type: String, default: null },
     postponedAt: { type: Date, default: null },
     originalScheduledStart: { type: Date, default: null },
+    /** Set when driver is notified that scheduled start time has been reached. */
+    scheduledStartNotifiedAt: { type: Date, default: null },
     fromCoords: coordsSchema,
     toCoords: coordsSchema,
     liveTracking: { type: liveTrackingSchema, default: () => ({}) },

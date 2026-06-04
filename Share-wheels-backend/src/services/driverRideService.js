@@ -6,6 +6,7 @@ const Courier = require("../models/courierModel");
 const User = require("../models/userModel");
 const { notifyUser } = require("./notificationService");
 const { notifyRideParticipants } = require("../utils/rideNotificationUtils");
+const { getDriverCompleteRideBlockers } = require("../utils/participantTripStatus");
 const { getRideDetails } = require("./rideService");
 const {
   emitToUser,
@@ -264,6 +265,21 @@ const endRide = async (user, { rideId }) => {
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
   if (ride.creator.toString() !== userId.toString()) return { status: 403, body: { success: false, message: "Only ride creator can end the ride" } };
   if (ride.status !== "started") return { status: 400, body: { success: false, message: "Ride is not in progress" } };
+
+  const completionCheck = getDriverCompleteRideBlockers(ride);
+  if (!completionCheck.ok) {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message:
+          completionCheck.message ||
+          "Mark all passengers Dropped and all couriers Delivered before completing the ride",
+        pendingPassengers: completionCheck.pendingPassengers,
+        pendingCouriers: completionCheck.pendingCouriers,
+      },
+    };
+  }
   ride.status = "completed";
   if (ride.liveTracking) {
     ride.liveTracking.isActive = false;

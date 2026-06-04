@@ -105,6 +105,71 @@ export const getRoleCardThemes = (c) => ({
   },
   Courier: {
     card: [c.tintOrange, c.background, c.card],
-    border: "#FDBA74",
+    border: c.mode === "dark" ? c.warningBorder : "#FDBA74",
   },
 });
+
+/** Bottom sheet gradient when viewing completed ride details */
+export const getHistorySliderThemes = (c) => {
+  const isDark = c.mode === "dark";
+  const roles = getRoleCardThemes(c);
+  return {
+    Driver: {
+      gradient: isDark
+        ? [c.surface, c.surfaceAlt, c.background]
+        : roles.Driver.card,
+      borderColor: c.border,
+      handleColor: c.textMuted,
+      backdropOpacity: isDark ? 0.65 : 0.55,
+    },
+    Passenger: {
+      gradient: isDark
+        ? [c.surface, c.surfaceAlt, c.background]
+        : roles.Passenger.card,
+      borderColor: c.border,
+      handleColor: c.textMuted,
+      backdropOpacity: isDark ? 0.65 : 0.55,
+    },
+    Courier: {
+      gradient: isDark
+        ? [c.surface, c.surfaceAlt, c.background]
+        : roles.Courier.card,
+      borderColor: c.border,
+      handleColor: c.textMuted,
+      backdropOpacity: isDark ? 0.65 : 0.55,
+    },
+  };
+};
+
+export const getHistoryTotalGradient = (c) =>
+  c.mode === "dark" ? [c.primaryMuted, c.primary] : ["#1D4ED8", "#2563EB"];
+
+export const getOnPrimaryGradientText = (c) =>
+  c.mode === "dark" ? c.primaryText : "#DBEAFE";
+
+export const getHistoryInfoTints = (c) => ({
+  vehicle: c.tintPurple,
+  seats: c.tintOrange,
+  date: c.tintTeal,
+  time: c.tintBlue,
+});
+
+export const getRequestDetailRoleTheme = (c, role) => {
+  const isCourier = role === "Courier";
+  return {
+    bg: isCourier ? "#EA580C" : "#16A34A",
+    chip: isCourier ? c.warningBg : c.successBg,
+    text: isCourier ? c.warningText : c.successText,
+  };
+};
+
+export const getParticipantPopoverRoleTheme = (c, role) => {
+  const isCourier =
+    role === "courier" || role === "Courier";
+  return {
+    bg: isCourier ? "#EA580C" : "#16A34A",
+    chip: isCourier ? c.warningBg : c.successBg,
+    text: isCourier ? c.warningText : c.successText,
+    label: isCourier ? "Courier" : "Passenger",
+  };
+};

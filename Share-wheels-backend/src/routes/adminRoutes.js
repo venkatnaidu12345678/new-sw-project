@@ -4,6 +4,7 @@ const adminAdController = require("../controllers/adminAdController");
 const adminLocationController = require("../controllers/adminLocationController");
 const adminFeedbackController = require("../controllers/adminFeedbackController");
 const adminLegalController = require("../controllers/adminLegalController");
+const adminLookupController = require("../controllers/adminLookupController");
 const adminAuthMiddleware = require("../middlewares/adminAuthMiddleware");
 const adUploadMiddleware = require("../middlewares/adUploadMiddleware");
 
@@ -48,5 +49,11 @@ router.patch("/feedback/:id", adminFeedbackController.update);
 // Legal policies (terms/privacy/disclaimer)
 router.get("/legal/policies", adminLegalController.listPolicies);
 router.put("/legal/policies", adminLegalController.upsertPolicies);
+
+router.get("/lookups", adminLookupController.listTypes);
+router.post("/lookups", adminLookupController.createType);
+router.post("/lookups/bulk", adminLookupController.bulkUpsertTypes);
+router.patch("/lookups/:id", adminLookupController.updateType);
+router.delete("/lookups/:id", adminLookupController.deleteType);
 
 module.exports = router;

@@ -35,7 +35,10 @@ import { LAYOUT, getScrollBottomPadding } from "../theme/layout";
 import { formatDisplayTime } from "../Utils/dateUtils";
 import { useTheme } from "../context/ThemeContext";
 import { useThemedStyles } from "../theme/useThemedStyles";
-import { getRoleCardThemes } from "../theme/appTheme";
+import {
+  getRoleCardThemes,
+  getHistorySliderThemes,
+} from "../theme/appTheme";
 
 const FILTER_TABS = ["All", "Driver", "Passenger", "Courier"];
 
@@ -45,30 +48,6 @@ const roleColors = {
   Courier: ["#EA580C", "#FDBA74"],
 };
 
-const getSliderThemes = (c) => ({
-  Driver: {
-    gradient: getRoleCardThemes(c).Driver.card,
-    borderColor: getRoleCardThemes(c).Driver.border,
-    handleColor: "#60A5FA",
-    closeColor: c.primaryText,
-    backdropOpacity: 0.55,
-  },
-  Passenger: {
-    gradient: getRoleCardThemes(c).Passenger.card,
-    borderColor: getRoleCardThemes(c).Passenger.border,
-    handleColor: "#4ADE80",
-    closeColor: c.successText,
-    backdropOpacity: 0.55,
-  },
-  Courier: {
-    gradient: getRoleCardThemes(c).Courier.card,
-    borderColor: getRoleCardThemes(c).Courier.border,
-    handleColor: "#FB923C",
-    closeColor: c.warningText,
-    backdropOpacity: 0.55,
-  },
-});
-
 const toDateLabel = (value) => {
   if (!value) return "—";
   const d = new Date(value);
@@ -77,12 +56,23 @@ const toDateLabel = (value) => {
 
 const toTimeLabel = (value) => formatDisplayTime(value) || "—";
 
+const sortHistoryByRecent = (items = []) =>
+  [...items].sort((a, b) => {
+    const aTime = new Date(
+      a?.completedAt || a?.updatedAt || a?.createdAt || a?.date || 0
+    ).getTime();
+    const bTime = new Date(
+      b?.completedAt || b?.updatedAt || b?.createdAt || b?.date || 0
+    ).getTime();
+    return bTime - aTime;
+  });
+
 const RideHistory = () => {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const roleCardTheme = getRoleCardThemes(colors);
-  const sliderThemes = getSliderThemes(colors);
+  const sliderThemes = getHistorySliderThemes(colors);
   const { refreshAds } = useAds();
   const [rides, setRides] = useState([]);
   const [filteredRides, setFilteredRides] = useState([]);
@@ -115,21 +105,22 @@ const RideHistory = () => {
         const completedOnly = (res.rides || []).filter(
           (r) => r.status === "completed"
         );
-        const data = completedOnly.map((ride) => ({
-          ...ride,
-          id: ride._id,
-          role:
-            ride.myRole === "driver"
-              ? "Driver"
-              : ride.myRole === "passenger"
-              ? "Passenger"
-              : "Courier",
-
-          formattedDate: toDateLabel(ride.date),
-          formattedTime: toTimeLabel(ride.startTime || ride.date),
-          courierSnapshot:
-            ride.courierSnapshot || ride.activeData || ride.all_deliveries?.[0] || null,
-        }));
+        const data = sortHistoryByRecent(
+          completedOnly.map((ride) => ({
+            ...ride,
+            id: ride._id,
+            role:
+              ride.myRole === "driver"
+                ? "Driver"
+                : ride.myRole === "passenger"
+                ? "Passenger"
+                : "Courier",
+            formattedDate: toDateLabel(ride.date),
+            formattedTime: toTimeLabel(ride.startTime || ride.date),
+            courierSnapshot:
+              ride.courierSnapshot || ride.activeData || ride.all_deliveries?.[0] || null,
+          }))
+        );
 
         setRides(data);
         setFilteredRides(data);
@@ -434,7 +425,7 @@ const createStyles = (c) =>
   },
 
   role: {
-    color: "#fff",
+    color: c.inverseText,
     fontWeight: "700",
     paddingHorizontal: 8,
     paddingVertical: 2,

@@ -95,6 +95,8 @@ export const endPoints = {
   getMyRequestsurl: "/rides/my-requests",
   getMyPassengerRequestsurl: "/rides/my-passenger-requests",
   getMyCourierRequestsurl: "/rides/my-courier-requests",
+  deleteMyPassengerRequesturl: "/rides/my-passenger-requests",
+  deleteMyCourierRequesturl: "/rides/my-courier-requests",
   uploadImageurl: "/auth/upload-image",
   AddVechileurl: "/auth/add-vehicle",
   editVechileurl: "/auth/edit-vehicle",

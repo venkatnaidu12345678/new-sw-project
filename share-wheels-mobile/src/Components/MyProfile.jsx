@@ -22,6 +22,7 @@ import {
 
 import PersonalInformationCard from "../Components/PersonalInformationCard";
 import Supportcard from "../Components/Supportcard";
+import { navigateRoot } from "../Utils/navigationRoot";
 import FeedbackCard from "../Components/FeedbackCard";
 import LegalIcon from "../assets/legal.png";
 
@@ -41,12 +42,14 @@ import { uploadAndSetProfileImage } from "../ApiService/imageApiService";
 import { userProfile } from "../ApiService/ridesApiServices";
 import { isRemoteImageUrl } from "../Utils/imageUpload";
 import { useTheme } from "../context/ThemeContext";
+import { useCoachMarks } from "../context/CoachMarksContext";
 
 const MyProfile = () => {
   const { ProfileDetails, SetProfileDetails, logout } = profileData();
   const navigation = useNavigation();
   const { refreshAds } = useAds();
   const { isDark, colors, toggleTheme } = useTheme();
+  const { startTour } = useCoachMarks();
   const themedStyles = React.useMemo(() => createStyles(colors), [colors]);
 
   useFocusEffect(
@@ -260,7 +263,19 @@ const MyProfile = () => {
         <View style={themedStyles.menuCard}>
           <TouchableOpacity
             style={themedStyles.menuRow}
-            onPress={() => navigation.navigate("Legal")}
+            onPress={() => startTour({ force: true })}
+            activeOpacity={0.85}
+          >
+            <View style={[themedStyles.menuIcon, { backgroundColor: colors.tintBlue }]}>
+              <Icon name="compass-outline" size={22} color={colors.primary} />
+            </View>
+            <Text style={themedStyles.menuTitle}>Show app tour</Text>
+            <Icon name="chevron-forward" size={20} color={colors.textMuted} />
+          </TouchableOpacity>
+          <View style={themedStyles.menuDivider} />
+          <TouchableOpacity
+            style={themedStyles.menuRow}
+            onPress={() => navigateRoot(navigation, "Legal")}
             activeOpacity={0.85}
           >
             <View style={[themedStyles.menuIcon, { backgroundColor: colors.primaryMuted }]}>
@@ -431,6 +446,12 @@ const createStyles = (colors) =>
     flexDirection: "row",
     alignItems: "center",
     padding: LAYOUT.spacing.md,
+  },
+
+  menuDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+    marginLeft: LAYOUT.spacing.md + 44 + 14,
   },
 
   menuIcon: {

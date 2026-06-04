@@ -22,6 +22,10 @@ import NotificationScreen from "../Components/NotificationScreen";
 import { userProfile } from "../ApiService/ridesApiServices";
 import { verifyTokenApi } from "../ApiService/AuthApiService";
 import DriverLocationTracker from "../Components/DriverLocationTracker";
+import {
+  installRideBackgroundKeepAlive,
+  uninstallRideBackgroundKeepAlive,
+} from "../liveTracking/rideBackgroundKeepAlive";
 import { clearAuthSession } from "../Utils/authSession";
 import {
   MIN_BOOTSTRAP_SPLASH_MS,
@@ -55,6 +59,15 @@ const AuthNavigator = () => {
   const [ProfileDetails, SetProfileDetails] = useState(null);
 
   useAppSocketConnection(isAuthenticated);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      installRideBackgroundKeepAlive();
+      return () => uninstallRideBackgroundKeepAlive();
+    }
+    uninstallRideBackgroundKeepAlive();
+    return undefined;
+  }, [isAuthenticated]);
 
   const getProfileData = async (token) => {
     try {

@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import { navigateRoot } from "../Utils/navigationRoot";
 import LinearGradient from "react-native-linear-gradient";
 import Icon from "react-native-vector-icons/Ionicons";
 import { LAYOUT } from "../theme/layout";
@@ -20,7 +21,7 @@ const SupportCard = () => {
   return (
     <TouchableOpacity
       style={styles.card}
-      onPress={() => navigation.navigate("ChartBoat")}
+      onPress={() => navigateRoot(navigation, "ChartBoat")}
       activeOpacity={0.88}
     >
       <LinearGradient

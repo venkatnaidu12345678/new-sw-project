@@ -21,8 +21,16 @@ const ensureAppStateReconnect = () => {
   if (appStateHookInstalled) return;
   appStateHookInstalled = true;
   AppState.addEventListener("change", (state) => {
-    if (state === "active" && socket && !socket.connected) {
-      connectAppSocket().catch(() => {});
+    if (state === "active" || state === "background") {
+      if (socket && !socket.connected) {
+        connectAppSocket().catch(() => {});
+      } else if (socket?.connected === false && socket?.active === false) {
+        try {
+          socket.connect();
+        } catch {
+          connectAppSocket().catch(() => {});
+        }
+      }
     }
   });
 };
@@ -77,6 +85,7 @@ const createSocket = (token) => {
     reconnectionDelay: 1000,
     reconnectionDelayMax: 8000,
     timeout: 25000,
+    autoConnect: true,
   });
   attachPersistentHandlers(s);
   return s;

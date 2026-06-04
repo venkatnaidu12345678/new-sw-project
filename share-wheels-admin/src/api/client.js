@@ -120,6 +120,22 @@ export const bulkUpsertLocations = (names) =>
   });
 export const clearAllLocations = () => api("/admin/locations/all", { method: "DELETE" });
 
+export const getLookupTypes = (category) => {
+  const q = category ? `?category=${encodeURIComponent(category)}` : "";
+  return api(`/admin/lookups${q}`);
+};
+export const createLookupType = (body) =>
+  api("/admin/lookups", { method: "POST", body: JSON.stringify(body) });
+export const updateLookupType = (id, body) =>
+  api(`/admin/lookups/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+export const deleteLookupType = (id) =>
+  api(`/admin/lookups/${id}`, { method: "DELETE" });
+export const bulkUpsertLookupTypes = (category, items) =>
+  api("/admin/lookups/bulk", {
+    method: "POST",
+    body: JSON.stringify({ category, items }),
+  });
+
 export const getFeedbacks = (params = {}) => {
   const q = new URLSearchParams(params).toString();
   return api(`/admin/feedback?${q}`);

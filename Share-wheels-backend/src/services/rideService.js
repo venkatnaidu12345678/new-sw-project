@@ -298,6 +298,7 @@ const postponeRide = async (user, { rideId, newStartTime, reason }) => {
   ride.postponeCount = 1;
   ride.postponeReason = reasonCheck.value;
   ride.postponedAt = new Date();
+  ride.scheduledStartNotifiedAt = null;
   await ride.save();
 
   const newTimeLabel = formatStartTimeHHmm(newStart);

@@ -9,6 +9,7 @@ const nav = [
   { to: "/live-tracking", label: "Live Tracking", icon: "L" },
   { to: "/ads", label: "Ads", icon: "A" },
   { to: "/locations", label: "Locations", icon: "G" },
+  { to: "/lookup-types", label: "Dropdown types", icon: "O" },
   { to: "/feedback", label: "Feedback", icon: "F" },
   { to: "/legal", label: "Legal", icon: "T" },
 ];

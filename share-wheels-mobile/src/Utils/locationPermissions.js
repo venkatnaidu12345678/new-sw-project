@@ -34,6 +34,51 @@ const probeIosLocationGranted = () =>
     );
   });
 
+/** Android 10+ background location (no dialog on check). */
+export const hasBackgroundLocationPermission = async () => {
+  if (Platform.OS !== "android") return true;
+  if (Platform.Version < 29) return true;
+  try {
+    return await PermissionsAndroid.check(
+      PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION
+    );
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Ask for background/always location when a ride is live — best-effort, never blocks ride.
+ */
+export const requestBackgroundLocationForActiveRide = async () => {
+  if (!(await hasLocationPermission())) return false;
+
+  if (Platform.OS === "ios") {
+    try {
+      const status = await Geolocation.requestAuthorization("always");
+      const granted = status === "granted" || status === "whenInUse";
+      if (granted) await persistGrantState(true);
+      return granted;
+    } catch {
+      return false;
+    }
+  }
+
+  if (Platform.OS === "android" && Platform.Version >= 29) {
+    if (await hasBackgroundLocationPermission()) return true;
+    try {
+      const result = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION
+      );
+      return result === PermissionsAndroid.RESULTS.GRANTED;
+    } catch {
+      return false;
+    }
+  }
+
+  return true;
+};
+
 /** Check permission only — never shows dialogs. */
 export const hasLocationPermission = async () => {
   if (Platform.OS === "android") {

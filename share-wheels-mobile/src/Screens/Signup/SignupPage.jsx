@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, Platform } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import AuthButton from "../../Components/AuthButton";
@@ -19,8 +19,10 @@ import {
 import { AUTH_COLORS, AUTH_GRADIENTS } from "../../theme/authTheme";
 import LinearGradient from "react-native-linear-gradient";
 import { INPUT_COLORS } from "../../theme/inputTheme";
+import { useTheme } from "../../context/ThemeContext";
 
 const SignupPage = ({ navigation, triggerAuth }) => {
+  const { colors, input, isDark } = useTheme();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -178,16 +180,40 @@ const SignupPage = ({ navigation, triggerAuth }) => {
             end={{ x: 1, y: 1 }}
             style={styles.pickerBorder}
           >
-          <View style={styles.pickerBox}>
+          <View
+            style={[
+              styles.pickerBox,
+              { backgroundColor: colors.surface || AUTH_COLORS.surface },
+            ]}
+          >
             <Picker
               selectedValue={gender}
               onValueChange={(v) => handleChange("gender", v)}
-              style={styles.picker}
+              mode={Platform.OS === "android" ? "dropdown" : undefined}
+              style={[styles.picker, { color: input.text }]}
+              dropdownIconColor={colors.textMuted}
+              itemStyle={Platform.OS === "ios" ? { color: input.text } : undefined}
             >
-              <Picker.Item label="Select" value="" color={INPUT_COLORS.placeholder} />
-              <Picker.Item label="Male" value="male" />
-              <Picker.Item label="Female" value="female" />
-              <Picker.Item label="Other" value="other" />
+              <Picker.Item
+                label="Select"
+                value=""
+                color={input.placeholder}
+              />
+              <Picker.Item
+                label="Male"
+                value="male"
+                color={isDark ? "#F8FAFC" : input.text}
+              />
+              <Picker.Item
+                label="Female"
+                value="female"
+                color={isDark ? "#F8FAFC" : input.text}
+              />
+              <Picker.Item
+                label="Other"
+                value="other"
+                color={isDark ? "#F8FAFC" : input.text}
+              />
             </Picker>
           </View>
           </LinearGradient>

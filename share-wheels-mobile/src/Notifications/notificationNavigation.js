@@ -13,6 +13,7 @@ const RIDE_TYPES = new Set([
   "ride_cancelled",
   "ride_postponed",
   "ride_started",
+  "ride_start_reminder",
   "ride_completed",
   "ride_expired",
   "boarding_otp_issued",

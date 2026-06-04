@@ -158,40 +158,66 @@ export const StyledPicker = ({
   items,
   theme,
   accent,
-}) => (
-  <StyledField label={label} theme={theme}>
-    <View
-      style={[
-        styles.pickerWrap,
-        {
-          backgroundColor: accent?.bg || theme.surface,
-          borderColor: accent?.border || theme.cardBorder,
-        },
-      ]}
-    >
-      {icon ? (
-        <View style={styles.pickerIconWrap}>
-          <Icon name={icon} size={18} color={accent?.icon || theme.textMuted} />
-        </View>
-      ) : null}
-      <Picker
-        selectedValue={selectedValue}
-        onValueChange={onValueChange}
-        style={styles.picker}
-        dropdownIconColor={theme.textMuted}
+  enabled = true,
+}) => {
+  const { colors, input, isDark } = useTheme();
+  const textColor = theme?.text || colors.text;
+  const mutedColor = theme?.textMuted || colors.textMuted;
+  const placeholderColor = input.placeholder;
+
+  return (
+    <StyledField label={label} theme={theme}>
+      <View
+        style={[
+          styles.pickerWrap,
+          {
+            backgroundColor: accent?.bg || input.background,
+            borderColor: accent?.border || theme.cardBorder,
+          },
+          !enabled && styles.pickerDisabled,
+        ]}
       >
-        {items.map((item) => (
-          <Picker.Item
-            key={item.value}
-            label={item.label}
-            value={item.value}
-            color={Platform.OS === "ios" ? theme.text : undefined}
-          />
-        ))}
-      </Picker>
-    </View>
-  </StyledField>
-);
+        {icon ? (
+          <View
+            style={[
+              styles.pickerIconWrap,
+              { backgroundColor: theme.surface || colors.surface },
+            ]}
+          >
+            <Icon name={icon} size={18} color={accent?.icon || mutedColor} />
+          </View>
+        ) : null}
+        <Picker
+          enabled={enabled}
+          selectedValue={selectedValue}
+          onValueChange={onValueChange}
+          mode={Platform.OS === "android" ? "dropdown" : undefined}
+          style={[
+            styles.picker,
+            { color: textColor, backgroundColor: "transparent" },
+          ]}
+          dropdownIconColor={mutedColor}
+          itemStyle={Platform.OS === "ios" ? { color: textColor } : undefined}
+        >
+          {items.map((item) => (
+            <Picker.Item
+              key={`${item.value}-${item.label}`}
+              label={item.label}
+              value={item.value}
+              color={
+                !item.value
+                  ? placeholderColor
+                  : isDark
+                    ? "#F8FAFC"
+                    : textColor
+              }
+            />
+          ))}
+        </Picker>
+      </View>
+    </StyledField>
+  );
+};
 
 /** Seats stepper — matches CalenderRange card layout (theme.date accent). */
 export const RequestSeatsStepper = ({
@@ -506,6 +532,9 @@ const styles = StyleSheet.create({
   picker: {
     flex: 1,
     height: Platform.OS === "ios" ? 120 : 50,
+  },
+  pickerDisabled: {
+    opacity: 0.55,
   },
   priceWrap: {
     flexDirection: "row",

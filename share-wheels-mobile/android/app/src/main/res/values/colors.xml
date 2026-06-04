@@ -2,4 +2,5 @@
 <resources>
     <color name="splash_background">#0F172A</color>
     <color name="splash_accent">#2563EB</color>
+    <color name="notification_accent">#2563EB</color>
 </resources>

@@ -735,6 +735,42 @@ export const getMyCourierRequests = async (token) => {
   }
 };
 
+export const deleteMyPassengerRequest = async (token, requestId) => {
+  const response = await fetch(
+    `${baseUrl}${endPoints.deleteMyPassengerRequesturl}/${requestId}`,
+    {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || result?.success === false) {
+    throw new Error(result?.message || "Failed to delete passenger request");
+  }
+  return result;
+};
+
+export const deleteMyCourierRequest = async (token, requestId) => {
+  const response = await fetch(
+    `${baseUrl}${endPoints.deleteMyCourierRequesturl}/${requestId}`,
+    {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || result?.success === false) {
+    throw new Error(result?.message || "Failed to delete courier request");
+  }
+  return result;
+};
+
 export const AddVehicle = async (token, vehicleData, imageFiles = {}) => {
   try {
     const formData = new FormData();

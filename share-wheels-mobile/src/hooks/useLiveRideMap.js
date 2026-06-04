@@ -16,6 +16,7 @@ import {
 } from "../liveTracking/liveTrackingState";
 import { subscribeGpsUpdates } from "../Utils/gpsService";
 import { hasLocationPermission } from "../Utils/locationPermissions";
+import { getPublishingRideId } from "../liveTracking/liveLocationPublisher";
 
 const LOCAL_GPS_THROTTLE_MS = 2000;
 
@@ -123,6 +124,7 @@ export function useLiveRideMap({
     let unsubLocation = () => {};
     let unsubReconnect = () => {};
     let cancelled = false;
+    const cleanups = [];
 
     (async () => {
       try {
@@ -132,6 +134,23 @@ export function useLiveRideMap({
         if (cancelled) return;
 
         unsubLocation = await subscribeSocketEvent("locationUpdate", onSocketPayload);
+
+        const unsubRoster = await subscribeSocketEvent(
+          "rideParticipantsUpdated",
+          (payload) => {
+            if (normalizeRideId(payload?.rideId) !== rid) return;
+            const action = payload?.action || "";
+            if (
+              action === "passenger_removed" ||
+              action === "courier_removed" ||
+              action === "passenger_accepted" ||
+              action === "courier_accepted"
+            ) {
+              bootstrapFromApi();
+            }
+          }
+        );
+        cleanups.push(unsubRoster);
 
         if (!bootstrapped.current) {
           bootstrapFromApi();
@@ -155,10 +174,19 @@ export function useLiveRideMap({
       try {
         unsubLocation();
         unsubReconnect();
+        cleanups.forEach((fn) => {
+          try {
+            fn();
+          } catch {
+            /* ignore */
+          }
+        });
       } catch {
         /* ignore */
       }
-      leaveRideRoom(rid);
+      if (getPublishingRideId() !== rid) {
+        leaveRideRoom(rid);
+      }
       setSocketLive(false);
       bootstrapped.current = false;
       trackingFpRef.current = "";

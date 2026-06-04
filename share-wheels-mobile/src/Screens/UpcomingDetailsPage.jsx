@@ -80,7 +80,11 @@ import { convertDate } from '../Utils';
 import { formatDisplayTime } from '../Utils/dateUtils';
 import { formatLocalISODate } from "../Utils/dateUtils";
 import { getRideDisplayFare, getPassengerFare, getCourierFare } from '../Utils/fareUtils';
-import { tripStatusLabel } from "../Utils/participantTripStatus";
+import {
+  tripStatusLabel,
+  canDriverCompleteRide,
+  getDriverCompleteRideBlockers,
+} from "../Utils/participantTripStatus";
 import { NOTIFICATIONS_REFRESH_EVENT } from "../context/NotificationsContext";
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator } from "react-native";
@@ -100,6 +104,7 @@ import {
 import { getApiErrorMessage } from "../Utils/apiErrors";
 import { openPhoneCall } from "../Utils/phoneCall";
 import { useRideSocket } from "../hooks/useAppSocket";
+import { normalizeRideId } from "../liveTracking/liveTrackingState";
 
 const UpcomingDetailsPage = ({ route }) => {
   const navigation = useNavigation();
@@ -352,7 +357,7 @@ const UpcomingDetailsPage = ({ route }) => {
     (normalizedRideStatus === "pending" || normalizedRideStatus === "started");
 
   const participantTabs = useMemo(() => {
-    const tabs = ["Passengers", "Couriers"];
+    const tabs = ["All", "Passengers", "Couriers"];
     if (!quickReserve) {
       tabs.push("Pax requests", "Courier requests");
     }
@@ -361,6 +366,33 @@ const UpcomingDetailsPage = ({ route }) => {
 
   const pendingRequestCount =
     passengerRequests.length + courierRequests.length;
+
+  /** Courier role: only this user's parcel — not every delivery on the ride. */
+  const myCourierParcels = useMemo(() => {
+    if (!isCourier) return [];
+    const uid = normalizeRideId(myUserId);
+    if (uid) {
+      const mine = (couriers || []).filter(
+        (c) => normalizeRideId(c.userId) === uid
+      );
+      if (mine.length > 0) return mine;
+    }
+    if (rideData?.activeData) return [rideData.activeData];
+    return [];
+  }, [isCourier, couriers, myUserId, rideData?.activeData]);
+
+  const driverRideForCompletion = useMemo(
+    () => ({
+      passengers: passengers.length ? passengers : rideData?.passengers || [],
+      all_deliveries: couriers.length ? couriers : rideData?.all_deliveries || [],
+    }),
+    [passengers, couriers, rideData?.passengers, rideData?.all_deliveries]
+  );
+
+  const driverCanCompleteRide = useMemo(
+    () => canDriverCompleteRide(driverRideForCompletion),
+    [driverRideForCompletion]
+  );
 
   const openParticipantsSlider = useCallback(
     (tabIndex = 0) => {
@@ -435,6 +467,12 @@ const UpcomingDetailsPage = ({ route }) => {
   }, [isRideStarted, rideStatus, rideIdStr]);
 
   const roleColor = isDriver ? "#007AFF" : isCourier ? "#F59E0B" : "#10B981";
+
+  const detailsViewTitle = useMemo(() => {
+    if (isDriver) return "Driver View";
+    if (isCourier) return "Courier View";
+    return "Passenger View";
+  }, [isDriver, isCourier]);
 
   const rideNavParams = () => ({
     rideId: rideData?._id,
@@ -840,6 +878,16 @@ const UpcomingDetailsPage = ({ route }) => {
   const handleEndRide = async () => {
     if (rideActionLoading || rideStatus !== "started") return;
 
+    const completionBlockers = getDriverCompleteRideBlockers(driverRideForCompletion);
+    if (!completionBlockers.ok) {
+      Alert.alert(
+        "Cannot complete ride",
+        completionBlockers.message ||
+          "Mark all passengers Dropped and all couriers Delivered before completing the ride."
+      );
+      return;
+    }
+
     try {
       setLoadingRide(true);
 
@@ -855,7 +903,10 @@ const UpcomingDetailsPage = ({ route }) => {
         Alert.alert("Success", "Ride Completed Successfully");
       }
     } catch (error) {
-      Alert.alert("Error", "Failed to complete ride");
+      Alert.alert(
+        "Error",
+        error?.message || "Failed to complete ride"
+      );
     } finally {
       setLoadingRide(false);
     }
@@ -951,14 +1002,14 @@ const UpcomingDetailsPage = ({ route }) => {
 
   return (
     <ScreenContainer style={{ paddingHorizontal: LAYOUT.spacing.screen }}>
-      <ScreenHeader title="Ride details" />
+      <ScreenHeader title={detailsViewTitle} />
 
       <View style={styles.buttonContainer}>
         <TouchableOpacity
           style={[styles.roleButton, { backgroundColor: roleColor + "20" }]}
         >
           <Text style={[styles.roleText, { color: roleColor }]}>
-            {isDriver ? "Driver" : isCourier ? "Courier" : "Passenger"}
+            {detailsViewTitle}
           </Text>
         </TouchableOpacity>
 
@@ -1224,15 +1275,21 @@ const UpcomingDetailsPage = ({ route }) => {
             {/* Parcel Info */}
             <Text style={styles.section}>Your Parcel</Text>
 
-            {couriers.map((item, index) => (
-              <View key={index} style={styles.myPassengerCard}>
-                <Text style={styles.name}>Your Parcel</Text>
-                <CourierParcelPreview courier={item} />
-                <Text style={styles.pickup}>
-                  Amount: ₹{getCourierFare(item)}
-                </Text>
-              </View>
-            ))}
+            {myCourierParcels.length === 0 ? (
+              <Text style={styles.pickup}>Your parcel details are not available yet.</Text>
+            ) : (
+              myCourierParcels.map((item, index) => (
+                <View
+                  key={normalizeRideId(item.userId) || item._id || `parcel-${index}`}
+                  style={styles.myPassengerCard}
+                >
+                  <CourierParcelPreview courier={item} />
+                  <Text style={styles.pickup}>
+                    Amount: ₹{getCourierFare(item)}
+                  </Text>
+                </View>
+              ))
+            )}
 
             {/* Other Passengers */}
             <Text style={styles.section}>Passengers in Ride</Text>
@@ -1480,7 +1537,8 @@ const UpcomingDetailsPage = ({ route }) => {
             normalizedRideStatus === "cancelled" ||
             normalizedRideStatus === "expired" ||
             rideActionLoading ||
-            (normalizedRideStatus === "started" && loadingRide)
+            (normalizedRideStatus === "started" && loadingRide) ||
+            (normalizedRideStatus === "started" && !driverCanCompleteRide)
           }
           loading={
             rideActionLoading ||

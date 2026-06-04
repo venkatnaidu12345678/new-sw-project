@@ -2,6 +2,7 @@ import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import RemoteImage from "./ui/RemoteImage";
 import { LAYOUT } from "../theme/layout";
+import { useThemedStyles } from "../theme/useThemedStyles";
 
 export const formatCourierParcelLine = (courier) => {
   if (!courier) return "Parcel";
@@ -15,6 +16,7 @@ export const formatCourierParcelLine = (courier) => {
  * Courier parcel photo + description — for driver "My Couriers" and request lists.
  */
 const CourierParcelPreview = ({ courier, compact = false }) => {
+  const styles = useThemedStyles(createStyles);
   if (!courier) return null;
 
   const imageUri = courier.courier_img;
@@ -53,57 +55,58 @@ const CourierParcelPreview = ({ courier, compact = false }) => {
 
 export default CourierParcelPreview;
 
-const styles = StyleSheet.create({
-  wrap: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginTop: 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
-  },
-  wrapCompact: {
-    marginTop: 8,
-    paddingTop: 8,
-  },
-  image: {
-    width: 80,
-    height: 80,
-    borderRadius: 10,
-    backgroundColor: "#E2E8F0",
-    marginRight: 12,
-  },
-  imageCompact: {
-    width: 64,
-    height: 64,
-  },
-  textCol: {
-    flex: 1,
-  },
-  textColFull: {
-    marginLeft: 0,
-  },
-  title: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#EA580C",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-    marginBottom: 4,
-  },
-  desc: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#0F172A",
-  },
-  meta: {
-    fontSize: 12,
-    color: "#475569",
-    marginTop: 6,
-  },
-  metaMuted: {
-    fontSize: 12,
-    color: "#64748B",
-    marginTop: 4,
-  },
-});
+const createStyles = (c) =>
+  StyleSheet.create({
+    wrap: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      marginTop: 10,
+      paddingTop: 10,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+    },
+    wrapCompact: {
+      marginTop: 8,
+      paddingTop: 8,
+    },
+    image: {
+      width: 80,
+      height: 80,
+      borderRadius: 10,
+      backgroundColor: c.surfaceAlt,
+      marginRight: 12,
+    },
+    imageCompact: {
+      width: 64,
+      height: 64,
+    },
+    textCol: {
+      flex: 1,
+    },
+    textColFull: {
+      marginLeft: 0,
+    },
+    title: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: c.warningText,
+      textTransform: "uppercase",
+      letterSpacing: 0.4,
+      marginBottom: 4,
+    },
+    desc: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: c.text,
+    },
+    meta: {
+      fontSize: 12,
+      color: c.textSecondary,
+      marginTop: 6,
+    },
+    metaMuted: {
+      fontSize: 12,
+      color: c.textMuted,
+      marginTop: 4,
+    },
+  });

@@ -12,6 +12,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import AuthNavigator from "./src/Navigation/AuthNavigator";
 import { AdsProvider } from "./src/context/AdsContext";
 import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
+import { AppAlertProvider } from "./src/context/AppAlertContext";
 import {
   requestUserPermission,
   registerForegroundHandler,
@@ -40,7 +41,8 @@ function AppShell() {
     setNavReady(true);
     const token = await AsyncStorage.getItem("token");
     if (token) {
-      syncFcmTokenWithBackend({ force: false }).catch(() => {});
+      syncFcmTokenWithBackend({ force: true }).catch(() => {});
+      setTimeout(() => syncFcmTokenWithBackend({ force: true }).catch(() => {}), 2500);
     }
     const pending = await consumePendingNotificationOpen();
     if (pending) {
@@ -124,9 +126,11 @@ function AppShell() {
               }
         }
       >
-        <AdsProvider>
-          <AuthNavigator />
-        </AdsProvider>
+        <AppAlertProvider>
+          <AdsProvider>
+            <AuthNavigator />
+          </AdsProvider>
+        </AppAlertProvider>
       </NavigationContainer>
     </GestureHandlerRootView>
   );

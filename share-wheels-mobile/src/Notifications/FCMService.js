@@ -86,6 +86,8 @@ export async function getDeviceToken() {
   }
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 /** Permission + Android channel, then FCM token (required before backend sync). */
 export async function getDeviceTokenWithPermission() {
   const permitted = await requestUserPermission();
@@ -102,7 +104,12 @@ export async function getDeviceTokenWithPermission() {
     }
   }
 
-  return getDeviceToken();
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const token = await getDeviceToken();
+    if (token) return token;
+    await sleep(350 * (attempt + 1));
+  }
+  return null;
 }
 
 export function registerForegroundHandler(onMessageCb) {

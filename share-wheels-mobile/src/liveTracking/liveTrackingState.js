@@ -59,6 +59,8 @@ export const normalizeTrackingApi = (apiBody) => {
     status: apiBody.status,
     from: apiBody.from,
     to: apiBody.to,
+    fromCoords: apiBody.fromCoords || null,
+    toCoords: apiBody.toCoords || null,
     myUserId: normalizeRideId(apiBody.myUserId),
     liveTracking: {
       ...lt,
@@ -93,19 +95,23 @@ export const mergeSocketLocation = (prev, payload) => {
     lt.driverLocation = { ...driverPoint, updatedAt: payload.location?.updatedAt };
   }
 
-  if (Array.isArray(payload.participantLocations) && payload.participantLocations.length) {
-    const byId = new Map();
-    participants.forEach((p) => {
-      const k = participantKey(p);
-      if (k) byId.set(k, p);
-    });
-    payload.participantLocations.forEach((raw) => {
-      const k = participantKey(raw);
-      if (!k) return;
-      const point = toPoint(raw);
-      byId.set(k, serializeParticipant({ ...byId.get(k), ...raw, ...(point || {}) }));
-    });
-    participants = Array.from(byId.values());
+  if (Array.isArray(payload.participantLocations)) {
+    if (payload.participantLocations.length === 0) {
+      participants = [];
+    } else {
+      const byId = new Map();
+      participants.forEach((p) => {
+        const k = participantKey(p);
+        if (k) byId.set(k, p);
+      });
+      payload.participantLocations.forEach((raw) => {
+        const k = participantKey(raw);
+        if (!k) return;
+        const point = toPoint(raw);
+        byId.set(k, serializeParticipant({ ...byId.get(k), ...raw, ...(point || {}) }));
+      });
+      participants = Array.from(byId.values());
+    }
   }
 
   const actorId = normalizeRideId(

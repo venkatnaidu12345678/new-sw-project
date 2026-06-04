@@ -22,6 +22,7 @@ import {
   validateLocation,
   validateDate,
 } from "../Utils";
+import { getSuggestionKey, getSuggestionLabel } from "../Utils/placeSuggestions";
 
 const SearchLocation = ({
   fromValue,
@@ -38,6 +39,7 @@ const SearchLocation = ({
   setShowDate,
   filterLocations,
   selectLocation,
+  suggestionsLoading,
   handleSearch,
   onFocus,
   onBlur,
@@ -72,13 +74,19 @@ const SearchLocation = ({
   };
 
   const renderSuggestions = (field) => {
-    if (activeField !== field || !suggestions?.length) return null;
+    if (activeField !== field) return null;
+    if (!suggestions?.length && !suggestionsLoading) return null;
 
     return (
       <View style={styles.inlineDropdown}>
+        {suggestionsLoading && !suggestions?.length ? (
+          <Text style={[styles.suggestionText, styles.loadingSuggestion]}>
+            Searching places…
+          </Text>
+        ) : null}
         {suggestions.map((item, index) => (
           <Pressable
-            key={`${field}-${item}-${index}`}
+            key={`${field}-${getSuggestionKey(item, index)}`}
             style={({ pressed }) => [
               styles.suggestion,
               pressed && styles.suggestionPressed,
@@ -89,7 +97,12 @@ const SearchLocation = ({
               onDismissSuggestions?.();
             }}
           >
-            <Text style={styles.suggestionText}>{item}</Text>
+            <Text style={styles.suggestionText}>{getSuggestionLabel(item)}</Text>
+            {item?.description ? (
+              <Text style={styles.suggestionSubtext} numberOfLines={1}>
+                {item.description}
+              </Text>
+            ) : null}
           </Pressable>
         ))}
       </View>
@@ -258,6 +271,16 @@ const createStyles = (c) =>
   suggestionText: {
     fontSize: 15,
     color: c.text,
+    fontWeight: "600",
+  },
+  suggestionSubtext: {
+    fontSize: 12,
+    color: c.textMuted,
+    marginTop: 2,
+  },
+  loadingSuggestion: {
+    fontWeight: "500",
+    padding: 14,
   },
   error: {
     color: c.errorText,

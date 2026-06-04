@@ -32,6 +32,26 @@ import { useLocationSuggestions } from "../hooks/useLocationSuggestions";
 import { formatLocalISODate } from "../Utils/dateUtils";
 import { useTheme } from "../context/ThemeContext";
 import { useThemedStyles } from "../theme/useThemedStyles";
+import CoachMarkAnchor from "../Components/coachMarks/CoachMarkAnchor";
+import { useCoachMarks } from "../context/CoachMarksContext";
+
+const UPCOMING_STATUS_PRIORITY = {
+  pending: 0,
+  started: 1,
+};
+
+const sortUpcomingByPriority = (rides = []) =>
+  [...rides].sort((a, b) => {
+    const aPriority =
+      UPCOMING_STATUS_PRIORITY[String(a?.status || "").toLowerCase()] ?? 99;
+    const bPriority =
+      UPCOMING_STATUS_PRIORITY[String(b?.status || "").toLowerCase()] ?? 99;
+    if (aPriority !== bPriority) return aPriority - bPriority;
+
+    const aTime = new Date(a?.date || a?.createdAt || 0).getTime();
+    const bTime = new Date(b?.date || b?.createdAt || 0).getTime();
+    return aTime - bTime;
+  });
 
 const DashboardPage = () => {
   const navigation = useNavigation();
@@ -44,6 +64,7 @@ const DashboardPage = () => {
   const [toValue, setToValue] = useState("");
   const [activeField, setActiveField] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [date, setDate] = useState(new Date());
   const [showDate, setShowDate] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
@@ -59,6 +80,9 @@ const DashboardPage = () => {
   const animation = useRef(new Animated.Value(1)).current;
   const listRef = useRef(null);
   const blurTimerRef = useRef(null);
+  const headerBeforeUpcomingHeightRef = useRef(0);
+  const upcomingSectionScrollOffsetRef = useRef(0);
+  const { registerScrollPreparer, unregisterScrollPreparer } = useCoachMarks();
 
   const user = ProfileDetails?.data?.personalInfo;
   const myUserId =
@@ -67,7 +91,7 @@ const DashboardPage = () => {
     user?._id ||
     user?.id;
   const { refreshAds } = useAds();
-  const { filterLocations: filterLocationSuggestions, reload: reloadLocations } =
+  const { searchPlaces, resolvePlace, reload: reloadLocations } =
     useLocationSuggestions();
 
   const fetchUpcomingRides = useCallback(async () => {
@@ -77,8 +101,10 @@ const DashboardPage = () => {
       if (!token) return;
 
       const resp = await getUpcomingRides(token);
-      const upcomingOnly = (resp?.rides || []).filter((ride) =>
-        ["pending", "started"].includes(ride?.status)
+      const upcomingOnly = sortUpcomingByPriority(
+        (resp?.rides || []).filter((ride) =>
+          ["pending", "started"].includes(ride?.status)
+        )
       );
       setRides(upcomingOnly);
       setErrorMsg("");
@@ -98,6 +124,50 @@ const DashboardPage = () => {
       reloadLocations(true);
     }, [fetchUpcomingRides, refreshUpcomingRides, refreshAds, reloadLocations])
   );
+
+  useEffect(() => {
+    const scrollToUpcoming = () =>
+      new Promise((resolve) => {
+        const list = listRef.current;
+        if (!list) {
+          resolve();
+          return;
+        }
+
+        dismissSuggestions();
+        collapseFilters();
+
+        const offset = Math.max(0, upcomingSectionScrollOffsetRef.current);
+        list.scrollToOffset({ offset, animated: true });
+
+        const finish = () => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => resolve());
+          });
+        };
+
+        if (rides.length > 0) {
+          setTimeout(() => {
+            try {
+              list.scrollToIndex({
+                index: 0,
+                animated: true,
+                viewPosition: 0.12,
+              });
+            } catch {
+              /* scrollToOffset above is sufficient */
+            }
+            setTimeout(finish, 420);
+          }, 280);
+          return;
+        }
+
+        setTimeout(finish, 520);
+      });
+
+    registerScrollPreparer("home_upcoming", scrollToUpcoming);
+    return () => unregisterScrollPreparer("home_upcoming");
+  }, [registerScrollPreparer, unregisterScrollPreparer, rides.length]);
 
   const handleSearch = async () => {
     collapseFilters();
@@ -190,13 +260,33 @@ const DashboardPage = () => {
     if (field === "FROM") setFromValue(text);
     if (field === "TO") setToValue(text);
     setActiveField(field);
-    setSuggestions(filterLocationSuggestions(text));
+
+    const query = String(text || "").trim();
+    if (!query || query.length < 2) {
+      setSuggestions([]);
+      setSuggestionsLoading(false);
+      return;
+    }
+
+    setSuggestionsLoading(true);
+    searchPlaces(query).then((results) => {
+      setSuggestions(results);
+      setSuggestionsLoading(false);
+    });
   };
 
-  const selectLocation = (item) => {
-    if (activeField === "FROM") setFromValue(item);
-    if (activeField === "TO") setToValue(item);
+  const selectLocation = async (item) => {
+    const resolved = await resolvePlace(item);
+    const label =
+      typeof resolved === "object" && resolved?.label
+        ? resolved.label
+        : typeof item === "string"
+          ? item
+          : item?.label || "";
+    if (activeField === "FROM") setFromValue(label);
+    if (activeField === "TO") setToValue(label);
     setSuggestions([]);
+    setSuggestionsLoading(false);
   };
 
   const animatedHeight = animation.interpolate({
@@ -207,15 +297,27 @@ const DashboardPage = () => {
   const animatedOpacity = animation;
   const dropdownTop = activeField === "FROM" ? 70 : 142;
 
-  const renderRide = ({ item }) => (
-    <UpcomingRide
-      data={item}
-      onPress={() => {
-        dismissSuggestions();
-        handleRidePress(item);
-      }}
-    />
-  );
+  const renderRide = ({ item, index }) => {
+    const card = (
+      <UpcomingRide
+        data={item}
+        onPress={() => {
+          dismissSuggestions();
+          handleRidePress(item);
+        }}
+      />
+    );
+
+    if (index === 0) {
+      return (
+        <CoachMarkAnchor id="home_upcoming" style={styles.upcomingAnchor}>
+          {card}
+        </CoachMarkAnchor>
+      );
+    }
+
+    return card;
+  };
 
   const terms = ProfileDetails?.data?.terms;
 
@@ -224,6 +326,7 @@ const DashboardPage = () => {
     toValue,
     activeField,
     suggestions,
+    suggestionsLoading,
     date,
     showDate,
     showFilters,
@@ -261,19 +364,43 @@ const DashboardPage = () => {
 
   const scrollListHeader = (
     <>
-      <Text style={styles.title}>Where do you plan to go today?</Text>
+      <View
+        onLayout={(e) => {
+          headerBeforeUpcomingHeightRef.current = e.nativeEvent.layout.height;
+          upcomingSectionScrollOffsetRef.current =
+            headerBeforeUpcomingHeightRef.current;
+        }}
+      >
+        <Text style={styles.title}>Where do you plan to go today?</Text>
 
-      <View style={styles.bannerWrap}>
-        <AdPlacement placement="home_banner" />
+        <View style={styles.bannerWrap}>
+          <AdPlacement placement="home_banner" />
+        </View>
+
+        {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
+
+        <CoachMarkAnchor id="home_search">
+          <SearchLocation {...searchProps} />
+        </CoachMarkAnchor>
+
+        <AdPlacement placement="home_video" />
       </View>
 
-      {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
-
-      <SearchLocation {...searchProps} />
-
-      <AdPlacement placement="home_video" />
-
-      <Text style={styles.section}>Upcoming Rides</Text>
+      <View
+        onLayout={(e) => {
+          upcomingSectionScrollOffsetRef.current =
+            headerBeforeUpcomingHeightRef.current;
+        }}
+      >
+        {rides.length === 0 ? (
+          <CoachMarkAnchor id="home_upcoming" style={styles.upcomingAnchor}>
+            <Text style={styles.section}>Upcoming Rides</Text>
+            <Text style={styles.emptyRides}>No upcoming rides</Text>
+          </CoachMarkAnchor>
+        ) : (
+          <Text style={styles.section}>Upcoming Rides</Text>
+        )}
+      </View>
       <AdPlacement placement="home_native" />
     </>
   );
@@ -293,7 +420,9 @@ const DashboardPage = () => {
               onBack={exitSearchResults}
               style={styles.searchHeader}
             />
-            <SearchLocation {...searchProps} />
+            <CoachMarkAnchor id="home_search">
+        <SearchLocation {...searchProps} />
+      </CoachMarkAnchor>
             <AllridesComponent
               rides={allRides}
               loading={loadingAllRides}
@@ -317,9 +446,17 @@ const DashboardPage = () => {
               keyExtractor={(item, index) => `${item._id}-${index}`}
               renderItem={renderRide}
               ListHeaderComponent={scrollListHeader}
-              ListEmptyComponent={
-                <Text style={styles.emptyRides}>No upcoming rides</Text>
-              }
+              ListEmptyComponent={null}
+              onScrollToIndexFailed={(info) => {
+                const average = info.averageItemLength || 220;
+                listRef.current?.scrollToOffset({
+                  offset: Math.max(
+                    0,
+                    upcomingSectionScrollOffsetRef.current + average * info.index
+                  ),
+                  animated: true,
+                });
+              }}
               contentContainerStyle={{
                 paddingBottom: getScrollBottomPadding(insets.bottom, 72),
               }}
@@ -371,6 +508,10 @@ const createStyles = (c) =>
       textAlign: "center",
       color: c.textMuted,
       marginTop: LAYOUT.spacing.md,
+      marginBottom: LAYOUT.spacing.sm,
+    },
+    upcomingAnchor: {
+      width: "100%",
     },
     searchHeader: {
       paddingHorizontal: LAYOUT.spacing.screen,

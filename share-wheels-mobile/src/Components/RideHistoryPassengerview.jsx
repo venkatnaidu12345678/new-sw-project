@@ -19,7 +19,13 @@ import madhapurIcon from "../assets/madhapuricon.png";
 import kondapurIcon from "../assets/kondapuricon.png";
 import { getRideDisplayFare } from "../Utils/fareUtils";
 import { formatDisplayTime } from "../Utils/dateUtils";
+import { useTheme } from "../context/ThemeContext";
 import { useThemedStyles } from "../theme/useThemedStyles";
+import {
+  getHistoryTotalGradient,
+  getOnPrimaryGradientText,
+  getHistoryInfoTints,
+} from "../theme/appTheme";
 
 const createStyles = (c) =>
   StyleSheet.create({
@@ -210,7 +216,7 @@ const createStyles = (c) =>
 
   totalLabel: {
     fontSize: 12,
-    color: "#DBEAFE",
+    color: getOnPrimaryGradientText(c),
   },
 
   totalAmount: {
@@ -235,7 +241,10 @@ const InfoCard = ({ icon, label, value, bg, full }) => {
 };
 
 const RideHistoryPassengerView = ({ ride, loading }) => {
+  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const tints = getHistoryInfoTints(colors);
+  const totalGradient = getHistoryTotalGradient(colors);
   if (!ride) return null;
 
   const formattedDate =
@@ -268,7 +277,7 @@ const RideHistoryPassengerView = ({ ride, loading }) => {
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 24 }} />
+        <ActivityIndicator style={{ marginTop: 24 }} color={colors.primary} />
       ) : (
       <View style={styles.scrollContent}>
         {/* ROUTE */}
@@ -302,28 +311,28 @@ const RideHistoryPassengerView = ({ ride, loading }) => {
                 .filter(Boolean)
                 .join(" · ") || "Car"
             }
-            bg="#F3E8FF"
+            bg={tints.vehicle}
           />
 
           <InfoCard
             icon={seat}
             label="Seats"
             value={String(seats)}
-            bg="#FFF7ED"
+            bg={tints.seats}
           />
 
           <InfoCard
             icon={dateIcon}
             label="Date"
             value={formattedDate}
-            bg="#ECFEFF"
+            bg={tints.date}
           />
 
           <InfoCard
             icon={clock}
             label="Start Time"
             value={formattedTime}
-            bg="#EFF6FF"
+            bg={tints.time}
             full
           />
         </View>
@@ -349,7 +358,7 @@ const RideHistoryPassengerView = ({ ride, loading }) => {
           <VehicleInfoStrip vehicle={ride.vehicle} />
         ) : null}
 
-        <LinearGradient colors={["#1D4ED8", "#2563EB"]} style={styles.totalCard}>
+        <LinearGradient colors={totalGradient} style={styles.totalCard}>
           <View>
             <Text style={styles.totalLabel}>Total Fare</Text>
             <Text style={styles.totalAmount}>₹{totalFare}</Text>

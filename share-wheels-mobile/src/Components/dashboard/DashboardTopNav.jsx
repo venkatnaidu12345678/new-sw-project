@@ -4,6 +4,7 @@ import LinearGradient from "react-native-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
 import UserAvatar from "../ui/UserAvatar";
 import NotificationIcon from "../NotificationIcon";
+import CoachMarkAnchor from "../coachMarks/CoachMarkAnchor";
 import { LAYOUT } from "../../theme/layout";
 
 const GRADIENT = ["#2563EB", "#4F46E5", "#7C3AED"];
@@ -34,7 +35,9 @@ const DashboardTopNav = ({ user }) => {
             <Text style={styles.sub}>Where are you headed?</Text>
           </View>
         </Pressable>
-        <NotificationIcon variant="dashboard" />
+        <CoachMarkAnchor id="home_notifications">
+          <NotificationIcon variant="dashboard" />
+        </CoachMarkAnchor>
       </View>
     </LinearGradient>
   );

@@ -20,13 +20,9 @@ import { DS } from "../../theme/designSystem";
 import { formatDisplayTime } from "../../Utils/dateUtils";
 import { useTheme } from "../../context/ThemeContext";
 import { useThemedStyles } from "../../theme/useThemedStyles";
+import { getRequestDetailRoleTheme } from "../../theme/appTheme";
 
 const MAX_CARD_HEIGHT = Dimensions.get("window").height * 0.78;
-
-const roleTheme = {
-  Passenger: { bg: "#16A34A", chip: "#DCFCE7", text: "#166534" },
-  Courier: { bg: "#F97316", chip: "#FFEDD5", text: "#C2410C" },
-};
 
 const displayValue = (value) => {
   if (value == null || value === "") return "—";
@@ -84,7 +80,7 @@ const RequestDetailPopover = ({
 
   if (!visible) return null;
 
-  const theme = roleTheme[request?.role] || roleTheme.Passenger;
+  const theme = getRequestDetailRoleTheme(colors, request?.role);
   const isCourier = request?.role === "Courier";
   const extraRows = (request?.extraRows || []).filter((row) => hasValue(row?.value));
 
@@ -256,7 +252,7 @@ const createStyles = (c) =>
       borderRadius: 999,
     },
     roleBadgeText: {
-      color: "#FFFFFF",
+      color: c.inverseText,
       fontSize: 12,
       fontWeight: "700",
     },

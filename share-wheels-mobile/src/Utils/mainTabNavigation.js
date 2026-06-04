@@ -56,5 +56,9 @@ export const navigateToRootScreen = (navigation, screen, params) => {
     nav = parent;
     parent = nav.getParent?.();
   }
-  nav.navigate(screen, params);
+  if (params !== undefined) {
+    nav.navigate(screen, params);
+  } else {
+    nav.navigate(screen);
+  }
 };

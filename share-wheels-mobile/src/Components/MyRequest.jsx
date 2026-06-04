@@ -29,9 +29,12 @@ import { formatDisplayTime } from "../Utils/dateUtils";
 import {
   getMyPassengerRequests,
   getMyCourierRequests,
+  deleteMyPassengerRequest,
+  deleteMyCourierRequest,
   passengerSendRequestApi,
   courierSendRequestApi,
 } from "../ApiService/ridesApiServices";
+import Icon from "react-native-vector-icons/Ionicons";
 import { getApiErrorMessage } from "../Utils/apiErrors";
 import { formatRequestDate } from "../Utils";
 import { RideListSkeleton } from "./ui/Skeleton";
@@ -83,6 +86,29 @@ const normalizeRequestTab = (tab, tabOptions) => {
   const key = String(tab).toLowerCase();
   return tabOptions.find((t) => t.toLowerCase() === key) || null;
 };
+
+const REQUEST_STATUS_PRIORITY = {
+  pending: 0,
+  accepted: 1,
+  confirmed: 1,
+  started: 2,
+  completed: 3,
+  rejected: 4,
+  cancelled: 5,
+};
+
+const sortRequestsByPriority = (items = []) =>
+  [...items].sort((a, b) => {
+    const aPriority =
+      REQUEST_STATUS_PRIORITY[String(a?.status || "").toLowerCase()] ?? 99;
+    const bPriority =
+      REQUEST_STATUS_PRIORITY[String(b?.status || "").toLowerCase()] ?? 99;
+    if (aPriority !== bPriority) return aPriority - bPriority;
+
+    const aTime = new Date(a?.raw?.requestedAt || a?.raw?.createdAt || 0).getTime();
+    const bTime = new Date(b?.raw?.requestedAt || b?.raw?.createdAt || 0).getTime();
+    return bTime - aTime;
+  });
 
 const mapPassengerRequest = (item) => {
   const isRideJoin = item.requestKind === "ride_join";
@@ -143,6 +169,7 @@ const MyRequest = () => {
   const [sheetVisible, setSheetVisible] = useState(false);
   const [popoverLoading, setPopoverLoading] = useState(false);
   const [joiningRideId, setJoiningRideId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
   const tabs = ["Passenger", "Courier"];
   const activeIndex = tabs.indexOf(activeTab);
@@ -165,7 +192,11 @@ const MyRequest = () => {
       }
 
       const res = await getMyPassengerRequests(token);
-      setPassengerRides((res?.passengerRequests || []).map(mapPassengerRequest));
+      setPassengerRides(
+        sortRequestsByPriority(
+          (res?.passengerRequests || []).map(mapPassengerRequest)
+        )
+      );
     } catch (err) {
       console.log("❌ PASSENGER REQUESTS ERROR:", err.message);
       setFetchError(getApiErrorMessage(err, "Could not load passenger requests."));
@@ -188,7 +219,9 @@ const MyRequest = () => {
       }
 
       const res = await getMyCourierRequests(token);
-      setCourierRides((res?.courierRequests || []).map(mapCourierRequest));
+      setCourierRides(
+        sortRequestsByPriority((res?.courierRequests || []).map(mapCourierRequest))
+      );
     } catch (err) {
       console.log("❌ COURIER REQUESTS ERROR:", err.message);
       setFetchError(getApiErrorMessage(err, "Could not load courier requests."));
@@ -386,6 +419,52 @@ const MyRequest = () => {
     }
   };
 
+  const canDeleteRequest = (item) =>
+    String(item?.status || "").toLowerCase() === "pending";
+
+  const handleDeleteRequest = (item) => {
+    if (!canDeleteRequest(item)) {
+      Alert.alert("Cannot delete", "Only pending requests can be removed.");
+      return;
+    }
+
+    Alert.alert(
+      "Delete request?",
+      `Remove this ${item.role === "Courier" ? "courier" : "passenger"} request? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            const token = await AsyncStorage.getItem("token");
+            if (!token) {
+              Alert.alert("Sign in required", "Please log in again.");
+              return;
+            }
+            setDeletingId(item.id);
+            try {
+              if (activeTab === "Courier") {
+                await deleteMyCourierRequest(token, item.id);
+              } else {
+                await deleteMyPassengerRequest(token, item.id);
+              }
+              if (selectedRide?.id === item.id) {
+                closePopover();
+                closeSheet();
+              }
+              await fetchActiveTabRequests();
+            } catch (error) {
+              Alert.alert("Delete failed", getApiErrorMessage(error));
+            } finally {
+              setDeletingId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleJoinRide = (ride) => {
     if (!selectedRide) return;
     if (selectedRide.requestKind === "ride_join" || ride.passengerRequestPending) {
@@ -427,6 +506,21 @@ const MyRequest = () => {
                   {rideCount} ride{rideCount !== 1 ? "s" : ""}
                 </Text>
               </View>
+            ) : null}
+            {canDeleteRequest(item) ? (
+              <TouchableOpacity
+                style={styles.deleteBtn}
+                onPress={() => handleDeleteRequest(item)}
+                disabled={deletingId === item.id}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                activeOpacity={0.75}
+              >
+                {deletingId === item.id ? (
+                  <Text style={styles.deleteBtnText}>…</Text>
+                ) : (
+                  <Icon name="trash-outline" size={18} color={colors.errorText} />
+                )}
+              </TouchableOpacity>
             ) : null}
             <View style={[styles.statusChip, { backgroundColor: theme.statusSoft }]}>
               <Text style={[styles.statusText, { color: theme.statusText }]}>
@@ -660,6 +754,22 @@ headerTitle: {
   },
 
   statusText: { fontSize: 11, fontWeight: "700" },
+
+  deleteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: c.errorBg,
+    borderWidth: 1,
+    borderColor: c.errorBorder,
+  },
+  deleteBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: c.errorText,
+  },
 
   routeRow: {
     flexDirection: "row",

@@ -1,4 +1,4 @@
-# new-sw-project
+# ShareWheels
 
 Share Wheels — carpooling, passenger requests, courier delivery, admin panel, and live ride tracking.
 

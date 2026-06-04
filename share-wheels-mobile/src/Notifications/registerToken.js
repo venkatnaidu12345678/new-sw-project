@@ -28,9 +28,13 @@ export async function syncFcmTokenWithBackend(options = {}) {
   if (!authToken) return null;
 
   const userId = await getLoggedInUserId();
-  const fcmToken = await getDeviceTokenWithPermission();
+  let fcmToken = await getDeviceTokenWithPermission();
   if (!fcmToken) {
-    if (__DEV__) console.warn("[FCM] no device token (permission or Firebase)");
+    await delay(800);
+    fcmToken = await getDeviceTokenWithPermission();
+  }
+  if (!fcmToken) {
+    console.warn("[FCM] no device token (permission denied or Firebase unavailable)");
     return null;
   }
 
