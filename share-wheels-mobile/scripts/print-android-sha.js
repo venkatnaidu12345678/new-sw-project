@@ -46,7 +46,7 @@ const printSha = (label, keystore, alias, storePass) => {
   }
 };
 
-console.log("Add every SHA below to Firebase → Android app (com.sw_mobile_app).");
+console.log("Add every SHA below to Firebase → Android app (com.sharewheels.app).");
 console.log("Then download a fresh google-services.json into android/app/.\n");
 
 const gsPath = path.join(ROOT, "android", "app", "google-services.json");

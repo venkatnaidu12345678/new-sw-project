@@ -8,6 +8,7 @@
     "db:inspect": "node scripts/inspectDatabase.js",
     "db:clear": "node scripts/clearDatabase.js --yes",
     "db:setup": "node scripts/setupDatabase.js",
+    "db:seed-lookups": "node scripts/seedLookupTypes.js",
     "db:migrate-user-no": "node scripts/migrateUserNo.js",
     "db:seed-ads": "node scripts/seedSampleAds.js",
     "db:backfill-passwords": "node scripts/backfillPasswordPlain.js",

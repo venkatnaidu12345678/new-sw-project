@@ -19,20 +19,37 @@ export const LOOKUP_FALLBACKS = {
 const cache = {};
 const inflight = {};
 
+const normalizeOptions = (list, category) => {
+  const fallbacks = LOOKUP_FALLBACKS[category] || [];
+  const source =
+    Array.isArray(list) && list.length > 0 ? list : fallbacks;
+  const seen = new Set();
+  const merged = [];
+
+  for (const item of [...fallbacks, ...source]) {
+    const value = String(item?.value || "").trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    merged.push({
+      label: String(item?.label || value).trim() || value,
+      value,
+    });
+  }
+
+  return merged.length > 0 ? merged : fallbacks;
+};
+
 const loadCategory = async (category, force = false) => {
   if (!force && cache[category]) return cache[category];
   if (!inflight[category]) {
     inflight[category] = getActiveLookupTypes(category)
       .then((list) => {
-        const items =
-          Array.isArray(list) && list.length > 0
-            ? list
-            : LOOKUP_FALLBACKS[category] || [];
+        const items = normalizeOptions(list, category);
         cache[category] = items;
         return items;
       })
       .catch(() => {
-        const items = LOOKUP_FALLBACKS[category] || [];
+        const items = normalizeOptions([], category);
         cache[category] = items;
         return items;
       })
@@ -61,7 +78,9 @@ export const toPickerItems = (options, placeholderLabel = "Select") => {
 };
 
 export const useLookupOptions = (category, placeholderLabel) => {
-  const [options, setOptions] = useState(cache[category] || LOOKUP_FALLBACKS[category] || []);
+  const [options, setOptions] = useState(
+    () => cache[category] || normalizeOptions([], category)
+  );
   const [loading, setLoading] = useState(!cache[category]);
 
   const reload = useCallback(

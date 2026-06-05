@@ -191,10 +191,15 @@ export const StyledPicker = ({
           enabled={enabled}
           selectedValue={selectedValue}
           onValueChange={onValueChange}
-          mode={Platform.OS === "android" ? "dropdown" : undefined}
+          mode={Platform.OS === "android" ? "dialog" : undefined}
+          prompt={Platform.OS === "android" ? label || "Select an option" : undefined}
           style={[
             styles.picker,
-            { color: textColor, backgroundColor: "transparent" },
+            {
+              color: textColor,
+              backgroundColor: "transparent",
+            },
+            Platform.OS === "android" && { color: isDark ? "#F8FAFC" : textColor },
           ]}
           dropdownIconColor={mutedColor}
           itemStyle={Platform.OS === "ios" ? { color: textColor } : undefined}

@@ -84,13 +84,13 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace "com.sw_mobile_app"
+    namespace "com.sharewheels.app"
     defaultConfig {
-        applicationId "com.sw_mobile_app"
+        applicationId "com.sharewheels.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-       versionCode 2
-    versionName "1.1"
+       versionCode 3
+    versionName "1.2"
         manifestPlaceholders = [usesCleartextTraffic: "true"]
         resValue "string", "GOOGLE_MAPS_API_KEY", (project.env.get("GOOGLE_MAPS_API_KEY") ?: "")
     }

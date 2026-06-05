@@ -6,6 +6,8 @@
 require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") });
 const { connectMongo, disconnectMongo, mongoUriHint } = require("./mongoConnect");
 const Admin = require("../src/models/adminModel");
+const lookupService = require("../src/services/lookupService");
+const { DEFAULT_LOOKUP_TYPES } = require("../src/constants/defaultLookupTypes");
 
 const run = async () => {
   if (!process.env.MONGO_URI) {
@@ -46,6 +48,11 @@ const run = async () => {
   console.log(`  email: ${admin.email}`);
   console.log(`  mobile: ${admin.mobile}`);
   console.log(`  password: ${admin.password}`);
+
+  for (const [category, items] of Object.entries(DEFAULT_LOOKUP_TYPES)) {
+    const res = await lookupService.bulkUpsert(category, items);
+    console.log(`Lookup ${category}:`, res.body.message || "ok");
+  }
 
   await disconnectMongo();
   process.exit(0);

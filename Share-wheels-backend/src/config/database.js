@@ -9,6 +9,7 @@ const connectDatabase = () => {
   }
 
   const { ensureDefaultAdmin } = require("./ensureDefaultAdmin");
+  const { ensureDefaultLookupTypes } = require("./ensureDefaultLookupTypes");
   const { ensureUserNos } = require("./ensureUserNos");
   const { startRideExpiryJob } = require("../jobs/rideExpiryJob");
   const { startNotificationCleanupJob } = require("../jobs/notificationCleanupJob");
@@ -19,6 +20,7 @@ const connectDatabase = () => {
       console.log("MongoDB Connected");
       try {
         await ensureDefaultAdmin();
+        await ensureDefaultLookupTypes();
         await ensureUserNos();
         startRideExpiryJob();
         startNotificationCleanupJob();

@@ -19,7 +19,7 @@ cd share-wheels-mobile
 node scripts/print-android-sha.js
 ```
 
-In [Firebase Console](https://console.firebase.google.com) → Project **sharewheels-5e988** → Android app **com.sw_mobile_app** → **Add fingerprint** for **both** SHA-1 and SHA-256 from the **Release** section.
+In [Firebase Console](https://console.firebase.google.com) → Project **sharewheels-5e988** → Android app **com.sharewheels.app** → **Add fingerprint** for **both** SHA-1 and SHA-256 from the **Release** section.
 
 Download the updated **`android/app/google-services.json`** and rebuild the release APK.
 

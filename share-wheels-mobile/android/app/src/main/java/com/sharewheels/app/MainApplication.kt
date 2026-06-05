@@ -1,4 +1,4 @@
-package com.sw_mobile_app
+package com.sharewheels.app
 
 import android.app.Application
 import com.facebook.react.PackageList

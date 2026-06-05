@@ -25,6 +25,17 @@ const run = (cmd, cwd = buildRoot) => {
   execSync(cmd, { cwd, stdio: "inherit", env: process.env });
 };
 
+const clearStaleAutolinkingCache = (root) => {
+  const autolinkingDir = path.join(
+    root,
+    "android/build/generated/autolinking"
+  );
+  if (fs.existsSync(autolinkingDir)) {
+    console.log(`Removing stale autolinking cache: ${autolinkingDir}`);
+    fs.rmSync(autolinkingDir, { recursive: true, force: true });
+  }
+};
+
 const copyProjectToShortPath = () => {
   if (!useShortPath) return;
   console.log(`Syncing project to ${SHORT_ROOT} (Windows path-length workaround)...`);
@@ -83,7 +94,9 @@ try {
       "Missing .env.production — copy .env.example and set PRODUCTION_URL + GOOGLE_MAPS_API_KEY"
     );
   }
+  clearStaleAutolinkingCache(ROOT);
   copyProjectToShortPath();
+  clearStaleAutolinkingCache(buildRoot);
   run(
     `${gradlewCmd} ${gradleTask} -PreactNativeArchitectures=arm64-v8a --no-daemon`,
     androidDir()

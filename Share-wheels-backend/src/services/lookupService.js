@@ -1,5 +1,6 @@
 const LookupOption = require("../models/lookupOptionModel");
 const { LOOKUP_CATEGORIES } = require("../models/lookupOptionModel");
+const { DEFAULT_LOOKUP_TYPES } = require("../constants/defaultLookupTypes");
 
 const normalizeLabel = (label) => String(label || "").trim();
 const slugFromLabel = (label) =>
@@ -21,12 +22,14 @@ const listActiveByCategory = async (category) => {
     .sort({ sortOrder: 1, label: 1 })
     .select("label value")
     .lean();
+  const mapped = types.map((t) => ({ label: t.label, value: t.value }));
+  const fallback = DEFAULT_LOOKUP_TYPES[category] || [];
   return {
     status: 200,
     body: {
       success: true,
       category,
-      types: types.map((t) => ({ label: t.label, value: t.value })),
+      types: mapped.length > 0 ? mapped : fallback,
     },
   };
 };

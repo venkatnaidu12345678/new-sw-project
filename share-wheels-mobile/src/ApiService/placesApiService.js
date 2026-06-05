@@ -21,7 +21,9 @@ export const autocompletePlaces = async (input, sessionToken) => {
   const q = String(input || "").trim();
   if (q.length < 2) return [];
 
-  const params = new URLSearchParams({ input: q });
+  // Request broad India location suggestions (cities/towns/areas/addresses).
+  // Backend defaults to cities+India, but this opts into the broader mode.
+  const params = new URLSearchParams({ input: q, mode: "all", country: "in" });
   if (sessionToken) params.set("sessionToken", sessionToken);
 
   const res = await fetch(`${baseUrl}/locations/places/autocomplete?${params}`, {
