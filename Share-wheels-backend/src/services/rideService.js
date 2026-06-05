@@ -706,7 +706,20 @@ const listRidesByPhase = async (user, completed) => {
       }
       return results;
     });
-  return { status: 200, body: { success: true, count: updatedRides.length, rides: updatedRides } };
+
+  const ridesOut = completed
+    ? updatedRides
+    : [...updatedRides].sort((a, b) => {
+        const order = { started: 0, pending: 1 };
+        const aRank = order[a.status] ?? 9;
+        const bRank = order[b.status] ?? 9;
+        if (aRank !== bRank) return aRank - bRank;
+        const aTime = new Date(a?.date || a?.createdAt || 0).getTime();
+        const bTime = new Date(b?.date || b?.createdAt || 0).getTime();
+        return aTime - bTime;
+      });
+
+  return { status: 200, body: { success: true, count: ridesOut.length, rides: ridesOut } };
 };
 
 const USER_FIELDS = USER_PUBLIC_FIELDS;

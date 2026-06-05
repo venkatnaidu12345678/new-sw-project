@@ -2,7 +2,7 @@
 export const MAIN_TAB_NAMES = ["Home", "Ride", "Request", "Profile"];
 
 /** Tabs where the global create (+) FAB should stay visible. */
-export const CREATE_FAB_TAB_NAMES = ["Home", "Ride", "Request"];
+export const CREATE_FAB_TAB_NAMES = ["Home", "Request"];
 
 /**
  * Resolve the active bottom-tab name from any navigation state tree

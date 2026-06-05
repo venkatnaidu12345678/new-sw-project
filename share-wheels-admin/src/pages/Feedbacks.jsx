@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { getFeedbacks, updateFeedback } from "../api/client";
 import PageHeader from "../components/ui/PageHeader";
 import Loading from "../components/ui/Loading";
+import StatusBadge from "../components/StatusBadge";
+import { Alert, btnClass, inputClass, Table, Th, Td } from "../components/ui/primitives";
 
 const STATUS_OPTIONS = ["all", "new", "reviewed", "resolved"];
 
@@ -35,88 +37,58 @@ export default function Feedbacks() {
   };
 
   return (
-    <div>
-      <PageHeader
-        title="User feedback"
-        subtitle="Messages submitted from the mobile app profile screen"
-      />
-
-      <div className="toolbar" style={{ marginBottom: 20 }}>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          style={{ maxWidth: 200 }}
-        >
+    <div className="mx-auto max-w-7xl">
+      <PageHeader title="User feedback" subtitle="Messages submitted from the mobile app profile screen" />
+      <div className="mb-5 flex flex-wrap gap-2">
+        <select className={inputClass("max-w-[200px]")} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           {STATUS_OPTIONS.map((s) => (
-            <option key={s} value={s}>
-              {s === "all" ? "All statuses" : s}
-            </option>
+            <option key={s} value={s}>{s === "all" ? "All statuses" : s}</option>
           ))}
         </select>
-        <button type="button" className="btn btn-primary" onClick={load}>
-          Refresh
-        </button>
+        <button type="button" className={btnClass("primary", "sm")} onClick={load}>Refresh</button>
       </div>
-
-      {error ? <div className="alert alert-error">{error}</div> : null}
-
+      {error ? <Alert className="mb-4">{error}</Alert> : null}
       {loading ? (
         <Loading message="Loading feedback…" />
       ) : feedbacks.length === 0 ? (
-        <p className="page-subtitle">No feedback yet.</p>
+        <p className="text-sm text-slate-500">No feedback yet.</p>
       ) : (
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>User</th>
-                <th>Category</th>
-                <th>Message</th>
-                <th>Status</th>
-                <th>Date</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {feedbacks.map((f) => (
-                <tr key={f._id}>
-                  <td>
-                    <div>{f.userId?.name || "—"}</div>
-                    <div style={{ fontSize: 12, color: "#64748B" }}>
-                      {f.userId?.email || f.userId?.mobile || ""}
-                    </div>
-                  </td>
-                  <td>{f.category}</td>
-                  <td style={{ maxWidth: 320, whiteSpace: "pre-wrap" }}>{f.message}</td>
-                  <td>
-                    <span className={`badge badge-${f.status}`}>{f.status}</span>
-                  </td>
-                  <td>{new Date(f.createdAt).toLocaleString()}</td>
-                  <td className="table-actions">
+        <Table>
+          <thead>
+            <tr>
+              <Th>User</Th>
+              <Th>Category</Th>
+              <Th>Message</Th>
+              <Th>Status</Th>
+              <Th>Date</Th>
+              <Th>Actions</Th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 bg-white">
+            {feedbacks.map((f) => (
+              <tr key={f._id} className="hover:bg-slate-50/80">
+                <Td>
+                  <div className="font-medium text-slate-800">{f.userId?.name || "—"}</div>
+                  <div className="text-xs text-slate-500">{f.userId?.email || f.userId?.mobile || ""}</div>
+                </Td>
+                <Td>{f.category}</Td>
+                <Td className="max-w-xs whitespace-pre-wrap text-slate-600">{f.message}</Td>
+                <Td><StatusBadge status={f.status} /></Td>
+                <Td className="text-xs text-slate-500">{new Date(f.createdAt).toLocaleString()}</Td>
+                <Td>
+                  <div className="flex flex-wrap gap-1.5">
                     {f.status !== "reviewed" ? (
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => setStatus(f._id, "reviewed")}
-                      >
-                        Reviewed
-                      </button>
+                      <button type="button" className={btnClass("secondary", "sm")} onClick={() => setStatus(f._id, "reviewed")}>Reviewed</button>
                     ) : null}
                     {f.status !== "resolved" ? (
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        onClick={() => setStatus(f._id, "resolved")}
-                      >
-                        Resolved
-                      </button>
+                      <button type="button" className={btnClass("primary", "sm")} onClick={() => setStatus(f._id, "resolved")}>Resolved</button>
                     ) : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  </div>
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
       )}
     </div>
   );

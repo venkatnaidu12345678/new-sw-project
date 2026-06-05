@@ -3,6 +3,7 @@ import { getRides, updateRideStatus } from "../api/client";
 import StatusBadge from "../components/StatusBadge";
 import PageHeader from "../components/ui/PageHeader";
 import Loading from "../components/ui/Loading";
+import { btnClass, inputClass, Table, Th, Td } from "../components/ui/primitives";
 
 export default function Rides() {
   const [rides, setRides] = useState([]);
@@ -23,10 +24,6 @@ export default function Rides() {
     load();
   }, [statusFilter]);
 
-  const onCreate = () => {
-    alert("Create rides is not available in this admin UI yet.");
-  };
-
   const changeStatus = async (id, status) => {
     try {
       await updateRideStatus(id, status);
@@ -44,20 +41,20 @@ export default function Rides() {
   });
 
   return (
-    <div>
+    <div className="mx-auto max-w-7xl">
       <PageHeader title="Rides" subtitle="Monitor and manage ride lifecycle." />
 
-      <div className="toolbar" style={{ marginBottom: 20 }}>
+      <div className="mb-5 flex flex-wrap items-center gap-2">
         <input
-          placeholder="Search route or driver?"
+          className={inputClass("max-w-xs")}
+          placeholder="Search route or driver…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{ maxWidth: 360 }}
         />
         <select
+          className={inputClass("max-w-[200px]")}
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          style={{ maxWidth: 220 }}
         >
           <option value="">All statuses</option>
           <option value="pending">Pending</option>
@@ -65,66 +62,64 @@ export default function Rides() {
           <option value="completed">Completed</option>
           <option value="cancelled">Cancelled</option>
         </select>
-        <button type="button" className="btn btn-secondary" onClick={onCreate}>
-          Create
-        </button>
-        <button type="button" className="btn btn-secondary" onClick={load}>
+        <button type="button" className={btnClass("secondary", "sm")} onClick={load}>
           Refresh
         </button>
       </div>
 
       {loading ? (
-        <Loading message="Loading rides..." />
+        <Loading message="Loading rides…" />
       ) : (
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
+        <Table>
+          <thead>
+            <tr>
+              <Th>Route</Th>
+              <Th>Driver</Th>
+              <Th>Date</Th>
+              <Th>Seats</Th>
+              <Th>Price/seat</Th>
+              <Th>Status</Th>
+              <Th>Update</Th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 bg-white">
+            {filteredRides.length === 0 ? (
               <tr>
-                <th>Route</th>
-                <th>Driver</th>
-                <th>Date</th>
-                <th>Seats</th>
-                <th>Price/seat</th>
-                <th>Status</th>
-                <th>Update</th>
+                <Td colSpan={7} className="py-12 text-center text-slate-500">
+                  No rides found.
+                </Td>
               </tr>
-            </thead>
-            <tbody>
-              {filteredRides.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="empty-state">
-                    No rides found.
-                  </td>
+            ) : (
+              filteredRides.map((r) => (
+                <tr key={r._id} className="hover:bg-slate-50/80">
+                  <Td>
+                    <div className="font-semibold text-slate-800">{r.from}</div>
+                    <div className="text-xs text-slate-500">→ {r.to}</div>
+                  </Td>
+                  <Td>{r.creator?.name || "—"}</Td>
+                  <Td>{r.date ? new Date(r.date).toLocaleDateString() : "—"}</Td>
+                  <Td>{r.availableSeats ?? "—"}</Td>
+                  <Td className="font-semibold">₹{r.ride_amount ?? 0}</Td>
+                  <Td>
+                    <StatusBadge status={r.status} />
+                  </Td>
+                  <Td>
+                    <select
+                      className={inputClass("max-w-[140px] py-1.5")}
+                      value={r.status}
+                      onChange={(e) => changeStatus(r._id, e.target.value)}
+                    >
+                      <option value="pending">pending</option>
+                      <option value="started">started</option>
+                      <option value="completed">completed</option>
+                      <option value="cancelled">cancelled</option>
+                    </select>
+                  </Td>
                 </tr>
-              ) : (
-                filteredRides.map((r) => (
-                  <tr key={r._id}>
-                    <td>{`${r.from || ""} -> ${r.to || ""}`}</td>
-                    <td>{r.creator?.name || "-"}</td>
-                    <td>{r.date ? new Date(r.date).toLocaleDateString() : "-"}</td>
-                    <td>{r.availableSeats ?? "-"}</td>
-                    <td>INR {r.ride_amount ?? 0}</td>
-                    <td>
-                      <StatusBadge status={r.status} />
-                    </td>
-                    <td>
-                      <select
-                        value={r.status}
-                        onChange={(e) => changeStatus(r._id, e.target.value)}
-                        style={{ maxWidth: 150 }}
-                      >
-                        <option value="pending">pending</option>
-                        <option value="started">started</option>
-                        <option value="completed">completed</option>
-                        <option value="cancelled">cancelled</option>
-                      </select>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+              ))
+            )}
+          </tbody>
+        </Table>
       )}
     </div>
   );

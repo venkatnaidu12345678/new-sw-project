@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { adminLogin } from "../api/client";
+import { Alert, btnClass, inputClass } from "../components/ui/primitives";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -26,40 +27,52 @@ export default function Login() {
   };
 
   return (
-    <div className="login-page">
-      <form className="login-card" onSubmit={handleSubmit}>
-        <div className="login-logo">SW</div>
-        <h1 className="login-title">Share Wheels Admin</h1>
-        <p className="login-sub">Sign in to manage users, rides, requests, and ads.</p>
+    <div className="relative flex min-h-full items-center justify-center overflow-hidden bg-gradient-to-br from-brand-600 via-indigo-600 to-accent-violet px-4 py-10">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(255,255,255,0.15),transparent_50%)]" />
+      <form
+        onSubmit={handleSubmit}
+        className="relative z-10 w-full max-w-md rounded-3xl border border-white/20 bg-white/95 p-8 shadow-2xl backdrop-blur-xl"
+      >
+        <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-600 to-accent-violet text-lg font-extrabold text-white shadow-lg">
+          SW
+        </div>
+        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
+          Share Wheels Admin
+        </h1>
+        <p className="mt-2 text-sm text-slate-500">
+          Sign in to manage users, rides, requests, and ads.
+        </p>
 
-        {error ? <div className="alert alert-error">{error}</div> : null}
+        {error ? <Alert className="mt-5">{error}</Alert> : null}
 
-        <div className="login-form">
-          <div className="form-field" style={{ marginBottom: 0 }}>
-            <label>Email</label>
+        <div className="mt-6 space-y-4">
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-semibold text-slate-700">Email</span>
             <input
               type="email"
+              className={inputClass()}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
               autoComplete="email"
               placeholder="admin@example.com"
             />
-          </div>
+          </label>
 
-          <div className="form-field" style={{ marginBottom: 0 }}>
-            <label>Password</label>
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-semibold text-slate-700">Password</span>
             <input
               type="password"
+              className={inputClass()}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               autoComplete="current-password"
               placeholder="••••••••"
             />
-          </div>
+          </label>
 
-          <button type="submit" className="btn btn-primary" disabled={loading}>
+          <button type="submit" disabled={loading} className={`${btnClass("primary")} w-full`}>
             {loading ? "Signing in…" : "Sign in"}
           </button>
         </div>

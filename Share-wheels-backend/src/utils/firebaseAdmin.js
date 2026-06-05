@@ -116,6 +116,8 @@ async function sendPushNotification(token, title, body, data = {}) {
       priority: "high",
       notification: {
         channelId: "share_wheels_default",
+        icon: "ic_notification",
+        color: "#2563EB",
         sound: "default",
         priority: "high",
         visibility: "public",

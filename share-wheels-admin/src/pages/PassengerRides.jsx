@@ -3,6 +3,7 @@ import { getPassengerRides } from "../api/client";
 import StatusBadge from "../components/StatusBadge";
 import PageHeader from "../components/ui/PageHeader";
 import Loading from "../components/ui/Loading";
+import { inputClass, Table, Th, Td } from "../components/ui/primitives";
 
 export default function PassengerRides() {
   const [rows, setRows] = useState([]);
@@ -19,10 +20,6 @@ export default function PassengerRides() {
       .finally(() => setLoading(false));
   }, [statusFilter]);
 
-  const onCreate = () => {
-    alert("Create passenger requests is not available in this admin UI yet.");
-  };
-
   const filteredRows = rows.filter((r) => {
     const q = search.trim().toLowerCase();
     if (!q) return true;
@@ -31,75 +28,48 @@ export default function PassengerRides() {
   });
 
   return (
-    <div>
-      <PageHeader
-        title="Passenger Requests"
-        subtitle="Track pending and assigned passenger ride requests."
-      />
-
-      <div className="toolbar" style={{ marginBottom: 20 }}>
-        <input
-          placeholder="Search passenger, route, status?"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ maxWidth: 360 }}
-        />
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          style={{ maxWidth: 220 }}
-        >
+    <div className="mx-auto max-w-7xl">
+      <PageHeader title="Passenger Requests" subtitle="Track pending and assigned passenger ride requests." />
+      <div className="mb-5 flex flex-wrap gap-2">
+        <input className={inputClass("max-w-sm")} placeholder="Search passenger, route…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <select className={inputClass("max-w-[200px]")} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">All statuses</option>
           <option value="pending">Pending</option>
           <option value="aisgned_passenger">Assigned</option>
           <option value="cancelled">Cancelled</option>
         </select>
-        <button type="button" className="btn btn-secondary" onClick={onCreate}>
-          Create
-        </button>
       </div>
-
       {loading ? (
-        <Loading message="Loading passenger requests?" />
+        <Loading message="Loading passenger requests…" />
       ) : (
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Passenger</th>
-                <th>Route</th>
-                <th>Seats</th>
-                <th>Offered (?)</th>
-                <th>Date</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRows.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="empty-state">
-                    No passenger requests found.
-                  </td>
+        <Table>
+          <thead>
+            <tr>
+              <Th>Passenger</Th>
+              <Th>Route</Th>
+              <Th>Seats</Th>
+              <Th>Offered (₹)</Th>
+              <Th>Date</Th>
+              <Th>Status</Th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 bg-white">
+            {filteredRows.length === 0 ? (
+              <tr><Td colSpan={6} className="py-12 text-center text-slate-500">No passenger requests found.</Td></tr>
+            ) : (
+              filteredRows.map((r) => (
+                <tr key={r._id} className="hover:bg-slate-50/80">
+                  <Td className="font-medium">{r.creator?.name || "—"}</Td>
+                  <Td><span className="font-medium">{r.from}</span> → {r.to}</Td>
+                  <Td>{r.seats_needed ?? "—"}</Td>
+                  <Td>₹{r.amount_will ?? 0}</Td>
+                  <Td>{r.date ? new Date(r.date).toLocaleDateString() : "—"}</Td>
+                  <Td><StatusBadge status={r.status} /></Td>
                 </tr>
-              ) : (
-                filteredRows.map((r) => (
-                  <tr key={r._id}>
-                    <td>{r.creator?.name || "?"}</td>
-                    <td>
-                      {r.from} ? {r.to}
-                    </td>
-                    <td>{r.seats_needed ?? "?"}</td>
-                    <td>?{r.amount_will ?? 0}</td>
-                    <td>{r.date ? new Date(r.date).toLocaleDateString() : "?"}</td>
-                    <td>
-                      <StatusBadge status={r.status} />
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+              ))
+            )}
+          </tbody>
+        </Table>
       )}
     </div>
   );

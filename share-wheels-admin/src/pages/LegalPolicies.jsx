@@ -6,6 +6,7 @@ import {
 import PageHeader from "../components/ui/PageHeader";
 import Loading from "../components/ui/Loading";
 import RichTextEditor, { htmlToPlainText } from "../components/RichTextEditor";
+import { Alert, btnClass, Table, Th, Td } from "../components/ui/primitives";
 
 const POLICY_ROWS = [
   { key: "terms", title: "Terms of Service", description: "Shown when users accept terms" },
@@ -107,110 +108,72 @@ export default function LegalPolicies() {
   if (loading) return <Loading message="Loading legal policies..." />;
 
   return (
-    <div>
-      <PageHeader
-        title="Legal Policies"
-        subtitle="Rich-text terms, privacy, and disclaimer shown in the mobile app"
-      >
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={saveAll}
-          disabled={saving}
-        >
+    <div className="mx-auto max-w-7xl">
+      <PageHeader title="Legal Policies" subtitle="Rich-text terms, privacy, and disclaimer shown in the mobile app">
+        <button type="button" className={btnClass("primary", "sm")} onClick={saveAll} disabled={saving}>
           {saving ? "Saving…" : "Save all"}
         </button>
       </PageHeader>
 
-      {error ? <div className="alert alert-error">{error}</div> : null}
+      {error ? <Alert className="mb-4">{error}</Alert> : null}
 
-      <div className="table-wrap">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Policy</th>
-              <th>Description</th>
-              <th>Preview</th>
-              <th>Last updated</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {POLICY_ROWS.map((row) => {
-              const plain = htmlToPlainText(policies[row.key]);
-              const preview =
-                plain.length > 120 ? `${plain.slice(0, 120)}…` : plain || "—";
-              return (
-                <tr key={row.key}>
-                  <td>
-                    <strong>{row.title}</strong>
-                    <div className="cell-muted">{row.key}</div>
-                  </td>
-                  <td className="cell-muted">{row.description}</td>
-                  <td style={{ maxWidth: 280 }}>{preview}</td>
-                  <td>
-                    {updatedAt[row.key]
-                      ? new Date(updatedAt[row.key]).toLocaleString()
-                      : "—"}
-                  </td>
-                  <td>
-                    <div className="table-actions">
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        onClick={() => openEditor(row.key)}
-                      >
-                        Edit content
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <Table>
+        <thead>
+          <tr>
+            <Th>Policy</Th>
+            <Th>Description</Th>
+            <Th>Preview</Th>
+            <Th>Last updated</Th>
+            <Th>Actions</Th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100 bg-white">
+          {POLICY_ROWS.map((row) => {
+            const plain = htmlToPlainText(policies[row.key]);
+            const preview = plain.length > 120 ? `${plain.slice(0, 120)}…` : plain || "—";
+            return (
+              <tr key={row.key} className="hover:bg-slate-50/80">
+                <Td>
+                  <div className="font-semibold text-slate-800">{row.title}</div>
+                  <div className="text-xs text-slate-500">{row.key}</div>
+                </Td>
+                <Td className="text-slate-500">{row.description}</Td>
+                <Td className="max-w-xs text-sm text-slate-600">{preview}</Td>
+                <Td className="text-sm text-slate-500">
+                  {updatedAt[row.key] ? new Date(updatedAt[row.key]).toLocaleString() : "—"}
+                </Td>
+                <Td>
+                  <button type="button" className={btnClass("primary", "sm")} onClick={() => openEditor(row.key)}>
+                    Edit content
+                  </button>
+                </Td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </Table>
 
       {editorOpen && editingMeta ? (
-        <div className="modal-backdrop" onClick={closeEditor} role="presentation">
-          <div
-            className="modal-card modal-card-lg"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-          >
-            <div className="modal-header-row">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={closeEditor} role="presentation">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="mb-4 flex items-start justify-between gap-4">
               <div>
-                <h2 className="modal-title">{editingMeta.title}</h2>
-                <p className="modal-subtitle">{editingMeta.description}</p>
+                <h2 className="text-xl font-bold text-slate-900">{editingMeta.title}</h2>
+                <p className="text-sm text-slate-500">{editingMeta.description}</p>
               </div>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={closeEditor}
-                aria-label="Close"
-              >
-                ✕
+              <button type="button" className={btnClass("ghost", "sm")} onClick={closeEditor} aria-label="Close">
+                Close
               </button>
             </div>
-
             <RichTextEditor
               value={draftContent}
               onChange={setDraftContent}
               placeholder={`Write ${editingMeta.title}…`}
               minHeight={320}
             />
-
-            <div className="modal-actions" style={{ marginTop: 20 }}>
-              <button type="button" className="btn btn-secondary" onClick={closeEditor}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={saveDraft}
-                disabled={saving}
-              >
+            <div className="mt-5 flex justify-end gap-2 border-t border-slate-100 pt-4">
+              <button type="button" className={btnClass("secondary")} onClick={closeEditor}>Cancel</button>
+              <button type="button" className={btnClass("primary")} onClick={saveDraft} disabled={saving}>
                 {saving ? "Saving…" : "Save policy"}
               </button>
             </div>

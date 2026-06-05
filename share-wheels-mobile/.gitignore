@@ -42,6 +42,8 @@ npm-debug.log
 yarn-error.log
 .env
 .env.production
+*firebase-adminsdk*.json
+firebase-service-account.json
 
 # fastlane
 #

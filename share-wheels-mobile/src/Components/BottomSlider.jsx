@@ -55,6 +55,7 @@ const BottomSlider = ({
   solid = false,
   heightRatio = 0.75,
   dismissOnBackdropPress = true,
+  closeDisabled = false,
   theme = {},
 }) => {
   const { colors, isDark } = useTheme();
@@ -121,7 +122,8 @@ const BottomSlider = ({
         })
         .onEnd((event) => {
           const shouldClose =
-            translateY.value > sheetHeight * 0.22 || event.velocityY > 650;
+            !closeDisabled &&
+            (translateY.value > sheetHeight * 0.22 || event.velocityY > 650);
 
           if (shouldClose) {
             translateY.value = withTiming(
@@ -137,7 +139,7 @@ const BottomSlider = ({
             translateY.value = withSpring(0, SPRING_SNAP);
           }
         }),
-    [sheetHeight, translateY, dragStartY]
+    [sheetHeight, translateY, dragStartY, closeDisabled]
   );
 
   const sheetAnimatedStyle = useAnimatedStyle(() => ({
@@ -192,7 +194,7 @@ const BottomSlider = ({
         ]}
       />
 
-      {dismissOnBackdropPress ? (
+      {dismissOnBackdropPress && !closeDisabled ? (
         <Animated.View style={[styles.topDismiss, topDismissAnimatedStyle]}>
           <Pressable
             style={StyleSheet.absoluteFill}
@@ -243,7 +245,8 @@ const BottomSlider = ({
 
           <KeyboardAvoidingView
             style={styles.keyboardAvoid}
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            behavior="padding"
+            keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
           >
             {solid ? (
               <View style={surfaceStyle}>{body}</View>

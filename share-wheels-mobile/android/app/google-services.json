@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "530725036472",
-    "project_id": "sharewheels-5e988",
-    "storage_bucket": "sharewheels-5e988.firebasestorage.app"
+    "project_number": "550440771618",
+    "project_id": "share-wheels-4afd2",
+    "storage_bucket": "share-wheels-4afd2.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:530725036472:android:6e08b04d4d9f70794baf4d",
+        "mobilesdk_app_id": "1:550440771618:android:c03016cc61f4fb1b236a7b",
         "android_client_info": {
           "package_name": "com.sharewheels.app"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyB-Zqz0z6qOhFyPWDZVn4izNR7ZElDZuF0"
+          "current_key": "AIzaSyAg5fzrxdF-Of33bArHS6_Z-mW4nCoR8Vw"
         }
       ],
       "services": {

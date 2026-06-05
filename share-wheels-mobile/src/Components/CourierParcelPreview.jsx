@@ -1,7 +1,7 @@
-import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import React, { useState } from "react";
+import { View, Text, StyleSheet, Pressable } from "react-native";
 import RemoteImage from "./ui/RemoteImage";
-import { LAYOUT } from "../theme/layout";
+import ImagePreviewModal from "./ui/ImagePreviewModal";
 import { useThemedStyles } from "../theme/useThemedStyles";
 
 export const formatCourierParcelLine = (courier) => {
@@ -13,10 +13,12 @@ export const formatCourierParcelLine = (courier) => {
 };
 
 /**
- * Courier parcel photo + description — for driver "My Couriers" and request lists.
+ * Courier parcel photo + description — tap image for full-screen preview.
  */
 const CourierParcelPreview = ({ courier, compact = false }) => {
   const styles = useThemedStyles(createStyles);
+  const [previewOpen, setPreviewOpen] = useState(false);
+
   if (!courier) return null;
 
   const imageUri = courier.courier_img;
@@ -24,32 +26,52 @@ const CourierParcelPreview = ({ courier, compact = false }) => {
   const receiver = courier.courier_receiver_details;
 
   return (
-    <View style={[styles.wrap, compact && styles.wrapCompact]}>
-      {imageUri ? (
-        <RemoteImage
-          source={imageUri}
-          style={[styles.image, compact && styles.imageCompact]}
-          resizeMode="cover"
-        />
-      ) : null}
-      <View style={[styles.textCol, !imageUri && styles.textColFull]}>
-        <Text style={styles.title}>Parcel</Text>
-        <Text style={styles.desc} numberOfLines={3}>
-          {line}
-        </Text>
-        {receiver?.name ? (
-          <Text style={styles.meta} numberOfLines={1}>
-            To: {receiver.name}
-            {receiver.mobile ? ` · ${receiver.mobile}` : ""}
-          </Text>
+    <>
+      <View style={[styles.wrap, compact && styles.wrapCompact]}>
+        {imageUri ? (
+          <Pressable
+            onPress={() => setPreviewOpen(true)}
+            accessibilityRole="imagebutton"
+            accessibilityLabel="View parcel photo full screen"
+            style={({ pressed }) => [pressed && styles.imagePressed]}
+          >
+            <RemoteImage
+              source={imageUri}
+              style={[styles.image, compact && styles.imageCompact]}
+              resizeMode="cover"
+            />
+          </Pressable>
         ) : null}
-        {receiver?.Address ? (
-          <Text style={styles.metaMuted} numberOfLines={2}>
-            {receiver.Address}
+        <View style={[styles.textCol, !imageUri && styles.textColFull]}>
+          <Text style={styles.title}>Parcel</Text>
+          <Text style={styles.desc} numberOfLines={3}>
+            {line}
           </Text>
-        ) : null}
+          {receiver?.name ? (
+            <Text style={styles.meta} numberOfLines={1}>
+              To: {receiver.name}
+              {receiver.mobile ? ` · ${receiver.mobile}` : ""}
+            </Text>
+          ) : null}
+          {receiver?.Address ? (
+            <Text style={styles.metaMuted} numberOfLines={2}>
+              {receiver.Address}
+            </Text>
+          ) : null}
+          {imageUri ? (
+            <Text style={styles.tapHint}>Tap photo to view full size</Text>
+          ) : null}
+        </View>
       </View>
-    </View>
+
+      <ImagePreviewModal
+        visible={previewOpen}
+        source={imageUri}
+        title={line}
+        subtitle={receiver?.name ? `To: ${receiver.name}` : undefined}
+        onClose={() => setPreviewOpen(false)}
+      />
+    </>
   );
 };
 
@@ -80,6 +102,9 @@ const createStyles = (c) =>
       width: 64,
       height: 64,
     },
+    imagePressed: {
+      opacity: 0.85,
+    },
     textCol: {
       flex: 1,
     },
@@ -108,5 +133,10 @@ const createStyles = (c) =>
       fontSize: 12,
       color: c.textMuted,
       marginTop: 4,
+    },
+    tapHint: {
+      fontSize: 11,
+      color: c.textMuted,
+      marginTop: 6,
     },
   });

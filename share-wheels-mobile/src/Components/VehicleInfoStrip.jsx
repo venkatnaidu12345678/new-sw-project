@@ -34,6 +34,7 @@ const VehicleInfoStrip = ({ vehicle, compact = false }) => {
       onPress={() => setPreviewOpen(true)}
       accessibilityRole="imagebutton"
       accessibilityLabel="View vehicle photo full screen"
+      style={({ pressed }) => [pressed && styles.imagePressed]}
     >
       <RemoteImage
         source={imageUri}
@@ -59,13 +60,17 @@ const VehicleInfoStrip = ({ vehicle, compact = false }) => {
             </Text>
           ) : null}
           {plate ? <Text style={styles.plate}>Reg: {plate}</Text> : null}
+          {imageUri ? (
+            <Text style={styles.tapHint}>Tap photo to view full size</Text>
+          ) : null}
         </View>
       </View>
 
       <ImagePreviewModal
         visible={previewOpen}
-        uri={imageUri}
-        title={label || plate || "Vehicle"}
+        source={imageUri}
+        title={label || "Vehicle"}
+        subtitle={plate ? `Reg: ${plate}` : undefined}
         onClose={() => setPreviewOpen(false)}
       />
     </>
@@ -98,6 +103,9 @@ const createStyles = (c) =>
     imageCompact: {
       width: 72,
       height: 54,
+    },
+    imagePressed: {
+      opacity: 0.85,
     },
     imagePlaceholder: {
       width: 88,
@@ -133,5 +141,10 @@ const createStyles = (c) =>
       fontSize: 13,
       color: c.textSecondary,
       marginTop: 4,
+    },
+    tapHint: {
+      fontSize: 11,
+      color: c.textMuted,
+      marginTop: 6,
     },
   });

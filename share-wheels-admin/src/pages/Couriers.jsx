@@ -3,6 +3,7 @@ import { getCouriers } from "../api/client";
 import StatusBadge from "../components/StatusBadge";
 import PageHeader from "../components/ui/PageHeader";
 import Loading from "../components/ui/Loading";
+import { inputClass, Table, Th, Td } from "../components/ui/primitives";
 
 export default function Couriers() {
   const [rows, setRows] = useState([]);
@@ -19,10 +20,6 @@ export default function Couriers() {
       .finally(() => setLoading(false));
   }, [statusFilter]);
 
-  const onCreate = () => {
-    alert("Create courier requests is not available in this admin UI yet.");
-  };
-
   const filteredRows = rows.filter((r) => {
     const q = search.trim().toLowerCase();
     if (!q) return true;
@@ -31,24 +28,11 @@ export default function Couriers() {
   });
 
   return (
-    <div>
-      <PageHeader
-        title="Courier Requests"
-        subtitle="Review courier deliveries and assignment pipeline."
-      />
-
-      <div className="toolbar" style={{ marginBottom: 20 }}>
-        <input
-          placeholder="Search courier, route, parcel?"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ maxWidth: 360 }}
-        />
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          style={{ maxWidth: 240 }}
-        >
+    <div className="mx-auto max-w-7xl">
+      <PageHeader title="Courier Requests" subtitle="Review courier deliveries and assignment pipeline." />
+      <div className="mb-5 flex flex-wrap gap-2">
+        <input className={inputClass("max-w-sm")} placeholder="Search courier, route, parcel…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <select className={inputClass("max-w-[220px]")} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">All statuses</option>
           <option value="pending">Pending</option>
           <option value="request_to_driver">Request to driver</option>
@@ -56,50 +40,36 @@ export default function Couriers() {
           <option value="delivered">Delivered</option>
           <option value="cancelled">Cancelled</option>
         </select>
-        <button type="button" className="btn btn-secondary" onClick={onCreate}>
-          Create
-        </button>
       </div>
-
       {loading ? (
-        <Loading message="Loading courier requests?" />
+        <Loading message="Loading courier requests…" />
       ) : (
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>User</th>
-                <th>Route</th>
-                <th>Parcel</th>
-                <th>Amount (?)</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRows.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="empty-state">
-                    No courier requests found.
-                  </td>
+        <Table>
+          <thead>
+            <tr>
+              <Th>User</Th>
+              <Th>Route</Th>
+              <Th>Parcel</Th>
+              <Th>Amount (₹)</Th>
+              <Th>Status</Th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 bg-white">
+            {filteredRows.length === 0 ? (
+              <tr><Td colSpan={5} className="py-12 text-center text-slate-500">No courier requests found.</Td></tr>
+            ) : (
+              filteredRows.map((r) => (
+                <tr key={r._id} className="hover:bg-slate-50/80">
+                  <Td className="font-medium">{r.creator?.name || "—"}</Td>
+                  <Td><span className="font-medium">{r.from}</span> → {r.to}</Td>
+                  <Td>{r.what_to_deliver || "—"}</Td>
+                  <Td>₹{r.amount_will ?? 0}</Td>
+                  <Td><StatusBadge status={r.courier_status} /></Td>
                 </tr>
-              ) : (
-                filteredRows.map((r) => (
-                  <tr key={r._id}>
-                    <td>{r.creator?.name || "?"}</td>
-                    <td>
-                      {r.from} ? {r.to}
-                    </td>
-                    <td>{r.what_to_deliver || "?"}</td>
-                    <td>?{r.amount_will ?? 0}</td>
-                    <td>
-                      <StatusBadge status={r.courier_status} />
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+              ))
+            )}
+          </tbody>
+        </Table>
       )}
     </div>
   );

@@ -4,13 +4,12 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
   Image,
 } from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
 import { launchCamera } from "react-native-image-picker";
-import FormPopoverShell from "./FormPopoverShell";
+import BottomSlider from "../BottomSlider";
 import {
   StyledTextInput,
   StyledPicker,
@@ -79,14 +78,22 @@ const BookCourierPopover = ({
     onBook?.(form);
   };
 
+  const handleClose = () => {
+    if (booking) return;
+    onClose?.();
+  };
+
   return (
-    <FormPopoverShell visible={visible} onClose={onClose} disabledClose={booking}>
-      <View style={styles.handle} />
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator
-      >
+    <BottomSlider
+      visible={visible}
+      onClose={handleClose}
+      scrollable
+      solid
+      heightRatio={0.88}
+      closeDisabled={booking}
+      dismissOnBackdropPress={!booking}
+    >
+      <View style={styles.content}>
         <View style={styles.headerRow}>
           <View style={[styles.iconWrap, { backgroundColor: colors.tintOrange }]}>
             <Icon name="cube" size={22} color={colors.warningText} />
@@ -97,9 +104,6 @@ const BookCourierPopover = ({
               {rideFrom} → {rideTo}
             </Text>
           </View>
-          <TouchableOpacity onPress={onClose} hitSlop={12} disabled={booking}>
-            <Icon name="close" size={22} color={colors.textMuted} />
-          </TouchableOpacity>
         </View>
 
         {blockReason ? (
@@ -109,11 +113,7 @@ const BookCourierPopover = ({
           </View>
         ) : null}
 
-        <RequestSection
-          accent={T.sections.parcel}
-          title="Parcel"
-          theme={T}
-        >
+        <RequestSection accent={T.sections.parcel} title="Parcel" theme={T}>
           <StyledPicker
             theme={T}
             accent={T.picker}
@@ -153,11 +153,7 @@ const BookCourierPopover = ({
           ) : null}
         </RequestSection>
 
-        <RequestSection
-          accent={T.sections.receiver}
-          title="Receiver"
-          theme={T}
-        >
+        <RequestSection accent={T.sections.receiver} title="Receiver" theme={T}>
           <StyledTextInput
             theme={T}
             placeholder="Full name"
@@ -203,8 +199,8 @@ const BookCourierPopover = ({
             <Text style={styles.primaryBtnText}>Send courier request</Text>
           )}
         </TouchableOpacity>
-      </ScrollView>
-    </FormPopoverShell>
+      </View>
+    </BottomSlider>
   );
 };
 
@@ -212,16 +208,7 @@ export default BookCourierPopover;
 
 const createStyles = (c) =>
   StyleSheet.create({
-    handle: {
-      width: 40,
-      height: 4,
-      borderRadius: 2,
-      backgroundColor: c.border,
-      alignSelf: "center",
-      marginTop: 10,
-      marginBottom: 8,
-    },
-    content: { paddingHorizontal: 16, paddingBottom: 32 },
+    content: { paddingBottom: 24 },
     headerRow: {
       flexDirection: "row",
       alignItems: "flex-start",

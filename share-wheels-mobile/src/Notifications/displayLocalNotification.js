@@ -39,12 +39,14 @@ export async function displayForegroundNotification(remoteMessage) {
     title,
     body,
     data: remoteMessage?.data || {},
-    android: {
-      channelId: CHANNEL_ID,
-      pressAction: { id: "default" },
-      smallIcon: "ic_notification",
-      importance: AndroidImportance.HIGH,
-    },
+      android: {
+        channelId: CHANNEL_ID,
+        pressAction: { id: "default" },
+        smallIcon: "ic_notification",
+        largeIcon: "ic_launcher",
+        color: "#2563EB",
+        importance: AndroidImportance.HIGH,
+      },
     ios: {
       foregroundPresentationOptions: {
         alert: true,

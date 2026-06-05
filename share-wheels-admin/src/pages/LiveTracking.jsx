@@ -3,6 +3,9 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { getActiveTracking, getTrackingDetail } from "../api/client";
+import PageHeader from "../components/ui/PageHeader";
+import Loading from "../components/ui/Loading";
+import { Alert, btnClass, inputClass, Table, Th, Td } from "../components/ui/primitives";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
@@ -23,7 +26,7 @@ const roleIcon = (role) =>
       font-size:17px;border:2px solid #fff;
       box-shadow:0 2px 6px rgba(0,0,0,.35);
       background:${role === "driver" ? "#2563eb" : role === "courier" ? "#d97706" : "#16a34a"};
-    ">${role === "driver" ? "??" : role === "courier" ? "??" : "??"}</div>`,
+    ">${role === "driver" ? "D" : role === "courier" ? "C" : "P"}</div>`,
     iconSize: [34, 34],
     iconAnchor: [17, 17],
   });
@@ -183,100 +186,88 @@ export default function LiveTracking() {
   );
 
   return (
-    <div>
-      <h1 style={styles.heading}>Live Ride Tracking</h1>
-      <p style={styles.sub}>
-        Driver, passenger, and courier locations when a ride is started and GPS is shared.
-      </p>
-      <div style={styles.legend}>
-        <span>?? Driver</span>
-        <span>?? Passenger</span>
-        <span>?? Courier</span>
+    <div className="mx-auto flex h-full max-w-[1600px] flex-col">
+      <PageHeader
+        title="Live ride tracking"
+        subtitle="Driver, passenger, and courier GPS when a ride is started"
+      />
+      <div className="mb-4 flex flex-wrap gap-4 text-sm font-semibold text-slate-600">
+        <span className="inline-flex items-center gap-2">
+          <span className="h-3 w-3 rounded-full bg-brand-600 ring-2 ring-white" /> Driver
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <span className="h-3 w-3 rounded-full bg-emerald-600 ring-2 ring-white" /> Passenger
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <span className="h-3 w-3 rounded-full bg-amber-600 ring-2 ring-white" /> Courier
+        </span>
       </div>
-      {error && <p style={{ color: "#b91c1c", marginBottom: 12 }}>{error}</p>}
-
-      <div style={styles.layout}>
-        <div style={styles.sidebar}>
-          <h3 style={styles.sideTitle}>Active rides ({filteredRides.length})</h3>
-
-          <div className="toolbar" style={{ marginBottom: 12 }}>
+      {error ? <Alert className="mb-4">{error}</Alert> : null}
+      <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[320px_1fr]">
+        <div className="flex max-h-[min(70vh,640px)] flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm lg:max-h-none">
+          <h3 className="mb-3 shrink-0 text-sm font-bold text-slate-800">
+            Active rides ({filteredRides.length})
+          </h3>
+          <div className="mb-3 flex shrink-0 flex-wrap gap-2">
             <input
-              placeholder="Search route or driver�"
+              className={inputClass("max-w-[220px]")}
+              placeholder="Search route or driver"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ maxWidth: 220 }}
             />
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() =>
-                alert("Create is not available for live tracking yet.")
-              }
-            >
-              Create
+            <button type="button" className={btnClass("secondary", "sm")} onClick={load}>
+              Refresh
             </button>
           </div>
-
-          {loading && rides.length === 0 ? (
-            <p>Loading...</p>
-          ) : filteredRides.length === 0 ? (
-            <p style={styles.muted}>No active rides match your search.</p>
-          ) : (
-            <div className="table-wrap">
-              <table className="data-table">
+          <div className="min-h-0 flex-1 overflow-auto">
+            {loading && rides.length === 0 ? (
+              <Loading message="Loading active rides..." />
+            ) : filteredRides.length === 0 ? (
+              <p className="py-8 text-center text-sm text-slate-500">No active rides match your search.</p>
+            ) : (
+              <Table>
                 <thead>
                   <tr>
-                    <th>Route</th>
-                    <th>Driver</th>
-                    <th>GPS</th>
+                    <Th>Route</Th>
+                    <Th>Driver</Th>
+                    <Th>GPS</Th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-slate-100 bg-white">
                   {filteredRides.map((r) => {
                     const active = rideKey(selectedId) === rideKey(r.rideId);
                     return (
                       <tr
                         key={r.rideId}
-                        style={{
-                          cursor: "pointer",
-                          background: active ? "#EFF6FF" : "transparent",
-                        }}
+                        className={`cursor-pointer transition ${active ? "bg-brand-50" : "hover:bg-slate-50/80"}`}
                         onClick={() => setSelectedId(r.rideId)}
                       >
-                        <td>{r.from} ? {r.to}</td>
-                        <td>{r.driver?.name || "�"}</td>
-                        <td style={{ fontWeight: 800, color: r.location ? "#16a34a" : "#d97706" }}>
+                        <Td className="font-medium text-slate-800">
+                          {r.from} → {r.to}
+                        </Td>
+                        <Td>{r.driver?.name || "—"}</Td>
+                        <Td className={`text-xs font-bold ${r.location ? "text-emerald-600" : "text-amber-600"}`}>
                           {r.location
                             ? `(${r.location.lat.toFixed(2)}, ${r.location.lng.toFixed(2)})`
                             : "Waiting"}
-                        </td>
+                        </Td>
                       </tr>
                     );
                   })}
                 </tbody>
-              </table>
-            </div>
-          )}
+              </Table>
+            )}
+          </div>
         </div>
-
-        <div style={styles.mapWrap}>
-          <MapContainer
-            center={mapCenter}
-            zoom={13}
-            style={{ height: "100%", width: "100%", borderRadius: 12 }}
-          >
+        <div className="min-h-[420px] overflow-hidden rounded-2xl border border-slate-200/80 shadow-sm lg:min-h-[560px]">
+          <MapContainer center={mapCenter} zoom={13} style={{ height: "100%", width: "100%" }}>
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
             <FitBounds points={fitPoints} />
-
             {allMarkers.map((m) => (
-              <Marker
-                key={m.key}
-                position={[m.lat, m.lng]}
-                icon={roleIcon(m.role)}
-              >
+              <Marker key={m.key} position={[m.lat, m.lng]} icon={roleIcon(m.role)}>
                 <Popup>
                   <strong>{m.label}</strong>
                   <br />
@@ -284,7 +275,6 @@ export default function LiveTracking() {
                 </Popup>
               </Marker>
             ))}
-
             {pathPositions.length > 1 && (
               <Polyline positions={pathPositions} color="#2563eb" weight={4} />
             )}
@@ -294,57 +284,3 @@ export default function LiveTracking() {
     </div>
   );
 }
-
-const styles = {
-  heading: { fontSize: 28, fontWeight: 800, marginBottom: 4 },
-  sub: { color: "#64748b", marginBottom: 12 },
-  legend: {
-    display: "flex",
-    gap: 20,
-    marginBottom: 16,
-    fontSize: 14,
-    fontWeight: 600,
-    color: "#334155",
-  },
-  layout: {
-    display: "grid",
-    gridTemplateColumns: "320px 1fr",
-    gap: 20,
-    minHeight: 520,
-  },
-  sidebar: {
-    background: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-    maxHeight: 560,
-    overflowY: "auto",
-  },
-  sideTitle: { fontSize: 14, fontWeight: 700, marginBottom: 12 },
-  muted: { color: "#94a3b8", fontSize: 14 },
-  rideCard: {
-    display: "block",
-    width: "100%",
-    textAlign: "left",
-    padding: 12,
-    marginBottom: 8,
-    borderRadius: 10,
-    border: "1px solid #e2e8f0",
-    background: "#f8fafc",
-    cursor: "pointer",
-  },
-  rideCardActive: {
-    borderColor: "#2563eb",
-    background: "#eff6ff",
-  },
-  rideRoute: { fontWeight: 600, fontSize: 14, marginBottom: 4 },
-  rideMeta: { fontSize: 12, color: "#64748b" },
-  gpsOk: { fontSize: 11, color: "#16a34a", marginTop: 6, fontWeight: 600 },
-  gpsWait: { fontSize: 11, color: "#d97706", marginTop: 6 },
-  mapWrap: {
-    height: 560,
-    borderRadius: 12,
-    overflow: "hidden",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-  },
-};

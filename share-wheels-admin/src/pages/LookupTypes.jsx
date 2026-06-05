@@ -8,6 +8,7 @@ import {
 } from "../api/client";
 import PageHeader from "../components/ui/PageHeader";
 import Loading from "../components/ui/Loading";
+import { Alert, btnClass, inputClass, Table, Th, Td } from "../components/ui/primitives";
 
 const TABS = [
   { key: "courier_type", label: "Courier types" },
@@ -127,124 +128,60 @@ export default function LookupTypes() {
   const tab = TABS.find((t) => t.key === category);
 
   return (
-    <div>
-      <PageHeader
-        title="Dropdown options"
-        subtitle="Courier and vehicle types shown in the mobile app pickers."
-      />
-
-      <div className="tabs" style={{ marginBottom: 16, display: "flex", gap: 8 }}>
+    <div className="mx-auto max-w-7xl">
+      <PageHeader title="Dropdown options" subtitle="Courier and vehicle types shown in the mobile app pickers." />
+      <div className="mb-4 flex flex-wrap gap-2">
         {TABS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            className={`btn ${category === t.key ? "btn-primary" : "btn-secondary"}`}
-            onClick={() => setCategory(t.key)}
-          >
+          <button key={t.key} type="button" className={category === t.key ? btnClass("primary", "sm") : btnClass("secondary", "sm")} onClick={() => setCategory(t.key)}>
             {t.label}
           </button>
         ))}
       </div>
-
-      {error ? <div className="alert alert-error">{error}</div> : null}
-
-      <form onSubmit={handleAdd} className="card" style={{ marginBottom: 16 }}>
-        <h3>Add {tab?.label?.toLowerCase()}</h3>
-        <div className="form-row">
-          <input
-            className="input"
-            placeholder="Display label (e.g. Parcel)"
-            value={newLabel}
-            onChange={(e) => setNewLabel(e.target.value)}
-          />
-          <button type="submit" className="btn btn-primary" disabled={saving}>
-            Add
-          </button>
+      {error ? <Alert className="mb-4">{error}</Alert> : null}
+      <form onSubmit={handleAdd} className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h3 className="mb-3 text-sm font-bold text-slate-800">Add {tab?.label?.toLowerCase()}</h3>
+        <div className="flex flex-wrap gap-2">
+          <input className={inputClass("max-w-sm")} placeholder="Display label (e.g. Parcel)" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} />
+          <button type="submit" className={btnClass("primary", "sm")} disabled={saving}>Add</button>
         </div>
       </form>
-
-      <div className="card" style={{ marginBottom: 16 }}>
-        <h3>Bulk import</h3>
-        <textarea
-          className="input"
-          rows={4}
-          placeholder="One label per line"
-          value={bulkText}
-          onChange={(e) => setBulkText(e.target.value)}
-        />
-        <button
-          type="button"
-          className="btn btn-secondary"
-          style={{ marginTop: 8 }}
-          disabled={saving}
-          onClick={handleBulk}
-        >
-          Import lines
-        </button>
+      <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h3 className="mb-3 text-sm font-bold text-slate-800">Bulk import</h3>
+        <textarea className={inputClass()} rows={4} placeholder="One label per line" value={bulkText} onChange={(e) => setBulkText(e.target.value)} />
+        <button type="button" className={`${btnClass("secondary", "sm")} mt-2`} disabled={saving} onClick={handleBulk}>Import lines</button>
       </div>
-
-      <div className="toolbar">
-        <input
-          className="input"
-          placeholder="Search label or value…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <button type="button" className="btn btn-secondary" onClick={load}>
-          Refresh
-        </button>
+      <div className="mb-4 flex flex-wrap gap-2">
+        <input className={inputClass("max-w-sm")} placeholder="Search label or value…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <button type="button" className={btnClass("secondary", "sm")} onClick={load}>Refresh</button>
       </div>
-
       {loading ? (
-        <Loading message={`Loading ${tab?.label?.toLowerCase()}?`} />
+        <Loading message={`Loading ${tab?.label?.toLowerCase()}…`} />
       ) : (
-        <table className="data-table">
+        <Table>
           <thead>
-            <tr>
-              <th>Label</th>
-              <th>Value</th>
-              <th>Order</th>
-              <th>Active</th>
-              <th />
-            </tr>
+            <tr><Th>Label</Th><Th>Value</Th><Th>Order</Th><Th>Active</Th><Th>Actions</Th></tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-100 bg-white">
             {shown.length === 0 ? (
-              <tr>
-                <td colSpan={5}>No options yet. Add some above or run seedLookupTypes.js.</td>
-              </tr>
+              <tr><Td colSpan={5} className="py-12 text-center text-slate-500">No options yet.</Td></tr>
             ) : (
               shown.map((row) => (
-                <tr key={row._id}>
-                  <td>{row.label}</td>
-                  <td>
-                    <code>{row.value}</code>
-                  </td>
-                  <td>{row.sortOrder ?? 0}</td>
-                  <td>{row.isActive ? "Yes" : "No"}</td>
-                  <td>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      disabled={saving}
-                      onClick={() => handleToggle(row)}
-                    >
-                      {row.isActive ? "Disable" : "Enable"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      disabled={saving}
-                      onClick={() => handleDelete(row._id)}
-                    >
-                      Delete
-                    </button>
-                  </td>
+                <tr key={row._id} className="hover:bg-slate-50/80">
+                  <Td className="font-medium">{row.label}</Td>
+                  <Td><code className="rounded bg-slate-100 px-2 py-0.5 text-xs">{row.value}</code></Td>
+                  <Td>{row.sortOrder ?? 0}</Td>
+                  <Td>{row.isActive ? "Yes" : "No"}</Td>
+                  <Td>
+                    <div className="flex gap-1.5">
+                      <button type="button" className={btnClass("secondary", "sm")} disabled={saving} onClick={() => handleToggle(row)}>{row.isActive ? "Disable" : "Enable"}</button>
+                      <button type="button" className={btnClass("danger", "sm")} disabled={saving} onClick={() => handleDelete(row._id)}>Delete</button>
+                    </div>
+                  </Td>
                 </tr>
               ))
             )}
           </tbody>
-        </table>
+        </Table>
       )}
     </div>
   );

@@ -36,8 +36,8 @@ import CoachMarkAnchor from "../Components/coachMarks/CoachMarkAnchor";
 import { useCoachMarks } from "../context/CoachMarksContext";
 
 const UPCOMING_STATUS_PRIORITY = {
-  pending: 0,
-  started: 1,
+  started: 0,
+  pending: 1,
 };
 
 const sortUpcomingByPriority = (rides = []) =>

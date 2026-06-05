@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import UserAvatar from "./UserAvatar";
 import RemoteImage from "./RemoteImage";
+import ImagePreviewModal from "./ImagePreviewModal";
 import { useTheme } from "../../context/ThemeContext";
 import { useThemedStyles } from "../../theme/useThemedStyles";
 import { getParticipantPopoverRoleTheme } from "../../theme/appTheme";
@@ -40,6 +41,7 @@ const DriverParticipantPopover = ({
   const styles = useThemedStyles(createStyles);
   const scale = useRef(new Animated.Value(0.92)).current;
   const opacity = useRef(new Animated.Value(0)).current;
+  const [parcelPreviewOpen, setParcelPreviewOpen] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -128,13 +130,19 @@ const DriverParticipantPopover = ({
                   <View style={styles.parcelSection}>
                     <Text style={styles.parcelSectionTitle}>Parcel photo</Text>
                     {detail?.parcelImage ? (
-                      <View style={styles.parcelImageWrap}>
+                      <Pressable
+                        onPress={() => setParcelPreviewOpen(true)}
+                        accessibilityRole="imagebutton"
+                        accessibilityLabel="View parcel photo full screen"
+                        style={styles.parcelImageWrap}
+                      >
                         <RemoteImage
                           source={detail.parcelImage}
                           style={styles.parcelImage}
                           resizeMode="cover"
                         />
-                      </View>
+                        <Text style={styles.parcelTapHint}>Tap to view full size</Text>
+                      </Pressable>
                     ) : (
                       <Text style={styles.parcelMissing}>No parcel photo uploaded</Text>
                     )}
@@ -173,6 +181,13 @@ const DriverParticipantPopover = ({
           </Animated.View>
         </Animated.View>
       </View>
+
+      <ImagePreviewModal
+        visible={parcelPreviewOpen}
+        source={detail?.parcelImage}
+        title={detail?.name ? `Parcel — ${detail.name}` : "Parcel photo"}
+        onClose={() => setParcelPreviewOpen(false)}
+      />
     </Modal>
   );
 };
@@ -308,6 +323,13 @@ const createStyles = (c) =>
   parcelImage: {
     width: "100%",
     height: 140,
+  },
+  parcelTapHint: {
+    fontSize: 11,
+    color: c.textMuted,
+    textAlign: "center",
+    paddingVertical: 8,
+    fontWeight: "500",
   },
   detailsBlock: {
     gap: 10,
