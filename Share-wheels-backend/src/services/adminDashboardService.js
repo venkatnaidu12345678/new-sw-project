@@ -6,6 +6,37 @@ const Courier = require("../models/courierModel");
 
 const { mapUserForAdmin } = require("./adminUserService");
 
+const buildDailySeries = async (Model, days = 7) => {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - (days - 1));
+
+  const rows = await Model.aggregate([
+    { $match: { createdAt: { $gte: start } } },
+    {
+      $group: {
+        _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+        count: { $sum: 1 },
+      },
+    },
+    { $sort: { _id: 1 } },
+  ]);
+
+  const map = Object.fromEntries(rows.map((r) => [r._id, r.count]));
+  const series = [];
+  for (let i = 0; i < days; i += 1) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    const key = d.toISOString().slice(0, 10);
+    series.push({
+      date: key,
+      label: d.toLocaleDateString("en-IN", { weekday: "short" }),
+      count: map[key] || 0,
+    });
+  }
+  return series;
+};
+
 const getDashboardStats = async () => {
   const [
     totalUsers,
@@ -15,6 +46,13 @@ const getDashboardStats = async () => {
     completedRides,
     openPassengerRequests,
     openCouriers,
+    pendingRides,
+    startedRides,
+    cancelledRides,
+    expiredRides,
+    recentRides,
+    rideActivity,
+    userActivity,
   ] = await Promise.all([
     User.countDocuments(),
     User.countDocuments({ isVerified: true }),
@@ -25,6 +63,18 @@ const getDashboardStats = async () => {
     Courier.countDocuments({
       courier_status: { $in: ["pending", "request_to_driver", "driver_assigned"] },
     }),
+    Ride.countDocuments({ status: "pending" }),
+    Ride.countDocuments({ status: "started" }),
+    Ride.countDocuments({ status: "cancelled" }),
+    Ride.countDocuments({ status: "expired" }),
+    Ride.find()
+      .sort({ updatedAt: -1 })
+      .limit(8)
+      .populate("creator", "name email")
+      .select("from to status date startTime updatedAt creator")
+      .lean(),
+    buildDailySeries(Ride, 7),
+    buildDailySeries(User, 7),
   ]);
 
   return {
@@ -39,7 +89,31 @@ const getDashboardStats = async () => {
         completedRides,
         openPassengerRequests,
         openCouriers,
+        pendingRides,
+        startedRides,
       },
+      rideStatusBreakdown: [
+        { name: "Pending", value: pendingRides, color: "#f59e0b" },
+        { name: "In progress", value: startedRides, color: "#3b82f6" },
+        { name: "Completed", value: completedRides, color: "#10b981" },
+        { name: "Cancelled", value: cancelledRides, color: "#f43f5e" },
+        { name: "Expired", value: expiredRides, color: "#94a3b8" },
+      ],
+      activityChart: rideActivity.map((row, i) => ({
+        ...row,
+        users: userActivity[i]?.count || 0,
+      })),
+      recentRides: recentRides.map((r) => ({
+        id: String(r._id),
+        from: r.from,
+        to: r.to,
+        status: r.status,
+        driver: r.creator?.name || "—",
+        date: r.date,
+        startTime: r.startTime,
+        updatedAt: r.updatedAt,
+      })),
+      generatedAt: new Date().toISOString(),
     },
   };
 };
