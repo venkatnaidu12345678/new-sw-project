@@ -29,16 +29,45 @@ const googleFetch = async (path, params = {}) => {
   return { status: 200, body: data };
 };
 
-const autocompletePlaces = async (input, sessionToken) => {
+const normalizeCountry = (country) => {
+  const c = String(country || "").trim().toLowerCase();
+  // Google "components=country:xx" expects ISO 3166-1 alpha-2.
+  return /^[a-z]{2}$/.test(c) ? c : "in";
+};
+
+/**
+ * Google Places Autocomplete.
+ *
+ * Note: Google does not provide an API to "list all places in India".
+ * Autocomplete is query-driven; we can only broaden/narrow what kinds of
+ * suggestions are returned for a given input string.
+ */
+const autocompletePlaces = async (input, sessionToken, opts = {}) => {
   const query = String(input || "").trim();
   if (query.length < 2) {
     return { status: 200, body: { success: true, predictions: [] } };
   }
 
+  const country = normalizeCountry(opts.country);
+  const mode = String(opts.mode || "cities").trim().toLowerCase();
+  const typeByMode = {
+    // Maintains existing behavior (city-level suggestions).
+    cities: "(cities)",
+    // Broader set: places/areas/addresses; Google recommends omitting `types`
+    // unless you specifically need a narrow subset.
+    all: null,
+    // Useful for "place-like" results without full addresses.
+    geocode: "geocode",
+    establishments: "establishment",
+  };
+  const types = Object.prototype.hasOwnProperty.call(typeByMode, mode)
+    ? typeByMode[mode]
+    : "(cities)";
+
   const params = {
     input: query,
-    types: "(cities)",
-    components: "country:in",
+    ...(types ? { types } : {}),
+    components: `country:${country}`,
   };
   if (sessionToken) params.sessiontoken = sessionToken;
 

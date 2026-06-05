@@ -12,7 +12,12 @@ const handle = async (res, fn) => {
 module.exports = {
   autocomplete: async (req, res) =>
     handle(res, () =>
-      googleMapsService.autocompletePlaces(req.query.input, req.query.sessionToken)
+      googleMapsService.autocompletePlaces(req.query.input, req.query.sessionToken, {
+        // Defaults to India + cities, but supports broader India results.
+        // Example: /locations/places/autocomplete?input=ban&mode=all&country=in
+        mode: req.query.mode,
+        country: req.query.country,
+      })
     ),
 
   placeDetails: async (req, res) =>
