@@ -24,6 +24,12 @@ const editVehicle = async (req, res) =>
 const updateTerms = async (req, res) => handle(res, () => authService.updateTerms(req.user.id, req.body.isAccepted));
 const getUsersData = async (req, res) => handle(res, () => authService.getUsersData(req.body.userIds));
 const getUserProfile = async (req, res) => handle(res, () => authService.getUserProfile(req.user._id));
+const changePassword = async (req, res) =>
+  handle(res, () => authService.changePassword(req.user._id, req.body));
+const forgotPassword = async (req, res) =>
+  handle(res, () => authService.forgotPassword(req.body));
+const resetPasswordWithOtp = async (req, res) =>
+  handle(res, () => authService.resetPasswordWithOtp(req.body));
 
 const getMyVehicle = async (req, res) => {
   const user = req.user;
@@ -46,4 +52,7 @@ module.exports = {
   getUsersData,
   getUserProfile,
   getMyVehicle,
+  changePassword,
+  forgotPassword,
+  resetPasswordWithOtp,
 };

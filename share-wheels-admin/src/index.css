@@ -2,19 +2,21 @@
 
 @theme {
   --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
-  --color-brand-50: #eff6ff;
-  --color-brand-100: #dbeafe;
-  --color-brand-500: #3b82f6;
-  --color-brand-600: #2563eb;
-  --color-brand-700: #1d4ed8;
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
   --color-accent-violet: #7c3aed;
   --color-accent-cyan: #06b6d4;
   --color-accent-emerald: #10b981;
   --color-accent-amber: #f59e0b;
   --color-accent-rose: #f43f5e;
   --color-surface: #ffffff;
-  --color-canvas: #f1f5f9;
-  --color-sidebar: #0f172a;
+  --color-canvas: #f4f6fb;
+  --color-sidebar: #0b1220;
+  --color-sidebar-hover: #151f33;
+  --color-sidebar-active: #1e293b;
 }
 
 @layer base {
@@ -28,10 +30,15 @@
     height: 100%;
   }
 
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     margin: 0;
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     background: var(--color-canvas);
     color: #0f172a;
   }
@@ -46,15 +53,70 @@
   textarea {
     font: inherit;
   }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-brand-500) 25%, transparent);
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 999px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .page-enter {
+    animation: page-enter 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes page-enter {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .sidebar-enter {
+    animation: sidebar-enter 0.25s ease-out both;
+  }
+
+  @keyframes sidebar-enter {
+    from {
+      opacity: 0;
+      transform: translateX(-12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
 }
 
 /* Rich text editor (Legal policies) */
 .rte-wrap .ql-toolbar {
-  @apply rounded-t-xl border border-slate-300 bg-slate-50;
+  @apply rounded-t-xl border border-slate-200 bg-slate-50/90;
 }
 
 .rte-wrap .ql-container {
-  @apply min-h-[280px] rounded-b-xl border border-slate-300 border-t-0 text-[15px];
+  @apply min-h-[280px] rounded-b-xl border border-slate-200 border-t-0 text-[15px];
 }
 
 .rte-wrap .ql-editor {

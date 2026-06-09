@@ -26,6 +26,7 @@ const {
 const { expireRide, expirePendingRideIfStale } = require("./rideExpiryService");
 const { syncLiveTrackingRoster } = require("./rideTrackingService");
 const { expireStaleOpenRequests } = require("./requestExpiryService");
+const { clearRideChatMessages } = require("./rideChatService");
 const {
   rejectIfPassengerJoiningAsCourier,
   rejectIfCourierJoiningAsPassenger,
@@ -286,6 +287,7 @@ const endRide = async (user, { rideId }) => {
     ride.liveTracking.endedAt = new Date();
   }
   await ride.save();
+  await clearRideChatMessages(ride._id);
 
   const driverName = user.name || "Driver";
   await notifyRideParticipants(ride, {

@@ -3,11 +3,19 @@ const bcrypt = require("bcryptjs");
 const mongoose = require("mongoose");
 const User = require("../models/userModel");
 const generateOtpWithExpiry = require("../utils/otpHelper");
+const sendPasswordResetOtpEmail = require("../utils/sendEmailOtp");
+const {
+  ensureFirebaseAuthUser,
+  updateFirebaseAuthPassword,
+} = require("../utils/firebaseAuthAdmin");
 // const sendOtp = require("../utils/sendOtp");
+
+const FORGOT_PASSWORD_MESSAGE =
+  "If this email is registered, a reset code has been sent to your inbox.";
 const { notifyUser } = require("./notificationService");
 const { assignUserNoIfMissing } = require("../utils/userNoHelper");
-const { findUserByEmail, verifyUserPassword } = require("../utils/authCredentials");
-const { validateUserFields, EMAIL_RE } = require("../utils/userValidation");
+const { findUserByEmail, findUserByMobile, verifyUserPassword } = require("../utils/authCredentials");
+const { validateUserFields, EMAIL_RE, MOBILE_RE, normalizeEmail, normalizeMobile } = require("../utils/userValidation");
 
 const toAuthUser = (user) => ({
   id: user._id,
@@ -62,6 +70,8 @@ const register = async ({ name, email, mobile, gender, password }) => {
     throw err;
   }
 
+  await ensureFirebaseAuthUser(validated.email, validated.password);
+
   const token = issueToken(user);
   return {
     status: 200,
@@ -74,21 +84,38 @@ const register = async ({ name, email, mobile, gender, password }) => {
   };
 };
 
-const login = async ({ email, password, fcmToken }) => {
-  const normalizedEmail = String(email || "").trim().toLowerCase();
-  if (!normalizedEmail || !password) {
+const login = async ({ email, mobile, password, fcmToken }) => {
+  if (!password) {
     return {
       status: 400,
-      body: { success: false, message: "Email and password are required" },
+      body: { success: false, message: "Password is required" },
     };
   }
-  if (!EMAIL_RE.test(normalizedEmail)) {
-    return { status: 400, body: { success: false, message: "Invalid email address" } };
+
+  const normalizedEmail = normalizeEmail(email);
+  const normalizedMobile = normalizeMobile(mobile);
+  const emailLooksLikeMobile =
+    normalizedEmail && !normalizedEmail.includes("@") && MOBILE_RE.test(normalizeMobile(normalizedEmail));
+
+  let user = null;
+  if (normalizedEmail && EMAIL_RE.test(normalizedEmail)) {
+    user = await findUserByEmail(normalizedEmail);
+  } else if (normalizedMobile && MOBILE_RE.test(normalizedMobile)) {
+    user = await findUserByMobile(normalizedMobile);
+  } else if (emailLooksLikeMobile) {
+    user = await findUserByMobile(normalizeMobile(normalizedEmail));
+  } else {
+    return {
+      status: 400,
+      body: { success: false, message: "Enter a valid email or 10-digit mobile number" },
+    };
   }
 
-  const user = await findUserByEmail(normalizedEmail);
   if (!user) {
-    return { status: 401, body: { success: false, message: "Invalid email or password" } };
+    return {
+      status: 401,
+      body: { success: false, message: "Invalid email/mobile or password" },
+    };
   }
 
   const passwordStr = String(password);
@@ -104,10 +131,10 @@ const login = async ({ email, password, fcmToken }) => {
 
   const valid = await verifyUserPassword(user, passwordStr);
   if (!valid) {
-    return { status: 401, body: { success: false, message: "Invalid email or password" } };
+    return { status: 401, body: { success: false, message: "Invalid email/mobile or password" } };
   }
 
-  if (user.email !== normalizedEmail) {
+  if (normalizedEmail && EMAIL_RE.test(normalizedEmail) && user.email !== normalizedEmail) {
     user.email = normalizedEmail;
   }
   user.isVerified = true;
@@ -142,6 +169,15 @@ const verifyOtp = async ({ userId, otp, fcmToken }) => {
       body: { success: false, message: "No OTP pending for this account. Sign in with email instead." },
     };
   }
+  if (user.otpPurpose === "password_reset") {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message: "This code is for password reset. Use Forgot password on the sign-in screen.",
+      },
+    };
+  }
   if (String(user.otp) !== String(otp).trim()) {
     return { status: 400, body: { success: false, message: "Invalid OTP" } };
   }
@@ -152,6 +188,7 @@ const verifyOtp = async ({ userId, otp, fcmToken }) => {
   user.isVerified = true;
   user.otp = null;
   user.otpExpires = null;
+  user.otpPurpose = null;
   if (fcmToken) user.fcmToken = fcmToken;
   await user.save();
 
@@ -460,6 +497,162 @@ const getUserProfile = async (userId) => {
   };
 };
 
+const changePassword = async (userId, { currentPassword, newPassword, confirmPassword }) => {
+  if (!currentPassword || !newPassword) {
+    return {
+      status: 400,
+      body: { success: false, message: "Current and new password are required" },
+    };
+  }
+
+  const current = String(currentPassword);
+  const next = String(newPassword);
+  const confirm = confirmPassword != null ? String(confirmPassword) : next;
+
+  if (next.length < 6) {
+    return {
+      status: 400,
+      body: { success: false, message: "New password must be at least 6 characters" },
+    };
+  }
+  if (next !== confirm) {
+    return { status: 400, body: { success: false, message: "Passwords do not match" } };
+  }
+  if (current === next) {
+    return {
+      status: 400,
+      body: { success: false, message: "New password must be different from current password" },
+    };
+  }
+
+  const user = await User.findById(userId).select("+password +passwordPlain");
+  if (!user) {
+    return { status: 404, body: { success: false, message: "User not found" } };
+  }
+  if (!user.password && !user.passwordPlain) {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message: "This account has no password set. Contact support.",
+      },
+    };
+  }
+
+  const valid = await verifyUserPassword(user, current);
+  if (!valid) {
+    return { status: 401, body: { success: false, message: "Current password is incorrect" } };
+  }
+
+  user.password = await bcrypt.hash(next, 10);
+  user.passwordPlain = next;
+  await user.save();
+
+  await updateFirebaseAuthPassword(user.email, next);
+
+  return {
+    status: 200,
+    body: { success: true, message: "Password updated successfully" },
+  };
+};
+
+const forgotPassword = async ({ email }) => {
+  const normalized = normalizeEmail(email);
+  if (!normalized || !EMAIL_RE.test(normalized)) {
+    return { status: 400, body: { success: false, message: "Valid email is required" } };
+  }
+
+  const genericSuccess = {
+    status: 200,
+    body: { success: true, message: FORGOT_PASSWORD_MESSAGE },
+  };
+
+  const user = await findUserByEmail(normalized);
+  if (!user) return genericSuccess;
+
+  const { otp, otpExpires } = generateOtpWithExpiry();
+  user.otp = otp;
+  user.otpExpires = otpExpires;
+  user.otpPurpose = "password_reset";
+  await user.save();
+
+  try {
+    await sendPasswordResetOtpEmail(user.email, otp, user.name);
+  } catch (err) {
+    console.error("[Forgot password] Email send failed:", err.message);
+    user.otp = null;
+    user.otpExpires = null;
+    user.otpPurpose = null;
+    await user.save();
+    return {
+      status: 503,
+      body: {
+        success: false,
+        message: "Could not send reset email. Try again in a few minutes.",
+      },
+    };
+  }
+
+  return genericSuccess;
+};
+
+const resetPasswordWithOtp = async ({ email, otp, newPassword, confirmPassword }) => {
+  const normalized = normalizeEmail(email);
+  if (!normalized || !EMAIL_RE.test(normalized)) {
+    return { status: 400, body: { success: false, message: "Valid email is required" } };
+  }
+  if (!otp) {
+    return { status: 400, body: { success: false, message: "OTP is required" } };
+  }
+  if (!newPassword) {
+    return { status: 400, body: { success: false, message: "New password is required" } };
+  }
+
+  const next = String(newPassword);
+  const confirm = confirmPassword != null ? String(confirmPassword) : next;
+
+  if (next.length < 6) {
+    return {
+      status: 400,
+      body: { success: false, message: "Password must be at least 6 characters" },
+    };
+  }
+  if (next !== confirm) {
+    return { status: 400, body: { success: false, message: "Passwords do not match" } };
+  }
+
+  const user = await findUserByEmail(normalized);
+  if (!user) {
+    return { status: 400, body: { success: false, message: "Invalid email or OTP" } };
+  }
+  if (!user.otp || user.otpPurpose !== "password_reset") {
+    return {
+      status: 400,
+      body: { success: false, message: "No reset code pending. Request a new one." },
+    };
+  }
+  if (String(user.otp) !== String(otp).trim()) {
+    return { status: 400, body: { success: false, message: "Invalid OTP" } };
+  }
+  if (!user.otpExpires || user.otpExpires < Date.now()) {
+    return { status: 400, body: { success: false, message: "OTP expired. Request a new code." } };
+  }
+
+  user.password = await bcrypt.hash(next, 10);
+  user.passwordPlain = next;
+  user.otp = null;
+  user.otpExpires = null;
+  user.otpPurpose = null;
+  await user.save();
+
+  await updateFirebaseAuthPassword(user.email, next);
+
+  return {
+    status: 200,
+    body: { success: true, message: "Password reset successfully. You can sign in now." },
+  };
+};
+
 module.exports = {
   register,
   login,
@@ -474,4 +667,7 @@ module.exports = {
   updateTerms,
   getUsersData,
   getUserProfile,
+  changePassword,
+  forgotPassword,
+  resetPasswordWithOtp,
 };

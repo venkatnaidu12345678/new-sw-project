@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   getUsers,
   createUser,
@@ -9,7 +9,14 @@ import {
 } from "../api/client";
 import PageHeader from "../components/ui/PageHeader";
 import Loading from "../components/ui/Loading";
-import { Alert, btnClass, inputClass, Table, Th, Td } from "../components/ui/primitives";
+import SearchInput from "../components/ui/SearchInput";
+import FilterBar from "../components/ui/FilterBar";
+import AdminPageShell, { AdminTablePanel } from "../components/ui/AdminPageShell";
+import Pagination from "../components/ui/Pagination";
+import { usePagination } from "../hooks/usePagination";
+import IconActionButton, { TableActions } from "../components/ui/IconActionButton";
+import { IconEdit, IconShieldCheck, IconShieldOff, IconTrash } from "../components/ui/icons";
+import { Alert, btnClass, inputClass, ModalBackdrop, Table, Th, Td } from "../components/ui/primitives";
 
 const EMPTY_FORM = {
   name: "",
@@ -32,18 +39,18 @@ export default function Users() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
     setError("");
     getUsers({ search, limit: 200 })
       .then((res) => setUsers(res.users || []))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  };
+  }, [search]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   const openCreate = () => {
     setEditing(null);
@@ -160,19 +167,28 @@ export default function Users() {
     return verifiedFilter === "verified" ? !!u.isVerified : !u.isVerified;
   });
 
+  const {
+    page,
+    setPage,
+    paginatedItems,
+    totalPages,
+    totalItems,
+    pageSize,
+  } = usePagination(filteredUsers, { resetDeps: [search, verifiedFilter] });
+
   return (
-    <div className="mx-auto max-w-7xl">
+    <AdminPageShell>
       <PageHeader
+        compact
         title="Users"
         subtitle="Create, edit, and delete app users. Deleting a user removes all related rides and data."
       />
 
-      <div className="mb-5 flex flex-wrap items-center gap-2">
-        <input
-          className={inputClass("max-w-sm")}
+      <FilterBar>
+        <SearchInput
           placeholder="Search name, email, mobile…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onDebouncedChange={setSearch}
+          debounceMs={350}
         />
         <select
           className={inputClass("max-w-[180px]")}
@@ -187,7 +203,7 @@ export default function Users() {
           Create user
         </button>
         <button type="button" className={btnClass("secondary", "sm")} onClick={load}>
-          Search
+          Refresh
         </button>
         <button
           type="button"
@@ -197,33 +213,35 @@ export default function Users() {
         >
           {backfillLoading ? "Loading…" : "Load missing passwords"}
         </button>
-      </div>
+      </FilterBar>
 
-      {error ? <Alert className="mb-4">{error}</Alert> : null}
+      {error ? <Alert className="mb-3 shrink-0">{error}</Alert> : null}
 
-      {loading ? (
-        <Loading message="Loading users…" />
-      ) : (
-        <Table>
-          <thead>
-            <tr>
-              <Th>Name</Th>
-              <Th>Email</Th>
-              <Th>Mobile</Th>
-              <Th>Password</Th>
-              <Th>Verified</Th>
-              <Th>Actions</Th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 bg-white">
-            {filteredUsers.length === 0 ? (
-              <tr>
-                <Td colSpan={6} className="py-12 text-center text-slate-500">
-                  No users found.
-                </Td>
-              </tr>
-            ) : (
-              filteredUsers.map((u) => (
+      <AdminTablePanel>
+        {loading ? (
+          <Loading message="Loading users…" className="flex-1 py-8" />
+        ) : (
+          <>
+            <Table fill>
+              <thead>
+                <tr>
+                  <Th sticky>Name</Th>
+                  <Th sticky>Email</Th>
+                  <Th sticky>Mobile</Th>
+                  <Th sticky>Password</Th>
+                  <Th sticky>Verified</Th>
+                  <Th sticky>Actions</Th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {totalItems === 0 ? (
+                  <tr>
+                    <Td colSpan={6} className="py-10 text-center text-slate-500">
+                      No users found.
+                    </Td>
+                  </tr>
+                ) : (
+                  paginatedItems.map((u) => (
                 <tr key={u._id} className="hover:bg-slate-50/80">
                   <Td className="font-medium text-slate-800">{u.name || "—"}</Td>
                   <Td>{u.email || "—"}</Td>
@@ -241,34 +259,42 @@ export default function Users() {
                     </span>
                   </Td>
                   <Td>
-                    <div className="flex flex-wrap gap-1.5">
-                      <button type="button" className={btnClass("secondary", "sm")} onClick={() => openEdit(u)}>
-                        Edit
-                      </button>
-                      <button type="button" className={btnClass("ghost", "sm")} onClick={() => toggleVerify(u._id, u.isVerified)}>
-                        {u.isVerified ? "Unverify" : "Verify"}
-                      </button>
-                      <button type="button" className={btnClass("danger", "sm")} onClick={() => handleDelete(u)} disabled={saving}>
-                        Delete
-                      </button>
-                    </div>
+                    <TableActions>
+                      <IconActionButton icon={IconEdit} label="Edit user" onClick={() => openEdit(u)} />
+                      <IconActionButton
+                        icon={u.isVerified ? IconShieldOff : IconShieldCheck}
+                        label={u.isVerified ? "Unverify user" : "Verify user"}
+                        variant="ghost"
+                        onClick={() => toggleVerify(u._id, u.isVerified)}
+                      />
+                      <IconActionButton
+                        icon={IconTrash}
+                        label="Delete user"
+                        variant="danger"
+                        onClick={() => handleDelete(u)}
+                        disabled={saving}
+                      />
+                    </TableActions>
                   </Td>
                 </tr>
               ))
-            )}
-          </tbody>
-        </Table>
-      )}
+                )}
+              </tbody>
+            </Table>
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              pageSize={pageSize}
+              onPageChange={setPage}
+            />
+          </>
+        )}
+      </AdminTablePanel>
 
       {modalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={closeModal} role="presentation">
-          <div
-            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-          >
-            <h2 className="mb-4 text-xl font-bold text-slate-900">{editing ? "Edit user" : "Create user"}</h2>
+        <ModalBackdrop onClose={closeModal}>
+          <h2 className="mb-4 text-xl font-bold text-slate-900">{editing ? "Edit user" : "Create user"}</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <label className="block text-sm font-semibold text-slate-700">
                 Full name
@@ -307,9 +333,8 @@ export default function Users() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
-    </div>
+    </AdminPageShell>
   );
 }

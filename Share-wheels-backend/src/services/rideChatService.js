@@ -164,4 +164,13 @@ const sendMessage = async (user, rideId, { message, recipientId }) => {
   return { status: 200, body: { success: true, message: payload } };
 };
 
-module.exports = { getMessages, sendMessage, emitChat };
+const clearRideChatMessages = async (rideId) => {
+  if (!mongoose.Types.ObjectId.isValid(rideId)) return { deletedCount: 0 };
+  const result = await RideMessage.deleteMany({ rideId });
+  if (global.io) {
+    global.io.to(`ride:${rideId}`).emit("chatCleared", { rideId: rideId.toString() });
+  }
+  return { deletedCount: result.deletedCount };
+};
+
+module.exports = { getMessages, sendMessage, emitChat, clearRideChatMessages };

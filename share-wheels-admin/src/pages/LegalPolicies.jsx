@@ -6,6 +6,11 @@ import {
 import PageHeader from "../components/ui/PageHeader";
 import Loading from "../components/ui/Loading";
 import RichTextEditor, { htmlToPlainText } from "../components/RichTextEditor";
+import AdminPageShell, { AdminTablePanel } from "../components/ui/AdminPageShell";
+import Pagination from "../components/ui/Pagination";
+import { usePagination } from "../hooks/usePagination";
+import IconActionButton from "../components/ui/IconActionButton";
+import { IconFileEdit } from "../components/ui/icons";
 import { Alert, btnClass, Table, Th, Td } from "../components/ui/primitives";
 
 const POLICY_ROWS = [
@@ -60,6 +65,8 @@ export default function LegalPolicies() {
     load();
   }, []);
 
+  const { page, setPage, paginatedItems, totalPages, totalItems, pageSize } = usePagination(POLICY_ROWS);
+
   const openEditor = (key) => {
     setEditingKey(key);
     setDraftContent(policies[key] || "");
@@ -105,57 +112,67 @@ export default function LegalPolicies() {
 
   const editingMeta = POLICY_ROWS.find((r) => r.key === editingKey);
 
-  if (loading) return <Loading message="Loading legal policies..." />;
-
   return (
-    <div className="mx-auto max-w-7xl">
-      <PageHeader title="Legal Policies" subtitle="Rich-text terms, privacy, and disclaimer shown in the mobile app">
+    <AdminPageShell>
+      <PageHeader compact title="Legal Policies" subtitle="Rich-text terms, privacy, and disclaimer shown in the mobile app">
         <button type="button" className={btnClass("primary", "sm")} onClick={saveAll} disabled={saving}>
           {saving ? "Saving…" : "Save all"}
         </button>
       </PageHeader>
 
-      {error ? <Alert className="mb-4">{error}</Alert> : null}
+      {error ? <Alert className="mb-3 shrink-0">{error}</Alert> : null}
 
-      <Table>
-        <thead>
-          <tr>
-            <Th>Policy</Th>
-            <Th>Description</Th>
-            <Th>Preview</Th>
-            <Th>Last updated</Th>
-            <Th>Actions</Th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100 bg-white">
-          {POLICY_ROWS.map((row) => {
-            const plain = htmlToPlainText(policies[row.key]);
-            const preview = plain.length > 120 ? `${plain.slice(0, 120)}…` : plain || "—";
-            return (
-              <tr key={row.key} className="hover:bg-slate-50/80">
-                <Td>
-                  <div className="font-semibold text-slate-800">{row.title}</div>
-                  <div className="text-xs text-slate-500">{row.key}</div>
-                </Td>
-                <Td className="text-slate-500">{row.description}</Td>
-                <Td className="max-w-xs text-sm text-slate-600">{preview}</Td>
-                <Td className="text-sm text-slate-500">
-                  {updatedAt[row.key] ? new Date(updatedAt[row.key]).toLocaleString() : "—"}
-                </Td>
-                <Td>
-                  <button type="button" className={btnClass("primary", "sm")} onClick={() => openEditor(row.key)}>
-                    Edit content
-                  </button>
-                </Td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </Table>
+      <AdminTablePanel>
+        {loading ? (
+          <Loading message="Loading legal policies..." className="flex-1 py-8" />
+        ) : (
+          <>
+            <Table fill>
+              <thead>
+                <tr>
+                  <Th sticky>Policy</Th>
+                  <Th sticky>Description</Th>
+                  <Th sticky>Preview</Th>
+                  <Th sticky>Last updated</Th>
+                  <Th sticky>Actions</Th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {paginatedItems.map((row) => {
+                  const plain = htmlToPlainText(policies[row.key]);
+                  const preview = plain.length > 120 ? `${plain.slice(0, 120)}…` : plain || "—";
+                  return (
+                    <tr key={row.key} className="hover:bg-slate-50/80">
+                      <Td>
+                        <div className="font-semibold text-slate-800">{row.title}</div>
+                        <div className="text-xs text-slate-500">{row.key}</div>
+                      </Td>
+                      <Td className="text-slate-500">{row.description}</Td>
+                      <Td className="max-w-xs text-sm text-slate-600">{preview}</Td>
+                      <Td className="text-sm text-slate-500">
+                        {updatedAt[row.key] ? new Date(updatedAt[row.key]).toLocaleString() : "—"}
+                      </Td>
+                      <Td>
+                        <IconActionButton
+                          icon={IconFileEdit}
+                          label="Edit policy content"
+                          variant="primary"
+                          onClick={() => openEditor(row.key)}
+                        />
+                      </Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+            <Pagination page={page} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} onPageChange={setPage} />
+          </>
+        )}
+      </AdminTablePanel>
 
       {editorOpen && editingMeta ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={closeEditor} role="presentation">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl scrollbar-thin" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
             <div className="mb-4 flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">{editingMeta.title}</h2>
@@ -180,6 +197,6 @@ export default function LegalPolicies() {
           </div>
         </div>
       ) : null}
-    </div>
+    </AdminPageShell>
   );
 }

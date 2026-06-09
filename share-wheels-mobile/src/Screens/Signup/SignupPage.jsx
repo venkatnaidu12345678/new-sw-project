@@ -1,13 +1,10 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, Platform } from "react-native";
+import { View, Text, StyleSheet, Platform, Alert } from "react-native";
 import { Picker } from "@react-native-picker/picker";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import AuthButton from "../../Components/AuthButton";
 import AuthTextInput from "../../Components/AuthTextInput";
 import AuthScreenLayout from "../../Components/auth/AuthScreenLayout";
 import { signupApi } from "../../ApiService/AuthApiService";
-import { syncFcmTokenWithBackend } from "../../Notifications/registerToken";
-import { requestAppPermissionsOnSignIn } from "../../Utils/locationPermissions";
 import {
   validateName,
   validatePhone,
@@ -19,10 +16,8 @@ import {
 import { AUTH_COLORS, AUTH_GRADIENTS } from "../../theme/authTheme";
 import LinearGradient from "react-native-linear-gradient";
 import { INPUT_COLORS } from "../../theme/inputTheme";
-import { useTheme } from "../../context/ThemeContext";
 
-const SignupPage = ({ navigation, triggerAuth }) => {
-  const { colors, input, isDark } = useTheme();
+const SignupPage = ({ navigation }) => {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -109,18 +104,24 @@ const SignupPage = ({ navigation, triggerAuth }) => {
         password,
       });
 
-      const token = response?.token || response?.data?.token;
-      const user = response?.user || response?.data?.user;
-
-      if (response?.success !== false && token) {
-        await AsyncStorage.setItem("token", token);
-        await AsyncStorage.setItem("user", JSON.stringify(user || {}));
-        if (user?.name) {
-          await AsyncStorage.setItem("USER_NAME", user.name);
-        }
-        await requestAppPermissionsOnSignIn();
-        await syncFcmTokenWithBackend({ force: true });
-        triggerAuth?.();
+      if (response?.success !== false) {
+        const loginIdentifier = email.trim().toLowerCase();
+        Alert.alert(
+          "Account created",
+          response?.message || "Please sign in with your email and password.",
+          [
+            {
+              text: "Sign in",
+              onPress: () => {
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: "Signin", params: { identifier: loginIdentifier } }],
+                });
+              },
+            },
+          ],
+          { cancelable: false }
+        );
       } else {
         setErrors((prev) => ({
           ...prev,
@@ -180,40 +181,19 @@ const SignupPage = ({ navigation, triggerAuth }) => {
             end={{ x: 1, y: 1 }}
             style={styles.pickerBorder}
           >
-          <View
-            style={[
-              styles.pickerBox,
-              { backgroundColor: colors.surface || AUTH_COLORS.surface },
-            ]}
-          >
+          <View style={styles.pickerBox}>
             <Picker
               selectedValue={gender}
               onValueChange={(v) => handleChange("gender", v)}
               mode={Platform.OS === "android" ? "dropdown" : undefined}
-              style={[styles.picker, { color: input.text }]}
-              dropdownIconColor={colors.textMuted}
-              itemStyle={Platform.OS === "ios" ? { color: input.text } : undefined}
+              style={styles.picker}
+              dropdownIconColor={AUTH_COLORS.textMuted}
+              itemStyle={Platform.OS === "ios" ? { color: INPUT_COLORS.text } : undefined}
             >
-              <Picker.Item
-                label="Select"
-                value=""
-                color={input.placeholder}
-              />
-              <Picker.Item
-                label="Male"
-                value="male"
-                color={isDark ? "#F8FAFC" : input.text}
-              />
-              <Picker.Item
-                label="Female"
-                value="female"
-                color={isDark ? "#F8FAFC" : input.text}
-              />
-              <Picker.Item
-                label="Other"
-                value="other"
-                color={isDark ? "#F8FAFC" : input.text}
-              />
+              <Picker.Item label="Select" value="" color={INPUT_COLORS.placeholder} />
+              <Picker.Item label="Male" value="male" color={INPUT_COLORS.text} />
+              <Picker.Item label="Female" value="female" color={INPUT_COLORS.text} />
+              <Picker.Item label="Other" value="other" color={INPUT_COLORS.text} />
             </Picker>
           </View>
           </LinearGradient>
@@ -291,5 +271,11 @@ const styles = StyleSheet.create({
     color: AUTH_COLORS.textMutedOnDark,
     textAlign: "center",
   },
-  link: { color: AUTH_COLORS.link, fontWeight: "700" },
+  link: {
+    color: AUTH_COLORS.white,
+    fontWeight: "800",
+    fontSize: 16,
+    textDecorationLine: "underline",
+    textDecorationColor: AUTH_COLORS.white,
+  },
 });

@@ -33,6 +33,8 @@ const userSchema = new mongoose.Schema(
     fcmToken: { type: String },
     otp: { type: String },
     otpExpires: { type: Date },
+    /** Distinguishes login/signup OTP from password reset OTP */
+    otpPurpose: { type: String, enum: ["login", "password_reset"], default: null },
     isVerified: { type: Boolean, default: false },
     isTermsAndServicesAccepted: { type: Boolean, default: false },
   },

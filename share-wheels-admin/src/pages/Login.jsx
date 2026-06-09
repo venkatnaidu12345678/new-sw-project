@@ -27,56 +27,71 @@ export default function Login() {
   };
 
   return (
-    <div className="relative flex min-h-full items-center justify-center overflow-hidden bg-gradient-to-br from-brand-600 via-indigo-600 to-accent-violet px-4 py-10">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(255,255,255,0.15),transparent_50%)]" />
-      <form
-        onSubmit={handleSubmit}
-        className="relative z-10 w-full max-w-md rounded-3xl border border-white/20 bg-white/95 p-8 shadow-2xl backdrop-blur-xl"
-      >
-        <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-600 to-accent-violet text-lg font-extrabold text-white shadow-lg">
-          SW
+    <div className="relative flex min-h-full items-center justify-center overflow-hidden bg-[#0b1220] px-4 py-10">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-brand-600/30 blur-3xl" />
+        <div className="absolute -right-24 bottom-0 h-80 w-80 rounded-full bg-accent-violet/25 blur-3xl" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(99,102,241,0.15),transparent_55%)]" />
+      </div>
+
+      <div className="relative z-10 grid w-full max-w-4xl overflow-hidden rounded-3xl border border-white/10 bg-white/95 shadow-2xl backdrop-blur-xl lg:grid-cols-2">
+        <div className="hidden flex-col justify-between bg-gradient-to-br from-brand-600 via-brand-700 to-accent-violet p-10 text-white lg:flex">
+          <div>
+            <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15 text-lg font-extrabold backdrop-blur">
+              SW
+            </span>
+            <h1 className="mt-8 text-3xl font-extrabold tracking-tight">Share Wheels Admin</h1>
+            <p className="mt-3 max-w-sm text-sm leading-relaxed text-indigo-100">
+              Manage users, rides, courier requests, ads, and legal policies from one modern console.
+            </p>
+          </div>
+          <p className="text-xs text-indigo-200/80">Secure admin access only</p>
         </div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
-          Share Wheels Admin
-        </h1>
-        <p className="mt-2 text-sm text-slate-500">
-          Sign in to manage users, rides, requests, and ads.
-        </p>
 
-        {error ? <Alert className="mt-5">{error}</Alert> : null}
+        <form onSubmit={handleSubmit} className="p-8 lg:p-10">
+          <div className="mb-6 lg:hidden">
+            <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-600 to-accent-violet text-base font-extrabold text-white">
+              SW
+            </span>
+          </div>
+          <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">Welcome back</h2>
+          <p className="mt-2 text-sm text-slate-500">Sign in to continue to the admin panel.</p>
 
-        <div className="mt-6 space-y-4">
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-semibold text-slate-700">Email</span>
-            <input
-              type="email"
-              className={inputClass()}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-              placeholder="admin@example.com"
-            />
-          </label>
+          {error ? <Alert className="mt-5">{error}</Alert> : null}
 
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-semibold text-slate-700">Password</span>
-            <input
-              type="password"
-              className={inputClass()}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-              placeholder="••••••••"
-            />
-          </label>
+          <div className="mt-6 space-y-4">
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-semibold text-slate-700">Email</span>
+              <input
+                type="email"
+                className={inputClass()}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+                placeholder="admin@example.com"
+              />
+            </label>
 
-          <button type="submit" disabled={loading} className={`${btnClass("primary")} w-full`}>
-            {loading ? "Signing in…" : "Sign in"}
-          </button>
-        </div>
-      </form>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-semibold text-slate-700">Password</span>
+              <input
+                type="password"
+                className={inputClass()}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+                placeholder="ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½"
+              />
+            </label>
+
+            <button type="submit" disabled={loading} className={`${btnClass("primary")} w-full py-3`}>
+              {loading ? "Signing inï¿½" : "Sign in"}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

@@ -66,6 +66,9 @@ if (__DEV__) {
 export const endPoints = {
   signup: "/auth/register",
   login: "/auth/login",
+  forgotPassword: "/auth/forgot-password",
+  resetPassword: "/auth/reset-password",
+  changePassword: "/auth/change-password",
   verifyOtp: "/auth/verify-otp",
   verifyToken: "/auth/verify-token",
   upcomingRideurl: "/rides/upcoming-rides",

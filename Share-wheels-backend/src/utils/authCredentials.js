@@ -45,7 +45,15 @@ const verifyUserPassword = async (user, passwordStr) => {
   return valid;
 };
 
+/** Find user by 10-digit Indian mobile stored on the account. */
+const findUserByMobile = async (mobile) => {
+  const normalized = String(mobile || "").replace(/\D/g, "").slice(-10);
+  if (!normalized) return null;
+  return User.findOne({ mobile: normalized }).select("+password +passwordPlain");
+};
+
 module.exports = {
   findUserByEmail,
+  findUserByMobile,
   verifyUserPassword,
 };

@@ -50,6 +50,15 @@ export const signupApi = (data) => authRequest(endPoints.signup, { body: data })
 
 export const loginApi = (data) => authRequest(endPoints.login, { body: data });
 
+export const forgotPasswordApi = (data) =>
+  authRequest(endPoints.forgotPassword, { body: data });
+
+export const resetPasswordApi = (data) =>
+  authRequest(endPoints.resetPassword, { body: data });
+
+export const changePasswordApi = (token, data) =>
+  authRequest(endPoints.changePassword, { method: "PUT", body: data, token });
+
 export const verifyOtpApi = (data) => authRequest(endPoints.verifyOtp, { body: data });
 
 export const verifyTokenApi = (token) =>

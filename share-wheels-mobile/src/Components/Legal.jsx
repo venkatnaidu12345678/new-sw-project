@@ -17,35 +17,13 @@ import { navigateRoot } from "../Utils/navigationRoot";
 import { useTheme } from "../context/ThemeContext";
 import { useThemedStyles } from "../theme/useThemedStyles";
 import { LAYOUT } from "../theme/layout";
+import { splitParagraphs } from "../Utils/htmlUtils";
 
 const TABS = [
   { key: "terms", label: "Terms", icon: "document-text", accent: "#4F46E5" },
   { key: "privacy", label: "Privacy", icon: "lock-closed", accent: "#0D9488" },
   { key: "disclaimer", label: "Disclaimer", icon: "information-circle", accent: "#D97706" },
 ];
-
-const stripHtmlToPlain = (html) => {
-  const raw = String(html || "").trim();
-  if (!raw) return "";
-  if (!/<[a-z][\s\S]*>/i.test(raw)) return raw;
-  return raw
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n\n")
-    .replace(/<\/h[1-6]>/gi, "\n\n")
-    .replace(/<li>/gi, "• ")
-    .replace(/<\/li>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-};
-
-const splitParagraphs = (text) => {
-  const plain = stripHtmlToPlain(text);
-  if (!plain) return [];
-  return plain.split(/\n\s*\n/g).map((t) => t.trim()).filter(Boolean);
-};
 
 export default function LegalPage() {
   const navigation = useNavigation();

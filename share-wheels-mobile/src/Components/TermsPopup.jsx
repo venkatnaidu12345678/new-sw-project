@@ -13,6 +13,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { userTermsApi } from "../ApiService/AuthApiService";
 import { getLegalPolicies } from "../ApiService/legalApiService";
+import { splitParagraphs } from "../Utils/htmlUtils";
 import { useTheme } from "../context/ThemeContext";
 import { useThemedStyles } from "../theme/useThemedStyles";
 
@@ -41,9 +42,8 @@ const TermsPopup = ({ visible = true, onSuccess, setRefresh }) => {
   }, [visible]);
 
   const renderParagraphs = (text) => {
-    const raw = String(text || "").trim();
-    if (!raw) return null;
-    const parts = raw.split(/\n\s*\n/g);
+    const parts = splitParagraphs(text);
+    if (!parts.length) return null;
     return parts.map((p, i) => (
       <View key={`${i}`} style={styles.clauseContainer}>
         <Text style={styles.clauseText}>{p}</Text>

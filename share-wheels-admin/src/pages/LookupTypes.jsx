@@ -8,7 +8,14 @@ import {
 } from "../api/client";
 import PageHeader from "../components/ui/PageHeader";
 import Loading from "../components/ui/Loading";
-import { Alert, btnClass, inputClass, Table, Th, Td } from "../components/ui/primitives";
+import SearchInput from "../components/ui/SearchInput";
+import FilterBar from "../components/ui/FilterBar";
+import AdminPageShell, { AdminTablePanel } from "../components/ui/AdminPageShell";
+import Pagination from "../components/ui/Pagination";
+import { usePagination } from "../hooks/usePagination";
+import IconActionButton, { TableActions } from "../components/ui/IconActionButton";
+import { IconToggle, IconTrash } from "../components/ui/icons";
+import { Alert, btnClass, inputClass, ModalBackdrop, Table, Th, Td } from "../components/ui/primitives";
 
 const TABS = [
   { key: "courier_type", label: "Courier types" },
@@ -24,6 +31,7 @@ export default function LookupTypes() {
   const [newLabel, setNewLabel] = useState("");
   const [bulkText, setBulkText] = useState("");
   const [search, setSearch] = useState("");
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -42,6 +50,10 @@ export default function LookupTypes() {
     const q = search.trim().toLowerCase();
     if (!q) return true;
     return `${row.label || ""} ${row.value || ""}`.toLowerCase().includes(q);
+  });
+
+  const { page, setPage, paginatedItems, totalPages, totalItems, pageSize } = usePagination(shown, {
+    resetDeps: [search, category],
   });
 
   const slug = (label) =>
@@ -117,6 +129,7 @@ export default function LookupTypes() {
         lines.map((label) => ({ label, value: slug(label) }))
       );
       setBulkText("");
+      setBulkModalOpen(false);
       load();
     } catch (err) {
       setError(err.message);
@@ -128,61 +141,111 @@ export default function LookupTypes() {
   const tab = TABS.find((t) => t.key === category);
 
   return (
-    <div className="mx-auto max-w-7xl">
-      <PageHeader title="Dropdown options" subtitle="Courier and vehicle types shown in the mobile app pickers." />
-      <div className="mb-4 flex flex-wrap gap-2">
+    <AdminPageShell>
+      <PageHeader compact title="Dropdown options" subtitle="Courier and vehicle types shown in the mobile app pickers." />
+
+      <FilterBar>
         {TABS.map((t) => (
-          <button key={t.key} type="button" className={category === t.key ? btnClass("primary", "sm") : btnClass("secondary", "sm")} onClick={() => setCategory(t.key)}>
+          <button
+            key={t.key}
+            type="button"
+            className={category === t.key ? btnClass("primary", "sm") : btnClass("secondary", "sm")}
+            onClick={() => setCategory(t.key)}
+          >
             {t.label}
           </button>
         ))}
-      </div>
-      {error ? <Alert className="mb-4">{error}</Alert> : null}
-      <form onSubmit={handleAdd} className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="mb-3 text-sm font-bold text-slate-800">Add {tab?.label?.toLowerCase()}</h3>
-        <div className="flex flex-wrap gap-2">
-          <input className={inputClass("max-w-sm")} placeholder="Display label (e.g. Parcel)" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} />
-          <button type="submit" className={btnClass("primary", "sm")} disabled={saving}>Add</button>
-        </div>
-      </form>
-      <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="mb-3 text-sm font-bold text-slate-800">Bulk import</h3>
-        <textarea className={inputClass()} rows={4} placeholder="One label per line" value={bulkText} onChange={(e) => setBulkText(e.target.value)} />
-        <button type="button" className={`${btnClass("secondary", "sm")} mt-2`} disabled={saving} onClick={handleBulk}>Import lines</button>
-      </div>
-      <div className="mb-4 flex flex-wrap gap-2">
-        <input className={inputClass("max-w-sm")} placeholder="Search label or value…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <button type="button" className={btnClass("secondary", "sm")} onClick={load}>Refresh</button>
-      </div>
-      {loading ? (
-        <Loading message={`Loading ${tab?.label?.toLowerCase()}…`} />
-      ) : (
-        <Table>
-          <thead>
-            <tr><Th>Label</Th><Th>Value</Th><Th>Order</Th><Th>Active</Th><Th>Actions</Th></tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 bg-white">
-            {shown.length === 0 ? (
-              <tr><Td colSpan={5} className="py-12 text-center text-slate-500">No options yet.</Td></tr>
-            ) : (
-              shown.map((row) => (
-                <tr key={row._id} className="hover:bg-slate-50/80">
-                  <Td className="font-medium">{row.label}</Td>
-                  <Td><code className="rounded bg-slate-100 px-2 py-0.5 text-xs">{row.value}</code></Td>
-                  <Td>{row.sortOrder ?? 0}</Td>
-                  <Td>{row.isActive ? "Yes" : "No"}</Td>
-                  <Td>
-                    <div className="flex gap-1.5">
-                      <button type="button" className={btnClass("secondary", "sm")} disabled={saving} onClick={() => handleToggle(row)}>{row.isActive ? "Disable" : "Enable"}</button>
-                      <button type="button" className={btnClass("danger", "sm")} disabled={saving} onClick={() => handleDelete(row._id)}>Delete</button>
-                    </div>
-                  </Td>
+        <form onSubmit={handleAdd} className="flex flex-wrap items-center gap-2">
+          <input
+            className={inputClass("max-w-[180px]")}
+            placeholder="New label…"
+            value={newLabel}
+            onChange={(e) => setNewLabel(e.target.value)}
+          />
+          <button type="submit" className={btnClass("primary", "sm")} disabled={saving}>
+            Add
+          </button>
+        </form>
+        <SearchInput placeholder="Search label or value…" onDebouncedChange={setSearch} />
+        <button type="button" className={btnClass("secondary", "sm")} onClick={() => setBulkModalOpen(true)}>
+          Bulk import
+        </button>
+        <button type="button" className={btnClass("secondary", "sm")} onClick={load}>
+          Refresh
+        </button>
+      </FilterBar>
+
+      {error ? <Alert className="mb-3 shrink-0">{error}</Alert> : null}
+
+      <AdminTablePanel>
+        {loading ? (
+          <Loading message={`Loading ${tab?.label?.toLowerCase()}…`} className="flex-1 py-8" />
+        ) : (
+          <>
+            <Table fill>
+              <thead>
+                <tr>
+                  <Th sticky>Label</Th>
+                  <Th sticky>Value</Th>
+                  <Th sticky>Order</Th>
+                  <Th sticky>Active</Th>
+                  <Th sticky>Actions</Th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </Table>
-      )}
-    </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {totalItems === 0 ? (
+                  <tr>
+                    <Td colSpan={5} className="py-10 text-center text-slate-500">
+                      No options yet.
+                    </Td>
+                  </tr>
+                ) : (
+                  paginatedItems.map((row) => (
+                    <tr key={row._id} className="hover:bg-slate-50/80">
+                      <Td className="font-medium">{row.label}</Td>
+                      <Td>
+                        <code className="rounded bg-slate-100 px-2 py-0.5 text-xs">{row.value}</code>
+                      </Td>
+                      <Td>{row.sortOrder ?? 0}</Td>
+                      <Td>{row.isActive ? "Yes" : "No"}</Td>
+                      <Td>
+                        <TableActions>
+                          <IconActionButton
+                            icon={IconToggle}
+                            label={row.isActive ? "Disable option" : "Enable option"}
+                            onClick={() => handleToggle(row)}
+                            disabled={saving}
+                          />
+                          <IconActionButton
+                            icon={IconTrash}
+                            label="Delete option"
+                            variant="danger"
+                            onClick={() => handleDelete(row._id)}
+                            disabled={saving}
+                          />
+                        </TableActions>
+                      </Td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </Table>
+            <Pagination page={page} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} onPageChange={setPage} />
+          </>
+        )}
+      </AdminTablePanel>
+
+      {bulkModalOpen ? (
+        <ModalBackdrop onClose={() => setBulkModalOpen(false)} size="lg">
+          <h2 className="text-xl font-bold text-slate-900">Bulk import {tab?.label?.toLowerCase()}</h2>
+          <p className="mt-2 text-sm text-slate-500">One label per line.</p>
+          <textarea className={`${inputClass()} mt-4`} rows={8} placeholder="One label per line" value={bulkText} onChange={(e) => setBulkText(e.target.value)} />
+          <div className="mt-4 flex justify-end gap-2">
+            <button type="button" className={btnClass("secondary")} onClick={() => setBulkModalOpen(false)}>Cancel</button>
+            <button type="button" className={btnClass("primary")} disabled={saving} onClick={handleBulk}>Import lines</button>
+          </div>
+        </ModalBackdrop>
+      ) : null}
+    </AdminPageShell>
   );
 }

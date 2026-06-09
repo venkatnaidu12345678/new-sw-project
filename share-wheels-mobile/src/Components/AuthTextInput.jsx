@@ -1,12 +1,10 @@
 import React, { useState } from "react";
-import { View, TouchableOpacity, StyleSheet } from "react-native";
+import { View, TouchableOpacity, TextInput, StyleSheet } from "react-native";
 import Icon from "react-native-vector-icons/FontAwesome";
 import LinearGradient from "react-native-linear-gradient";
-import AppTextInput from "./ui/AppTextInput";
 import { AUTH_GRADIENTS } from "../theme/authTheme";
+import { INPUT_COLORS, inputDefaults } from "../theme/inputTheme";
 import { LAYOUT } from "../theme/layout";
-import { useTheme } from "../context/ThemeContext";
-import { useThemedStyles } from "../theme/useThemedStyles";
 
 const AuthTextInput = ({
   value,
@@ -17,8 +15,6 @@ const AuthTextInput = ({
   maxLength,
   autoCapitalize,
 }) => {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
   const [showPassword, setShowPassword] = useState(false);
   const isPassword = secureTextEntry === true;
 
@@ -31,11 +27,13 @@ const AuthTextInput = ({
         style={styles.border}
       >
         <View style={styles.inner}>
-          <AppTextInput
-            style={styles.input}
+          <TextInput
+            {...inputDefaults}
+            style={[styles.input, isPassword && styles.inputWithEye]}
             value={value}
             onChangeText={onChangeText}
             placeholder={placeholder}
+            placeholderTextColor={INPUT_COLORS.placeholder}
             keyboardType={keyboardType}
             secureTextEntry={isPassword && !showPassword}
             maxLength={maxLength}
@@ -50,7 +48,7 @@ const AuthTextInput = ({
               <Icon
                 name={showPassword ? "eye" : "eye-slash"}
                 size={20}
-                color={colors.textMuted}
+                color={INPUT_COLORS.placeholder}
               />
             </TouchableOpacity>
           )}
@@ -62,8 +60,7 @@ const AuthTextInput = ({
 
 export default AuthTextInput;
 
-const createStyles = (c) =>
-  StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
     marginBottom: LAYOUT.spacing.sm,
   },
@@ -73,15 +70,20 @@ const createStyles = (c) =>
   },
   inner: {
     position: "relative",
-    backgroundColor: c.surface,
+    backgroundColor: INPUT_COLORS.background,
     borderRadius: LAYOUT.radius.md,
     overflow: "hidden",
   },
   input: {
     height: LAYOUT.sizes.inputHeight,
-    paddingRight: 44,
+    paddingHorizontal: LAYOUT.spacing.md,
     backgroundColor: "transparent",
     borderWidth: 0,
+    color: INPUT_COLORS.text,
+    fontSize: LAYOUT.font.body,
+  },
+  inputWithEye: {
+    paddingRight: 44,
   },
   eyeButton: {
     position: "absolute",

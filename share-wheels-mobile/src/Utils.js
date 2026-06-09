@@ -150,6 +150,51 @@ export const validateEmail = (value) => {
   return error;
 };
 
+/** True when the login field should be treated as email (not mobile). */
+export const isLoginEmailIdentifier = (value) => {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return false;
+  if (trimmed.includes("@")) return true;
+  return /[a-zA-Z._%+-]/.test(trimmed);
+};
+
+/** Format login identifier while typing — do not strip email letters before "@". */
+export const formatLoginIdentifierInput = (value) => {
+  const raw = String(value || "");
+  if (raw.includes("@") || /[a-zA-Z._%+-]/.test(raw)) {
+    return raw.replace(/[^\w@.%+-]/g, "");
+  }
+  return raw.replace(/\D/g, "").slice(0, 10);
+};
+
+export const validateEmailOrMobile = (value) => {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "Email or mobile is required";
+
+  if (isLoginEmailIdentifier(trimmed)) {
+    if (!trimmed.includes("@")) return "Enter a complete email address";
+    return validateEmail(trimmed);
+  }
+
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length !== 10) return "Enter a valid 10-digit mobile number";
+  if (!/^[6-9]/.test(digits)) return "Enter a valid Indian mobile number";
+
+  return "";
+};
+
+/** Build login API body from a single email-or-mobile field. */
+export const buildLoginPayload = (identifier, password) => {
+  const trimmed = String(identifier || "").trim();
+  const payload = { password };
+  if (isLoginEmailIdentifier(trimmed)) {
+    payload.email = trimmed.toLowerCase();
+  } else {
+    payload.mobile = trimmed.replace(/\D/g, "").slice(-10);
+  }
+  return payload;
+};
+
 export const validatePassword = (value) => {
   if (!value) return "Password is required";
   if (value.length < 6) return "Password must be at least 6 characters";

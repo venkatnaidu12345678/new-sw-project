@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Text, StyleSheet, Alert } from "react-native";
+import React, { useState, useEffect } from "react";
+import { Text, StyleSheet, Alert, TouchableOpacity } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import AuthButton from "../../Components/AuthButton";
 import AuthTextInput from "../../Components/AuthTextInput";
@@ -8,22 +8,43 @@ import { loginApi } from "../../ApiService/AuthApiService";
 import { getDeviceTokenWithPermission } from "../../Notifications/FCMService";
 import { syncFcmTokenWithBackend } from "../../Notifications/registerToken";
 import { requestAppPermissionsOnSignIn } from "../../Utils/locationPermissions";
-import { validateEmail, validatePassword } from "../../Utils";
+import {
+  validateEmailOrMobile,
+  validatePassword,
+  buildLoginPayload,
+  isLoginEmailIdentifier,
+  formatLoginIdentifierInput,
+} from "../../Utils";
 import { AUTH_COLORS } from "../../theme/authTheme";
 import { getApiErrorMessage } from "../../Utils/apiErrors";
 
-const LoginPage = ({ navigation, triggerAuth }) => {
-  const [email, setEmail] = useState("");
+const LoginPage = ({ navigation, route, triggerAuth }) => {
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState({ email: "", password: "" });
+  const [errors, setErrors] = useState({ identifier: "", password: "" });
+
+  useEffect(() => {
+    const prefill = route.params?.identifier || route.params?.email;
+    if (prefill) {
+      setIdentifier(formatLoginIdentifierInput(String(prefill)));
+    }
+  }, [route.params?.identifier, route.params?.email]);
+
+  const isEmailMode = isLoginEmailIdentifier(identifier);
+
+  const identifierPlaceholder = !identifier
+    ? "Email or mobile number"
+    : isEmailMode
+      ? "you@example.com"
+      : "10-digit mobile number";
 
   const handleLogin = async () => {
-    const emailError = validateEmail(email.trim());
+    const identifierError = validateEmailOrMobile(identifier.trim());
     const passwordError = validatePassword(password);
 
-    if (emailError || passwordError) {
-      setErrors({ email: emailError, password: passwordError });
+    if (identifierError || passwordError) {
+      setErrors({ identifier: identifierError, password: passwordError });
       return;
     }
 
@@ -33,8 +54,7 @@ const LoginPage = ({ navigation, triggerAuth }) => {
       const fcmToken = await getDeviceTokenWithPermission();
 
       const res = await loginApi({
-        email: email.trim().toLowerCase(),
-        password,
+        ...buildLoginPayload(identifier, password),
         ...(fcmToken ? { fcmToken } : {}),
       });
 
@@ -52,7 +72,7 @@ const LoginPage = ({ navigation, triggerAuth }) => {
       } else {
         Alert.alert(
           "Login failed",
-          getApiErrorMessage(res, "Invalid email or password")
+          getApiErrorMessage(res, "Invalid email/mobile or password")
         );
       }
     } catch (err) {
@@ -64,8 +84,9 @@ const LoginPage = ({ navigation, triggerAuth }) => {
 
   return (
     <AuthScreenLayout
+      centerContent
       title="Sign in"
-      subtitle="Welcome back. Enter your email and password to continue."
+      subtitle="Use your registered email or 10-digit mobile number with your password."
       footer={
         <Text style={styles.footer}>
           Don&apos;t have an account?{" "}
@@ -75,22 +96,23 @@ const LoginPage = ({ navigation, triggerAuth }) => {
         </Text>
       }
     >
-      <Text style={styles.label}>Email</Text>
+      <Text style={styles.label}>Email or mobile number</Text>
       <AuthTextInput
-        placeholder="you@example.com"
-        keyboardType="email-address"
+        placeholder={identifierPlaceholder}
+        keyboardType={isEmailMode ? "email-address" : identifier ? "phone-pad" : "default"}
         autoCapitalize="none"
-        value={email}
+        value={identifier}
+        maxLength={isEmailMode ? undefined : 10}
         onChangeText={(t) => {
-          setEmail(t);
-          setErrors((e) => ({ ...e, email: "" }));
+          setIdentifier(formatLoginIdentifierInput(t));
+          setErrors((e) => ({ ...e, identifier: "" }));
         }}
       />
-      {!!errors.email && <Text style={styles.error}>{errors.email}</Text>}
+      {!!errors.identifier && <Text style={styles.error}>{errors.identifier}</Text>}
 
       <Text style={styles.label}>Password</Text>
       <AuthTextInput
-        placeholder="Enter your password"
+        placeholder="Password"
         secureTextEntry
         value={password}
         onChangeText={(t) => {
@@ -99,6 +121,14 @@ const LoginPage = ({ navigation, triggerAuth }) => {
         }}
       />
       {!!errors.password && <Text style={styles.error}>{errors.password}</Text>}
+
+      <TouchableOpacity
+        style={styles.forgotWrap}
+        onPress={() => navigation.navigate("ForgotPassword")}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.forgotLink}>Forgot password?</Text>
+      </TouchableOpacity>
 
       <AuthButton type="signin" onPress={handleLogin} loading={loading} />
     </AuthScreenLayout>
@@ -122,11 +152,28 @@ const styles = StyleSheet.create({
   },
   footer: {
     fontSize: 15,
-    color: AUTH_COLORS.textMutedOnDark,
+    color: AUTH_COLORS.textOnDark,
     textAlign: "center",
   },
   link: {
-    color: AUTH_COLORS.link,
+    color: AUTH_COLORS.white,
+    fontWeight: "800",
+    fontSize: 16,
+    textDecorationLine: "underline",
+    textDecorationColor: AUTH_COLORS.white,
+  },
+  forgotWrap: {
+    alignSelf: "flex-end",
+    marginBottom: 12,
+    marginTop: 2,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  forgotLink: {
+    color: AUTH_COLORS.primary,
+    fontSize: 15,
     fontWeight: "700",
+    textDecorationLine: "underline",
+    textDecorationColor: AUTH_COLORS.primary,
   },
 });

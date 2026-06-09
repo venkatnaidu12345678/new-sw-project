@@ -5,7 +5,11 @@ import "leaflet/dist/leaflet.css";
 import { getActiveTracking, getTrackingDetail } from "../api/client";
 import PageHeader from "../components/ui/PageHeader";
 import Loading from "../components/ui/Loading";
-import { Alert, btnClass, inputClass, Table, Th, Td } from "../components/ui/primitives";
+import SearchInput from "../components/ui/SearchInput";
+import AdminPageShell from "../components/ui/AdminPageShell";
+import Pagination from "../components/ui/Pagination";
+import { usePagination } from "../hooks/usePagination";
+import { Alert, btnClass, Table, Th, Td } from "../components/ui/primitives";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
@@ -155,6 +159,11 @@ export default function LiveTracking() {
     });
   }, [rides, search]);
 
+  const { page, setPage, paginatedItems, totalPages, totalItems, pageSize } = usePagination(filteredRides, {
+    pageSize: 6,
+    resetDeps: [search],
+  });
+
   const pathPositions = useMemo(() => {
     const path = detail?.liveTracking?.locationHistory || selectedRide?.path || [];
     return path
@@ -186,80 +195,89 @@ export default function LiveTracking() {
   );
 
   return (
-    <div className="mx-auto flex h-full max-w-[1600px] flex-col">
+    <AdminPageShell>
       <PageHeader
+        compact
         title="Live ride tracking"
         subtitle="Driver, passenger, and courier GPS when a ride is started"
       />
-      <div className="mb-4 flex flex-wrap gap-4 text-sm font-semibold text-slate-600">
-        <span className="inline-flex items-center gap-2">
-          <span className="h-3 w-3 rounded-full bg-brand-600 ring-2 ring-white" /> Driver
+      <div className="mb-2 flex shrink-0 flex-wrap gap-3 text-xs font-semibold text-slate-600">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-brand-600 ring-2 ring-white" /> Driver
         </span>
-        <span className="inline-flex items-center gap-2">
-          <span className="h-3 w-3 rounded-full bg-emerald-600 ring-2 ring-white" /> Passenger
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-emerald-600 ring-2 ring-white" /> Passenger
         </span>
-        <span className="inline-flex items-center gap-2">
-          <span className="h-3 w-3 rounded-full bg-amber-600 ring-2 ring-white" /> Courier
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-amber-600 ring-2 ring-white" /> Courier
         </span>
       </div>
-      {error ? <Alert className="mb-4">{error}</Alert> : null}
-      <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[320px_1fr]">
-        <div className="flex max-h-[min(70vh,640px)] flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm lg:max-h-none">
-          <h3 className="mb-3 shrink-0 text-sm font-bold text-slate-800">
-            Active rides ({filteredRides.length})
+      {error ? <Alert className="mb-2 shrink-0">{error}</Alert> : null}
+      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[340px_1fr]">
+        <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm">
+          <h3 className="mb-2 shrink-0 text-sm font-bold text-slate-800">
+            Active rides ({totalItems})
           </h3>
-          <div className="mb-3 flex shrink-0 flex-wrap gap-2">
-            <input
-              className={inputClass("max-w-[220px]")}
+          <div className="mb-2 flex shrink-0 flex-wrap gap-2">
+            <SearchInput
+              className="max-w-[220px]"
               placeholder="Search route or driver"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onDebouncedChange={setSearch}
             />
             <button type="button" className={btnClass("secondary", "sm")} onClick={load}>
               Refresh
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
             {loading && rides.length === 0 ? (
-              <Loading message="Loading active rides..." />
-            ) : filteredRides.length === 0 ? (
-              <p className="py-8 text-center text-sm text-slate-500">No active rides match your search.</p>
+              <Loading message="Loading active rides..." className="flex-1 py-6" />
+            ) : totalItems === 0 ? (
+              <p className="py-6 text-center text-sm text-slate-500">No active rides match your search.</p>
             ) : (
-              <Table>
-                <thead>
-                  <tr>
-                    <Th>Route</Th>
-                    <Th>Driver</Th>
-                    <Th>GPS</Th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
-                  {filteredRides.map((r) => {
-                    const active = rideKey(selectedId) === rideKey(r.rideId);
-                    return (
-                      <tr
-                        key={r.rideId}
-                        className={`cursor-pointer transition ${active ? "bg-brand-50" : "hover:bg-slate-50/80"}`}
-                        onClick={() => setSelectedId(r.rideId)}
-                      >
-                        <Td className="font-medium text-slate-800">
-                          {r.from} → {r.to}
-                        </Td>
-                        <Td>{r.driver?.name || "—"}</Td>
-                        <Td className={`text-xs font-bold ${r.location ? "text-emerald-600" : "text-amber-600"}`}>
-                          {r.location
-                            ? `(${r.location.lat.toFixed(2)}, ${r.location.lng.toFixed(2)})`
-                            : "Waiting"}
-                        </Td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </Table>
+              <>
+                <Table fill>
+                  <thead>
+                    <tr>
+                      <Th sticky>Route</Th>
+                      <Th sticky>Driver</Th>
+                      <Th sticky>GPS</Th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {paginatedItems.map((r) => {
+                      const active = rideKey(selectedId) === rideKey(r.rideId);
+                      return (
+                        <tr
+                          key={r.rideId}
+                          className={`cursor-pointer transition ${active ? "bg-brand-50" : "hover:bg-slate-50/80"}`}
+                          onClick={() => setSelectedId(r.rideId)}
+                        >
+                          <Td className="font-medium text-slate-800">
+                            {r.from} → {r.to}
+                          </Td>
+                          <Td>{r.driver?.name || "—"}</Td>
+                          <Td className={`text-xs font-bold ${r.location ? "text-emerald-600" : "text-amber-600"}`}>
+                            {r.location
+                              ? `(${r.location.lat.toFixed(2)}, ${r.location.lng.toFixed(2)})`
+                              : "Waiting"}
+                          </Td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </Table>
+                <Pagination
+                  page={page}
+                  totalPages={totalPages}
+                  totalItems={totalItems}
+                  pageSize={pageSize}
+                  onPageChange={setPage}
+                />
+              </>
             )}
           </div>
         </div>
-        <div className="min-h-[420px] overflow-hidden rounded-2xl border border-slate-200/80 shadow-sm lg:min-h-[560px]">
+        <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-slate-200/80 shadow-sm">
           <MapContainer center={mapCenter} zoom={13} style={{ height: "100%", width: "100%" }}>
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -281,6 +299,6 @@ export default function LiveTracking() {
           </MapContainer>
         </div>
       </div>
-    </div>
+    </AdminPageShell>
   );
 }

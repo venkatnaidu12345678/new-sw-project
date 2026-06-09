@@ -253,8 +253,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   resendLink: {
-    color: AUTH_COLORS.link,
+    color: AUTH_COLORS.white,
     fontWeight: "700",
+    textDecorationLine: "underline",
   },
   timerText: {
     color: AUTH_COLORS.textMutedOnDark,

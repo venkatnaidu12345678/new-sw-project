@@ -150,6 +150,10 @@ export const StyledTextInput = ({
   );
 };
 
+/** Picker.Item colors for Android's dialog surface (stays light even in app dark mode). */
+const ANDROID_DIALOG_TEXT = "#0F172A";
+const ANDROID_DIALOG_PLACEHOLDER = "#64748B";
+
 export const StyledPicker = ({
   label,
   icon,
@@ -164,6 +168,20 @@ export const StyledPicker = ({
   const textColor = theme?.text || colors.text;
   const mutedColor = theme?.textMuted || colors.textMuted;
   const placeholderColor = input.placeholder;
+  const pickerDisplayColor = input.text;
+  const dropdownIcon = isDark ? colors.textSecondary : mutedColor;
+
+  const getItemColor = (item) => {
+    if (!item.value) {
+      return Platform.OS === "android" && isDark
+        ? ANDROID_DIALOG_PLACEHOLDER
+        : placeholderColor;
+    }
+    if (Platform.OS === "android" && isDark) {
+      return ANDROID_DIALOG_TEXT;
+    }
+    return textColor;
+  };
 
   return (
     <StyledField label={label} theme={theme}>
@@ -172,7 +190,7 @@ export const StyledPicker = ({
           styles.pickerWrap,
           {
             backgroundColor: accent?.bg || input.background,
-            borderColor: accent?.border || theme.cardBorder,
+            borderColor: accent?.border || input.border || theme.cardBorder,
           },
           !enabled && styles.pickerDisabled,
         ]}
@@ -196,26 +214,23 @@ export const StyledPicker = ({
           style={[
             styles.picker,
             {
-              color: textColor,
+              color: pickerDisplayColor,
               backgroundColor: "transparent",
             },
-            Platform.OS === "android" && { color: isDark ? "#F8FAFC" : textColor },
           ]}
-          dropdownIconColor={mutedColor}
-          itemStyle={Platform.OS === "ios" ? { color: textColor } : undefined}
+          dropdownIconColor={dropdownIcon}
+          itemStyle={
+            Platform.OS === "ios"
+              ? { color: textColor, fontSize: DS.font.body }
+              : undefined
+          }
         >
           {items.map((item) => (
             <Picker.Item
               key={`${item.value}-${item.label}`}
               label={item.label}
               value={item.value}
-              color={
-                !item.value
-                  ? placeholderColor
-                  : isDark
-                    ? "#F8FAFC"
-                    : textColor
-              }
+              color={getItemColor(item)}
             />
           ))}
         </Picker>

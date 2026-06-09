@@ -2,7 +2,13 @@ import { useEffect, useState } from "react";
 import { getFeedbacks, updateFeedback } from "../api/client";
 import PageHeader from "../components/ui/PageHeader";
 import Loading from "../components/ui/Loading";
+import FilterBar from "../components/ui/FilterBar";
+import AdminPageShell, { AdminTablePanel } from "../components/ui/AdminPageShell";
+import Pagination from "../components/ui/Pagination";
+import { usePagination } from "../hooks/usePagination";
 import StatusBadge from "../components/StatusBadge";
+import IconActionButton, { TableActions } from "../components/ui/IconActionButton";
+import { IconCheck, IconCheckCircle } from "../components/ui/icons";
 import { Alert, btnClass, inputClass, Table, Th, Td } from "../components/ui/primitives";
 
 const STATUS_OPTIONS = ["all", "new", "reviewed", "resolved"];
@@ -36,60 +42,83 @@ export default function Feedbacks() {
     }
   };
 
+  const { page, setPage, paginatedItems, totalPages, totalItems, pageSize } = usePagination(feedbacks, {
+    resetDeps: [statusFilter],
+  });
+
   return (
-    <div className="mx-auto max-w-7xl">
-      <PageHeader title="User feedback" subtitle="Messages submitted from the mobile app profile screen" />
-      <div className="mb-5 flex flex-wrap gap-2">
+    <AdminPageShell>
+      <PageHeader compact title="User feedback" subtitle="Messages submitted from the mobile app profile screen" />
+      <FilterBar>
         <select className={inputClass("max-w-[200px]")} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           {STATUS_OPTIONS.map((s) => (
             <option key={s} value={s}>{s === "all" ? "All statuses" : s}</option>
           ))}
         </select>
         <button type="button" className={btnClass("primary", "sm")} onClick={load}>Refresh</button>
-      </div>
-      {error ? <Alert className="mb-4">{error}</Alert> : null}
-      {loading ? (
-        <Loading message="Loading feedback…" />
-      ) : feedbacks.length === 0 ? (
-        <p className="text-sm text-slate-500">No feedback yet.</p>
-      ) : (
-        <Table>
-          <thead>
-            <tr>
-              <Th>User</Th>
-              <Th>Category</Th>
-              <Th>Message</Th>
-              <Th>Status</Th>
-              <Th>Date</Th>
-              <Th>Actions</Th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 bg-white">
-            {feedbacks.map((f) => (
-              <tr key={f._id} className="hover:bg-slate-50/80">
-                <Td>
-                  <div className="font-medium text-slate-800">{f.userId?.name || "—"}</div>
-                  <div className="text-xs text-slate-500">{f.userId?.email || f.userId?.mobile || ""}</div>
-                </Td>
-                <Td>{f.category}</Td>
-                <Td className="max-w-xs whitespace-pre-wrap text-slate-600">{f.message}</Td>
-                <Td><StatusBadge status={f.status} /></Td>
-                <Td className="text-xs text-slate-500">{new Date(f.createdAt).toLocaleString()}</Td>
-                <Td>
-                  <div className="flex flex-wrap gap-1.5">
-                    {f.status !== "reviewed" ? (
-                      <button type="button" className={btnClass("secondary", "sm")} onClick={() => setStatus(f._id, "reviewed")}>Reviewed</button>
-                    ) : null}
-                    {f.status !== "resolved" ? (
-                      <button type="button" className={btnClass("primary", "sm")} onClick={() => setStatus(f._id, "resolved")}>Resolved</button>
-                    ) : null}
-                  </div>
-                </Td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-      )}
-    </div>
+      </FilterBar>
+      {error ? <Alert className="mb-3 shrink-0">{error}</Alert> : null}
+
+      <AdminTablePanel>
+        {loading ? (
+          <Loading message="Loading feedback…" className="flex-1 py-8" />
+        ) : (
+          <>
+            <Table fill>
+              <thead>
+                <tr>
+                  <Th sticky>User</Th>
+                  <Th sticky>Category</Th>
+                  <Th sticky>Message</Th>
+                  <Th sticky>Status</Th>
+                  <Th sticky>Date</Th>
+                  <Th sticky>Actions</Th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {totalItems === 0 ? (
+                  <tr>
+                    <Td colSpan={6} className="py-10 text-center text-slate-500">No feedback yet.</Td>
+                  </tr>
+                ) : (
+                  paginatedItems.map((f) => (
+                    <tr key={f._id} className="hover:bg-slate-50/80">
+                      <Td>
+                        <div className="font-medium text-slate-800">{f.userId?.name || "—"}</div>
+                        <div className="text-xs text-slate-500">{f.userId?.email || f.userId?.mobile || ""}</div>
+                      </Td>
+                      <Td>{f.category}</Td>
+                      <Td className="max-w-xs whitespace-pre-wrap text-slate-600">{f.message}</Td>
+                      <Td><StatusBadge status={f.status} /></Td>
+                      <Td className="text-xs text-slate-500">{new Date(f.createdAt).toLocaleString()}</Td>
+                      <Td>
+                        <TableActions>
+                          {f.status !== "reviewed" ? (
+                            <IconActionButton
+                              icon={IconCheck}
+                              label="Mark as reviewed"
+                              onClick={() => setStatus(f._id, "reviewed")}
+                            />
+                          ) : null}
+                          {f.status !== "resolved" ? (
+                            <IconActionButton
+                              icon={IconCheckCircle}
+                              label="Mark as resolved"
+                              variant="primary"
+                              onClick={() => setStatus(f._id, "resolved")}
+                            />
+                          ) : null}
+                        </TableActions>
+                      </Td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </Table>
+            <Pagination page={page} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} onPageChange={setPage} />
+          </>
+        )}
+      </AdminTablePanel>
+    </AdminPageShell>
   );
 }

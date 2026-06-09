@@ -43,6 +43,7 @@ import { userProfile } from "../ApiService/ridesApiServices";
 import { isRemoteImageUrl } from "../Utils/imageUpload";
 import { useTheme } from "../context/ThemeContext";
 import { useCoachMarks } from "../context/CoachMarksContext";
+import ChangePasswordModal from "./ChangePasswordModal";
 
 const MyProfile = () => {
   const { ProfileDetails, SetProfileDetails, logout } = profileData();
@@ -65,6 +66,7 @@ const MyProfile = () => {
   const [profileImage, setProfileImage] = useState(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [visible, setVisible] = useState(false);
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
   const scaleAnim = useRef(new Animated.Value(0)).current;
 
   // ✅ Load saved image
@@ -251,6 +253,22 @@ const MyProfile = () => {
         </View>
 
         <Text style={themedStyles.sectionHeading}>Account details</Text>
+        <View style={themedStyles.menuCard}>
+          <TouchableOpacity
+            style={themedStyles.menuRow}
+            onPress={() => setPasswordModalVisible(true)}
+            activeOpacity={0.85}
+          >
+            <View style={[themedStyles.menuIcon, { backgroundColor: colors.tintOrange }]}>
+              <Icon name="key-outline" size={22} color={colors.primary} />
+            </View>
+            <View style={themedStyles.themeTextCol}>
+              <Text style={themedStyles.menuTitle}>Change password</Text>
+              <Text style={themedStyles.themeSub}>Update your sign-in password</Text>
+            </View>
+            <Icon name="chevron-forward" size={20} color={colors.textMuted} />
+          </TouchableOpacity>
+        </View>
         <PersonalInformationCard personal={personal} vehicle={vehicle} />
 
         <Text style={themedStyles.sectionHeading}>Feedback</Text>
@@ -296,6 +314,11 @@ const MyProfile = () => {
           <Text style={themedStyles.logoutText}>Log out</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <ChangePasswordModal
+        visible={passwordModalVisible}
+        onClose={() => setPasswordModalVisible(false)}
+      />
 
       {/* IMAGE PREVIEW MODAL */}
       <Modal visible={visible} transparent animationType="fade">

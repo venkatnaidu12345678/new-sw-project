@@ -6,6 +6,8 @@ import SplashScreen from "../Screens/Splash/SplashScreen";
 import LoginPage from "../Screens/Login/LoginPage";
 import SignupPage from "../Screens/Signup/SignupPage";
 import OtpVerificationPage from "../Screens/OtpVerification/OtpVerificationPage";
+import ForgotPasswordPage from "../Screens/ForgotPassword/ForgotPasswordPage";
+import ResetPasswordPage from "../Screens/ForgotPassword/ResetPasswordPage";
 import BottomNavigator from "../Components/BottomNavigator";
 import CreateRidePage from "../Screens/CreateRidePage";
 import PassengerRequest from "../Screens/PassengerRequest";
@@ -34,6 +36,7 @@ import {
 import { NotificationsProvider } from "../context/NotificationsContext";
 import { useAppSocketConnection } from "../hooks/useAppSocket";
 import { syncFcmTokenWithBackend } from "../Notifications/registerToken";
+import { AUTH_COLORS } from "../theme/authTheme";
 import { useTheme } from "../context/ThemeContext";
 
 const Stack = createNativeStackNavigator();
@@ -44,15 +47,21 @@ export const profileData = () => useContext(ProfileContext);
 const AuthNavigator = () => {
   const { colors } = useTheme();
   const [booting, setBooting] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  const stackBackground = booting
+    ? SPLASH_LAUNCH_BACKGROUND
+    : isAuthenticated
+      ? colors.background
+      : AUTH_COLORS.background;
 
   const authScreenOptions = {
     headerShown: false,
     animation: "fade",
     contentStyle: {
-      backgroundColor: booting ? SPLASH_LAUNCH_BACKGROUND : colors.background,
+      backgroundColor: stackBackground,
     },
   };
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [userData, setUserData] = useState(null);
   const [refreshUpcomingRides, setRefreshUpcomingrides] = useState(true);
@@ -187,6 +196,16 @@ const AuthNavigator = () => {
                 />
               )}
             </Stack.Screen>
+            <Stack.Screen
+              name="ForgotPassword"
+              options={{ animation: "slide_from_right" }}
+              component={ForgotPasswordPage}
+            />
+            <Stack.Screen
+              name="ResetPassword"
+              options={{ animation: "slide_from_right" }}
+              component={ResetPasswordPage}
+            />
           </>
         ) : (
           <>

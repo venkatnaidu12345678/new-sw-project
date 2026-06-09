@@ -27,8 +27,31 @@ const AuthScreenLayout = ({
   footer,
   showBack,
   onBack,
+  centerContent = false,
 }) => {
   const insets = useSafeAreaInsets();
+
+  const formSection = (
+    <>
+      <Text style={styles.title}>{title}</Text>
+      {!!subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+
+      <LinearGradient
+        colors={AUTH_GRADIENTS.cardBorder}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.cardBorder}
+      >
+        <View style={styles.card}>{children}</View>
+      </LinearGradient>
+
+      {footer ? (
+        <View style={[styles.footerWrap, centerContent && styles.footerWrapCentered]}>
+          {footer}
+        </View>
+      ) : null}
+    </>
+  );
 
   return (
     <LinearGradient
@@ -53,23 +76,22 @@ const AuthScreenLayout = ({
           </TouchableOpacity>
         ) : null}
 
-        <View style={styles.brandRow}>
-          <LinearGradient
-            colors={AUTH_GRADIENTS.hero}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.logoWrap}
-          >
-            <Image source={icon} style={styles.logo} resizeMode="contain" />
-          </LinearGradient>
-          <View style={styles.brandTextCol}>
-            <Text style={styles.brand}>Share Wheels</Text>
-            <Text style={styles.brandTag}>Ride together, save together</Text>
+        {!showBack ? (
+          <View style={styles.brandRow}>
+            <LinearGradient
+              colors={AUTH_GRADIENTS.hero}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.logoWrap}
+            >
+              <Image source={icon} style={styles.logo} resizeMode="contain" />
+            </LinearGradient>
+            <View style={styles.brandTextCol}>
+              <Text style={styles.brand}>Share Wheels</Text>
+              <Text style={styles.brandTag}>Ride together, save together</Text>
+            </View>
           </View>
-        </View>
-
-        <Text style={styles.title}>{title}</Text>
-        {!!subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+        ) : null}
       </View>
 
       <KeyboardAwareScreen
@@ -77,19 +99,19 @@ const AuthScreenLayout = ({
         style={styles.formArea}
         contentContainerStyle={[
           styles.scroll,
-          { paddingBottom: insets.bottom + LAYOUT.spacing.lg },
+          centerContent && styles.scrollCentered,
+          {
+            paddingHorizontal: AUTH_SPACING.screen,
+            paddingBottom: insets.bottom + LAYOUT.spacing.lg,
+          },
         ]}
         keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
       >
-        <LinearGradient
-          colors={AUTH_GRADIENTS.cardBorder}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.cardBorder}
-        >
-          <View style={styles.card}>{children}</View>
-        </LinearGradient>
-        {footer ? <View style={styles.footerWrap}>{footer}</View> : null}
+        {centerContent ? (
+          <View style={styles.centeredSection}>{formSection}</View>
+        ) : (
+          formSection
+        )}
       </KeyboardAwareScreen>
     </LinearGradient>
   );
@@ -109,10 +131,17 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flexGrow: 1,
-    paddingHorizontal: AUTH_SPACING.screen,
-    paddingTop: LAYOUT.spacing.sm,
   },
-  backBtn: { marginBottom: LAYOUT.spacing.sm },
+  scrollCentered: {
+    justifyContent: "center",
+  },
+  centeredSection: {
+    width: "100%",
+  },
+  backBtn: {
+    marginBottom: LAYOUT.spacing.sm,
+    alignSelf: "flex-start",
+  },
   backText: {
     fontSize: AUTH_FONT.back,
     color: AUTH_COLORS.link,
@@ -121,7 +150,7 @@ const styles = StyleSheet.create({
   brandRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: LAYOUT.spacing.lg,
+    marginBottom: LAYOUT.spacing.sm,
     gap: scale(12),
   },
   logoWrap: {
@@ -176,5 +205,8 @@ const styles = StyleSheet.create({
   footerWrap: {
     marginTop: LAYOUT.spacing.lg,
     paddingHorizontal: LAYOUT.spacing.xs,
+  },
+  footerWrapCentered: {
+    alignItems: "center",
   },
 });

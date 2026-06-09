@@ -5,6 +5,7 @@ const PassengerRide = require("../models/passengerRideModel");
 const Courier = require("../models/courierModel");
 
 const { mapUserForAdmin } = require("./adminUserService");
+const { clearRideChatMessages } = require("./rideChatService");
 
 const buildDailySeries = async (Model, days = 7) => {
   const start = new Date();
@@ -261,6 +262,9 @@ const updateRideStatus = async (rideId, status) => {
   }
   const ride = await Ride.findByIdAndUpdate(rideId, { status }, { returnDocument: "after" });
   if (!ride) return { status: 404, body: { message: "Ride not found" } };
+  if (status === "completed") {
+    await clearRideChatMessages(rideId);
+  }
   return { status: 200, body: { success: true, ride } };
 };
 

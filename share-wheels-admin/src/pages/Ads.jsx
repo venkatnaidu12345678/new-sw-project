@@ -9,6 +9,13 @@ import {
 } from "../api/client";
 import PageHeader from "../components/ui/PageHeader";
 import Loading from "../components/ui/Loading";
+import SearchInput from "../components/ui/SearchInput";
+import FilterBar from "../components/ui/FilterBar";
+import AdminPageShell, { AdminTablePanel } from "../components/ui/AdminPageShell";
+import Pagination from "../components/ui/Pagination";
+import { usePagination } from "../hooks/usePagination";
+import IconActionButton, { TableActions } from "../components/ui/IconActionButton";
+import { IconEdit, IconPause, IconPlay, IconTrash } from "../components/ui/icons";
 import { Alert, btnClass, inputClass, Table, Th, Td } from "../components/ui/primitives";
 
 const PLACEMENT_LABELS = {
@@ -76,6 +83,10 @@ export default function Ads() {
     if (!q) return true;
     const hay = `${ad.title || ""} ${ad.type || ""} ${ad.placement || ""}`.toLowerCase();
     return hay.includes(q);
+  });
+
+  const { page, setPage, paginatedItems, totalPages, totalItems, pageSize } = usePagination(shownAds, {
+    resetDeps: [search, filterPlacement],
   });
 
   const setField = (key, value) => setForm((f) => ({ ...f, [key]: value }));
@@ -193,21 +204,19 @@ export default function Ads() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl">
-      <PageHeader title="Ads Manager" subtitle="Banner, native, and video placements for the mobile app">
+    <AdminPageShell>
+      <PageHeader compact title="Ads Manager" subtitle="Banner, native, and video placements for the mobile app">
         <button type="button" className={btnClass("primary", "sm")} onClick={openCreate}>
           Create ad
         </button>
       </PageHeader>
 
-      {error && !modalOpen ? <Alert className="mb-4">{error}</Alert> : null}
+      {error && !modalOpen ? <Alert className="mb-3 shrink-0">{error}</Alert> : null}
 
-      <div className="mb-5 flex flex-wrap gap-2">
-        <input
-          className={inputClass("max-w-sm")}
+      <FilterBar>
+        <SearchInput
           placeholder="Search title, type, placement…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onDebouncedChange={setSearch}
         />
         <select className={inputClass("max-w-xs")} value={filterPlacement} onChange={(e) => setFilterPlacement(e.target.value)}>
           <option value="">All placements</option>
@@ -218,33 +227,35 @@ export default function Ads() {
         <button type="button" className={btnClass("secondary", "sm")} onClick={load}>
           Refresh
         </button>
-      </div>
+      </FilterBar>
 
-      {loading ? (
-        <Loading message="Loading ads..." />
-      ) : (
-        <Table>
-          <thead>
-            <tr>
-              <Th>Preview</Th>
-              <Th>Title</Th>
-              <Th>Type</Th>
-              <Th>Placement</Th>
-              <Th>Priority</Th>
-              <Th>Status</Th>
-              <Th>Views / Clicks</Th>
-              <Th>Actions</Th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 bg-white">
-            {shownAds.length === 0 ? (
-              <tr>
-                <Td colSpan={8} className="py-12 text-center text-slate-500">
-                  No ads match your filters.
-                </Td>
-              </tr>
-            ) : (
-              shownAds.map((ad) => (
+      <AdminTablePanel>
+        {loading ? (
+          <Loading message="Loading ads..." className="flex-1 py-8" />
+        ) : (
+          <>
+            <Table fill>
+              <thead>
+                <tr>
+                  <Th sticky>Preview</Th>
+                  <Th sticky>Title</Th>
+                  <Th sticky>Type</Th>
+                  <Th sticky>Placement</Th>
+                  <Th sticky>Priority</Th>
+                  <Th sticky>Status</Th>
+                  <Th sticky>Views / Clicks</Th>
+                  <Th sticky>Actions</Th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {totalItems === 0 ? (
+                  <tr>
+                    <Td colSpan={8} className="py-10 text-center text-slate-500">
+                      No ads match your filters.
+                    </Td>
+                  </tr>
+                ) : (
+                  paginatedItems.map((ad) => (
                 <tr key={ad._id} className="hover:bg-slate-50/80">
                   <Td>
                     {ad.mediaUrl ? (
@@ -275,18 +286,31 @@ export default function Ads() {
                   </Td>
                   <Td>{ad.impressions || 0} / {ad.clicks || 0}</Td>
                   <Td>
-                    <div className="flex flex-wrap gap-1.5">
-                      <button type="button" className={btnClass("secondary", "sm")} onClick={() => startEdit(ad)}>Edit</button>
-                      <button type="button" className={btnClass("secondary", "sm")} onClick={() => toggleActive(ad)}>{ad.isActive ? "Pause" : "Activate"}</button>
-                      <button type="button" className={btnClass("danger", "sm")} onClick={() => handleDelete(ad._id)}>Delete</button>
-                    </div>
+                    <TableActions>
+                      <IconActionButton icon={IconEdit} label="Edit ad" onClick={() => startEdit(ad)} />
+                      <IconActionButton
+                        icon={ad.isActive ? IconPause : IconPlay}
+                        label={ad.isActive ? "Pause ad" : "Activate ad"}
+                        variant="ghost"
+                        onClick={() => toggleActive(ad)}
+                      />
+                      <IconActionButton
+                        icon={IconTrash}
+                        label="Delete ad"
+                        variant="danger"
+                        onClick={() => handleDelete(ad._id)}
+                      />
+                    </TableActions>
                   </Td>
                 </tr>
               ))
-            )}
-          </tbody>
-        </Table>
-      )}
+                )}
+              </tbody>
+            </Table>
+            <Pagination page={page} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} onPageChange={setPage} />
+          </>
+        )}
+      </AdminTablePanel>
 
       {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={closeModal} role="presentation">
@@ -368,6 +392,6 @@ export default function Ads() {
           </div>
         </div>
       ) : null}
-    </div>
+    </AdminPageShell>
   );
 }

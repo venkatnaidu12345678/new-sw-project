@@ -25,7 +25,7 @@ import Animated, {
   FadeInDown,
   FadeInUp,
 } from "react-native-reanimated";
-import { AUTH_COLORS } from "../../theme/authTheme";
+import { AUTH_COLORS, AUTH_GRADIENTS } from "../../theme/authTheme";
 import { LAYOUT, scale, verticalScale, moderateScale } from "../../theme/layout";
 import ScreenContainer from "../../Components/ui/ScreenContainer";
 import SplashBackground from "../../Components/splash/SplashBackground";
@@ -35,8 +35,8 @@ import { INTRO_CTA_DELAY_MS } from "../../theme/splashTiming";
 const { width: SCREEN_W } = Dimensions.get("window");
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-const GRADIENT_COLORS = ["#0F172A", "#1E3A8A", "#2563EB", "#38BDF8"];
-const GRADIENT_LOCATIONS = [0, 0.32, 0.68, 1];
+const GRADIENT_COLORS = AUTH_GRADIENTS.screen;
+const GRADIENT_LOCATIONS = AUTH_GRADIENTS.screenLocations;
 
 const FEATURES = ["Carpool", "Courier", "Community"];
 
