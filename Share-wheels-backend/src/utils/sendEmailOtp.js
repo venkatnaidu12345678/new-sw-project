@@ -1,6 +1,10 @@
 const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 
 const isProduction = () => String(process.env.NODE_ENV || "").toLowerCase() === "production";
+
+const getResendApiKey = () => String(process.env.RESEND_API_KEY || "").trim();
+const getBrevoApiKey = () => String(process.env.BREVO_API_KEY || "").trim();
 
 const isSmtpConfigured = () => {
   const host = process.env.SMTP_HOST;
@@ -9,16 +13,66 @@ const isSmtpConfigured = () => {
   return Boolean(host && user && pass);
 };
 
+const isHttpEmailConfigured = () => Boolean(getResendApiKey() || getBrevoApiKey());
+
+const isEmailConfigured = () => isHttpEmailConfigured() || isSmtpConfigured();
+
+const resolveFromAddress = () => {
+  if (getResendApiKey()) {
+    return (
+      process.env.RESEND_FROM ||
+      process.env.EMAIL_FROM ||
+      "Share Wheels <onboarding@resend.dev>"
+    );
+  }
+  return (
+    process.env.EMAIL_FROM ||
+    process.env.SMTP_FROM ||
+    process.env.SMTP_USER ||
+    "noreply@sharewheels.app"
+  );
+};
+
+const parseFromAddress = (from) => {
+  const raw = String(from || "").trim();
+  const match = raw.match(/^(.+?)\s*<([^>]+)>$/);
+  if (match) {
+    return { name: match[1].trim(), email: match[2].trim() };
+  }
+  return { name: "Share Wheels", email: raw };
+};
+
 /** Safe status for /health — no secrets. */
 const getSmtpStatus = () => {
-  const configured = isSmtpConfigured();
+  const resend = Boolean(getResendApiKey());
+  const brevo = Boolean(getBrevoApiKey());
+  const smtp = isSmtpConfigured();
   const port = Number(process.env.SMTP_PORT || 587);
+
+  let provider = "none";
+  if (resend) provider = "resend";
+  else if (brevo) provider = "brevo";
+  else if (smtp) provider = "smtp";
+
   return {
-    configured,
-    host: configured ? String(process.env.SMTP_HOST).trim() : null,
-    port: configured ? port : null,
-    fromSet: Boolean(process.env.SMTP_FROM || process.env.SMTP_USER),
-    mode: configured ? (isProduction() ? "production" : "development") : "missing",
+    configured: isEmailConfigured(),
+    provider,
+    httpApi: resend || brevo,
+    resend,
+    brevo,
+    smtp,
+    host: smtp ? String(process.env.SMTP_HOST).trim() : null,
+    port: smtp ? port : null,
+    fromSet: Boolean(
+      process.env.EMAIL_FROM ||
+        process.env.RESEND_FROM ||
+        process.env.SMTP_FROM ||
+        process.env.SMTP_USER
+    ),
+    renderNote:
+      isProduction() && smtp && !resend && !brevo
+        ? "Render free tier blocks SMTP ports 587/465 — set RESEND_API_KEY or BREVO_API_KEY"
+        : null,
   };
 };
 
@@ -47,16 +101,7 @@ function getTransporter() {
   });
 }
 
-async function sendPasswordResetOtpEmail(to, otp, userName) {
-  const recipient = String(to || "").trim().toLowerCase();
-  const code = String(otp || "").trim();
-  if (!recipient || !code) {
-    throw new Error("Email recipient and OTP are required");
-  }
-
-  const from =
-    process.env.SMTP_FROM || process.env.SMTP_USER || "noreply@sharewheels.app";
-  const subject = "Share Wheels — Password reset code";
+const buildResetEmail = (userName, code) => {
   const greeting = userName ? `Hi ${userName},` : "Hi,";
   const text = `${greeting}
 
@@ -79,25 +124,119 @@ If you did not request this, you can ignore this email.
     </div>
   `;
 
+  return { subject: "Share Wheels — Password reset code", text, html };
+};
+
+async function sendViaResend({ from, to, subject, text, html }) {
+  const apiKey = getResendApiKey();
+  if (!apiKey) return null;
+
+  const resend = new Resend(apiKey);
+  const { data, error } = await resend.emails.send({
+    from,
+    to: [to],
+    subject,
+    text,
+    html,
+  });
+
+  if (error) {
+    throw new Error(error.message || "Resend send failed");
+  }
+  return { sent: true, provider: "resend", id: data?.id };
+}
+
+async function sendViaBrevo({ from, to, subject, text, html }) {
+  const apiKey = getBrevoApiKey();
+  if (!apiKey) return null;
+
+  const sender = parseFromAddress(from);
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "api-key": apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      sender: { name: sender.name, email: sender.email },
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+      textContent: text,
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = data?.message || data?.error || `Brevo API error (${res.status})`;
+    throw new Error(msg);
+  }
+  return { sent: true, provider: "brevo", id: data?.messageId };
+}
+
+async function sendViaSmtp({ from, to, subject, text, html }) {
   const transporter = getTransporter();
-  if (!transporter) {
+  if (!transporter) return null;
+
+  await transporter.sendMail({ from, to, subject, text, html });
+  return { sent: true, provider: "smtp" };
+}
+
+async function sendPasswordResetOtpEmail(to, otp, userName) {
+  const recipient = String(to || "").trim().toLowerCase();
+  const code = String(otp || "").trim();
+  if (!recipient || !code) {
+    throw new Error("Email recipient and OTP are required");
+  }
+
+  const from = resolveFromAddress();
+  const { subject, text, html } = buildResetEmail(userName, code);
+  const payload = { from, to: recipient, subject, text, html };
+
+  if (!isEmailConfigured()) {
     if (isProduction()) {
-      throw new Error("SMTP is not configured on the server");
+      throw new Error(
+        "Email is not configured. Set RESEND_API_KEY (recommended on Render) or BREVO_API_KEY."
+      );
     }
-    console.log(`[Email OTP] SMTP not configured. Reset code for ${recipient}: ${code}`);
+    console.log(`[Email OTP] Email not configured. Reset code for ${recipient}: ${code}`);
     return { sent: false, devLogged: true };
   }
 
-  try {
-    await transporter.sendMail({ from, to: recipient, subject, text, html });
-    return { sent: true };
-  } catch (err) {
-    const detail = err?.response || err?.code || err?.message || "unknown error";
-    console.error("[Email OTP] sendMail failed:", detail);
-    throw new Error(typeof detail === "string" ? detail : err.message || "SMTP send failed");
+  // HTTP APIs use port 443 — works on Render free tier (SMTP 587/465 is blocked).
+  const senders = [];
+  if (getResendApiKey()) senders.push(() => sendViaResend(payload));
+  if (getBrevoApiKey()) senders.push(() => sendViaBrevo(payload));
+  if (isSmtpConfigured()) senders.push(() => sendViaSmtp(payload));
+
+  let lastError = null;
+  for (const attempt of senders) {
+    try {
+      const result = await attempt();
+      if (result?.sent) return result;
+    } catch (err) {
+      lastError = err;
+      const code = err?.code || err?.message || "";
+      console.error("[Email OTP] send failed:", code);
+      // SMTP timeout on Render — try next provider if available
+      if (code === "ETIMEDOUT" || String(code).includes("ETIMEDOUT")) continue;
+      throw err;
+    }
   }
+
+  if (lastError) {
+    const timedOut = String(lastError.code || lastError.message).includes("ETIMEDOUT");
+    if (timedOut && isProduction() && isSmtpConfigured() && !isHttpEmailConfigured()) {
+      throw new Error(
+        "SMTP timed out — Render free tier blocks ports 587/465. Add RESEND_API_KEY or upgrade Render."
+      );
+    }
+    throw lastError;
+  }
+
+  throw new Error("Email could not be sent");
 }
 
 module.exports = sendPasswordResetOtpEmail;
-module.exports.isSmtpConfigured = isSmtpConfigured;
+module.exports.isSmtpConfigured = isEmailConfigured;
 module.exports.getSmtpStatus = getSmtpStatus;
