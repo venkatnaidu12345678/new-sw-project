@@ -17,22 +17,6 @@ const isHttpEmailConfigured = () => Boolean(getResendApiKey() || getBrevoApiKey(
 
 const isEmailConfigured = () => isHttpEmailConfigured() || isSmtpConfigured();
 
-const resolveFromAddress = () => {
-  if (getResendApiKey()) {
-    return (
-      process.env.RESEND_FROM ||
-      process.env.EMAIL_FROM ||
-      "Share Wheels <onboarding@resend.dev>"
-    );
-  }
-  return (
-    process.env.EMAIL_FROM ||
-    process.env.SMTP_FROM ||
-    process.env.SMTP_USER ||
-    "noreply@sharewheels.app"
-  );
-};
-
 const parseFromAddress = (from) => {
   const raw = String(from || "").trim();
   const match = raw.match(/^(.+?)\s*<([^>]+)>$/);
@@ -42,21 +26,64 @@ const parseFromAddress = (from) => {
   return { name: "Share Wheels", email: raw };
 };
 
+const isResendTestFrom = (from) => {
+  const email = parseFromAddress(from).email.toLowerCase();
+  return email === "onboarding@resend.dev";
+};
+
+const getResendAccountEmail = () =>
+  String(process.env.RESEND_ACCOUNT_EMAIL || process.env.SMTP_USER || "")
+    .trim()
+    .toLowerCase();
+
+const resolveResendFrom = () =>
+  process.env.RESEND_FROM ||
+  process.env.EMAIL_FROM ||
+  "Share Wheels <onboarding@resend.dev>";
+
+const resolveBrevoFrom = () =>
+  process.env.BREVO_FROM ||
+  process.env.EMAIL_FROM ||
+  process.env.SMTP_FROM ||
+  process.env.SMTP_USER ||
+  "Share Wheels <sharewheels1998@gmail.com>";
+
+const resolveSmtpFrom = () =>
+  process.env.EMAIL_FROM ||
+  process.env.SMTP_FROM ||
+  process.env.SMTP_USER ||
+  "noreply@sharewheels.app";
+
+const isRetryableProviderError = (err) => {
+  const msg = String(err?.message || err?.code || "");
+  return (
+    msg.includes("ETIMEDOUT") ||
+    msg.includes("testing emails to your own email") ||
+    msg.includes("verify a domain at resend.com")
+  );
+};
+
 /** Safe status for /health — no secrets. */
 const getSmtpStatus = () => {
   const resend = Boolean(getResendApiKey());
   const brevo = Boolean(getBrevoApiKey());
   const smtp = isSmtpConfigured();
   const port = Number(process.env.SMTP_PORT || 587);
+  const resendFrom = resolveResendFrom();
+  const resendTestMode = resend && isResendTestFrom(resendFrom);
+  const canSendToAnyUser = brevo || (resend && !resendTestMode);
 
   let provider = "none";
-  if (resend) provider = "resend";
-  else if (brevo) provider = "brevo";
+  if (brevo) provider = "brevo";
+  else if (resend && !resendTestMode) provider = "resend";
+  else if (resend) provider = "resend-test";
   else if (smtp) provider = "smtp";
 
   return {
     configured: isEmailConfigured(),
     provider,
+    canSendToAnyUser,
+    resendTestMode,
     httpApi: resend || brevo,
     resend,
     brevo,
@@ -66,12 +93,14 @@ const getSmtpStatus = () => {
     fromSet: Boolean(
       process.env.EMAIL_FROM ||
         process.env.RESEND_FROM ||
+        process.env.BREVO_FROM ||
         process.env.SMTP_FROM ||
         process.env.SMTP_USER
     ),
-    renderNote:
-      isProduction() && smtp && !resend && !brevo
-        ? "Render free tier blocks SMTP ports 587/465 — set RESEND_API_KEY or BREVO_API_KEY"
+    renderNote: !canSendToAnyUser
+      ? "Resend test sender only emails sharewheels1998@gmail.com — add BREVO_API_KEY or verify a domain in Resend"
+      : isProduction() && smtp && !resend && !brevo
+        ? "Render free tier blocks SMTP ports 587/465 — set BREVO_API_KEY or RESEND_API_KEY"
         : null,
   };
 };
@@ -182,6 +211,45 @@ async function sendViaSmtp({ from, to, subject, text, html }) {
   return { sent: true, provider: "smtp" };
 }
 
+function buildSenderChain(recipient, emailContent) {
+  const { subject, text, html } = emailContent;
+  const resendFrom = resolveResendFrom();
+  const brevoFrom = resolveBrevoFrom();
+  const smtpFrom = resolveSmtpFrom();
+  const resendTest = getResendApiKey() && isResendTestFrom(resendFrom);
+  const accountEmail = getResendAccountEmail();
+  const chain = [];
+
+  // Brevo: verified sender email → any recipient (best for Render without custom domain).
+  if (getBrevoApiKey()) {
+    chain.push(() =>
+      sendViaBrevo({ from: brevoFrom, to: recipient, subject, text, html })
+    );
+  }
+
+  // Resend with verified domain → any recipient.
+  if (getResendApiKey() && !resendTest) {
+    chain.push(() =>
+      sendViaResend({ from: resendFrom, to: recipient, subject, text, html })
+    );
+  }
+
+  // Resend test sender → only the Resend account email.
+  if (getResendApiKey() && resendTest && recipient === accountEmail) {
+    chain.push(() =>
+      sendViaResend({ from: resendFrom, to: recipient, subject, text, html })
+    );
+  }
+
+  if (isSmtpConfigured()) {
+    chain.push(() =>
+      sendViaSmtp({ from: smtpFrom, to: recipient, subject, text, html })
+    );
+  }
+
+  return chain;
+}
+
 async function sendPasswordResetOtpEmail(to, otp, userName) {
   const recipient = String(to || "").trim().toLowerCase();
   const code = String(otp || "").trim();
@@ -189,51 +257,45 @@ async function sendPasswordResetOtpEmail(to, otp, userName) {
     throw new Error("Email recipient and OTP are required");
   }
 
-  const from = resolveFromAddress();
-  const { subject, text, html } = buildResetEmail(userName, code);
-  const payload = { from, to: recipient, subject, text, html };
+  const emailContent = buildResetEmail(userName, code);
 
   if (!isEmailConfigured()) {
     if (isProduction()) {
       throw new Error(
-        "Email is not configured. Set RESEND_API_KEY (recommended on Render) or BREVO_API_KEY."
+        "Email is not configured. Set BREVO_API_KEY or verify a domain in Resend."
       );
     }
     console.log(`[Email OTP] Email not configured. Reset code for ${recipient}: ${code}`);
     return { sent: false, devLogged: true };
   }
 
-  // HTTP APIs use port 443 — works on Render free tier (SMTP 587/465 is blocked).
-  const senders = [];
-  if (getResendApiKey()) senders.push(() => sendViaResend(payload));
-  if (getBrevoApiKey()) senders.push(() => sendViaBrevo(payload));
-  if (isSmtpConfigured()) senders.push(() => sendViaSmtp(payload));
+  const resendTest = getResendApiKey() && isResendTestFrom(resolveResendFrom());
+  if (
+    resendTest &&
+    !getBrevoApiKey() &&
+    recipient !== getResendAccountEmail()
+  ) {
+    throw new Error(
+      "Resend test sender cannot email other users. Set BREVO_API_KEY or verify a domain at resend.com/domains"
+    );
+  }
 
+  const senders = buildSenderChain(recipient, emailContent);
   let lastError = null;
+
   for (const attempt of senders) {
     try {
       const result = await attempt();
       if (result?.sent) return result;
     } catch (err) {
       lastError = err;
-      const code = err?.code || err?.message || "";
-      console.error("[Email OTP] send failed:", code);
-      // SMTP timeout on Render — try next provider if available
-      if (code === "ETIMEDOUT" || String(code).includes("ETIMEDOUT")) continue;
+      console.error("[Email OTP] send failed:", err?.message || err?.code || err);
+      if (isRetryableProviderError(err)) continue;
       throw err;
     }
   }
 
-  if (lastError) {
-    const timedOut = String(lastError.code || lastError.message).includes("ETIMEDOUT");
-    if (timedOut && isProduction() && isSmtpConfigured() && !isHttpEmailConfigured()) {
-      throw new Error(
-        "SMTP timed out — Render free tier blocks ports 587/465. Add RESEND_API_KEY or upgrade Render."
-      );
-    }
-    throw lastError;
-  }
-
+  if (lastError) throw lastError;
   throw new Error("Email could not be sent");
 }
 
