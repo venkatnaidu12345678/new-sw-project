@@ -577,7 +577,15 @@ const forgotPassword = async ({ email }) => {
   await user.save();
 
   try {
-    await sendPasswordResetOtpEmail(user.email, otp, user.name);
+    const mailResult = await sendPasswordResetOtpEmail(user.email, otp, user.name);
+    if (!mailResult?.sent) {
+      if (process.env.NODE_ENV === "production") {
+        throw new Error("SMTP email was not sent");
+      }
+      console.warn(
+        `[Forgot password] SMTP not configured — reset code logged for ${user.email}`
+      );
+    }
   } catch (err) {
     console.error("[Forgot password] Email send failed:", err.message);
     user.otp = null;

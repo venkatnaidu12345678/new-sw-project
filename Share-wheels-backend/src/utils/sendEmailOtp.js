@@ -1,17 +1,49 @@
 const nodemailer = require("nodemailer");
 
-function getTransporter() {
+const isProduction = () => String(process.env.NODE_ENV || "").toLowerCase() === "production";
+
+const isSmtpConfigured = () => {
   const host = process.env.SMTP_HOST;
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
-  if (!host || !user || !pass) return null;
+  return Boolean(host && user && pass);
+};
 
+/** Safe status for /health — no secrets. */
+const getSmtpStatus = () => {
+  const configured = isSmtpConfigured();
   const port = Number(process.env.SMTP_PORT || 587);
+  return {
+    configured,
+    host: configured ? String(process.env.SMTP_HOST).trim() : null,
+    port: configured ? port : null,
+    fromSet: Boolean(process.env.SMTP_FROM || process.env.SMTP_USER),
+    mode: configured ? (isProduction() ? "production" : "development") : "missing",
+  };
+};
+
+function getTransporter() {
+  if (!isSmtpConfigured()) return null;
+
+  const host = String(process.env.SMTP_HOST).trim();
+  const user = String(process.env.SMTP_USER).trim();
+  const pass = String(process.env.SMTP_PASS).trim();
+  const port = Number(process.env.SMTP_PORT || 587);
+  const secureEnv = String(process.env.SMTP_SECURE || "").toLowerCase();
+  const secure = secureEnv === "true" || secureEnv === "1" || port === 465;
+
   return nodemailer.createTransport({
     host,
     port,
-    secure: port === 465,
+    secure,
     auth: { user, pass },
+    requireTLS: !secure && port === 587,
+    connectionTimeout: 20000,
+    greetingTimeout: 20000,
+    socketTimeout: 20000,
+    tls: {
+      minVersion: "TLSv1.2",
+    },
   });
 }
 
@@ -49,12 +81,23 @@ If you did not request this, you can ignore this email.
 
   const transporter = getTransporter();
   if (!transporter) {
+    if (isProduction()) {
+      throw new Error("SMTP is not configured on the server");
+    }
     console.log(`[Email OTP] SMTP not configured. Reset code for ${recipient}: ${code}`);
     return { sent: false, devLogged: true };
   }
 
-  await transporter.sendMail({ from, to: recipient, subject, text, html });
-  return { sent: true };
+  try {
+    await transporter.sendMail({ from, to: recipient, subject, text, html });
+    return { sent: true };
+  } catch (err) {
+    const detail = err?.response || err?.code || err?.message || "unknown error";
+    console.error("[Email OTP] sendMail failed:", detail);
+    throw new Error(typeof detail === "string" ? detail : err.message || "SMTP send failed");
+  }
 }
 
 module.exports = sendPasswordResetOtpEmail;
+module.exports.isSmtpConfigured = isSmtpConfigured;
+module.exports.getSmtpStatus = getSmtpStatus;

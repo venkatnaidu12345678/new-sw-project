@@ -29,12 +29,16 @@ app.use(express.json());
 /** Used by the mobile app to wake Render before FCM token registration. */
 app.get("/health", (_req, res) => {
   const { isFirebaseReady, getFirebaseStatus } = require("./utils/firebaseAdmin");
+  const { getSmtpStatus } = require("./utils/sendEmailOtp");
   const fcm = getFirebaseStatus();
+  const smtp = getSmtpStatus();
   res.status(200).json({
     ok: true,
     service: "share-wheels-backend",
     fcmPushEnabled: isFirebaseReady(),
-    fcm: fcm,
+    fcm,
+    smtp,
+    passwordResetEmailEnabled: smtp.configured,
   });
 });
 
