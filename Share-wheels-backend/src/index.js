@@ -27,18 +27,31 @@ app.use(cors());
 app.use(express.json());
 
 /** Used by the mobile app to wake Render before FCM token registration. */
-app.get("/health", (_req, res) => {
+app.get("/health", async (_req, res) => {
   const { isFirebaseReady, getFirebaseStatus } = require("./utils/firebaseAdmin");
-  const { getSmtpStatus } = require("./utils/sendEmailOtp");
+  const {
+    getPasswordResetStatus,
+    probeFirebaseAuthConfiguration,
+  } = require("./utils/firebaseAuthAdmin");
   const fcm = getFirebaseStatus();
-  const smtp = getSmtpStatus();
+  const passwordReset = getPasswordResetStatus();
+  let authProbe = { ok: false, reason: "not_checked" };
+  try {
+    authProbe = await probeFirebaseAuthConfiguration();
+  } catch (error) {
+    authProbe = { ok: false, reason: error?.message || "probe_failed" };
+  }
   res.status(200).json({
     ok: true,
     service: "share-wheels-backend",
     fcmPushEnabled: isFirebaseReady(),
     fcm,
-    smtp,
-    passwordResetEmailEnabled: smtp.configured,
+    passwordReset: {
+      ...passwordReset,
+      emailPasswordEnabled: authProbe.ok,
+      probe: authProbe,
+    },
+    passwordResetEmailEnabled: authProbe.ok,
   });
 });
 

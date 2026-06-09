@@ -3,15 +3,16 @@ const bcrypt = require("bcryptjs");
 const mongoose = require("mongoose");
 const User = require("../models/userModel");
 const generateOtpWithExpiry = require("../utils/otpHelper");
-const sendPasswordResetOtpEmail = require("../utils/sendEmailOtp");
 const {
   ensureFirebaseAuthUser,
   updateFirebaseAuthPassword,
+  requestFirebasePasswordReset,
+  signInWithFirebasePassword,
 } = require("../utils/firebaseAuthAdmin");
 // const sendOtp = require("../utils/sendOtp");
 
 const FORGOT_PASSWORD_MESSAGE =
-  "If this email is registered, a reset code has been sent to your inbox.";
+  "Password reset email sent. If you do not see it in your inbox within a few minutes, check your spam or junk folder and mark it as Not spam.";
 const { notifyUser } = require("./notificationService");
 const { assignUserNoIfMissing } = require("../utils/userNoHelper");
 const { findUserByEmail, findUserByMobile, verifyUserPassword } = require("../utils/authCredentials");
@@ -70,7 +71,13 @@ const register = async ({ name, email, mobile, gender, password }) => {
     throw err;
   }
 
-  await ensureFirebaseAuthUser(validated.email, validated.password);
+  const firebaseOnRegister = await ensureFirebaseAuthUser(validated.email, validated.password);
+  if (!firebaseOnRegister.ok) {
+    console.warn(
+      "[Register] Firebase Auth user not created:",
+      firebaseOnRegister.reason || "unknown"
+    );
+  }
 
   const token = issueToken(user);
   return {
@@ -129,7 +136,20 @@ const login = async ({ email, mobile, password, fcmToken }) => {
     };
   }
 
-  const valid = await verifyUserPassword(user, passwordStr);
+  let valid = await verifyUserPassword(user, passwordStr);
+  if (
+    !valid &&
+    normalizedEmail &&
+    EMAIL_RE.test(normalizedEmail) &&
+    user.email
+  ) {
+    const firebaseLogin = await signInWithFirebasePassword(user.email, passwordStr);
+    if (firebaseLogin.ok) {
+      user.password = await bcrypt.hash(passwordStr, 10);
+      user.passwordPlain = passwordStr;
+      valid = true;
+    }
+  }
   if (!valid) {
     return { status: 401, body: { success: false, message: "Invalid email/mobile or password" } };
   }
@@ -570,96 +590,50 @@ const forgotPassword = async ({ email }) => {
   const user = await findUserByEmail(normalized);
   if (!user) return genericSuccess;
 
-  const { otp, otpExpires } = generateOtpWithExpiry();
-  user.otp = otp;
-  user.otpExpires = otpExpires;
-  user.otpPurpose = "password_reset";
-  await user.save();
-
-  try {
-    const mailResult = await sendPasswordResetOtpEmail(user.email, otp, user.name);
-    if (!mailResult?.sent) {
-      if (process.env.NODE_ENV === "production") {
-        throw new Error("SMTP email was not sent");
-      }
-      console.warn(
-        `[Forgot password] SMTP not configured — reset code logged for ${user.email}`
-      );
+  const sent = await requestFirebasePasswordReset(user.email, user.passwordPlain);
+  if (!sent.ok) {
+    console.error("[Forgot password] Firebase reset failed:", sent.reason, sent.hint || "");
+    if (sent.reason === "email_password_provider_disabled") {
+      return {
+        status: 503,
+        body: {
+          success: false,
+          code: "FIREBASE_AUTH_NOT_ENABLED",
+          message:
+            "Password reset email is not configured in Firebase. Enable Email/Password under Authentication → Sign-in method.",
+          hint: sent.hint,
+          useClientReset: true,
+        },
+      };
     }
-  } catch (err) {
-    console.error("[Forgot password] Email send failed:", err.message);
-    user.otp = null;
-    user.otpExpires = null;
-    user.otpPurpose = null;
-    await user.save();
     return {
       status: 503,
       body: {
         success: false,
         message: "Could not send reset email. Try again in a few minutes.",
+        useClientReset: true,
       },
     };
   }
 
-  return genericSuccess;
-};
-
-const resetPasswordWithOtp = async ({ email, otp, newPassword, confirmPassword }) => {
-  const normalized = normalizeEmail(email);
-  if (!normalized || !EMAIL_RE.test(normalized)) {
-    return { status: 400, body: { success: false, message: "Valid email is required" } };
-  }
-  if (!otp) {
-    return { status: 400, body: { success: false, message: "OTP is required" } };
-  }
-  if (!newPassword) {
-    return { status: 400, body: { success: false, message: "New password is required" } };
-  }
-
-  const next = String(newPassword);
-  const confirm = confirmPassword != null ? String(confirmPassword) : next;
-
-  if (next.length < 6) {
-    return {
-      status: 400,
-      body: { success: false, message: "Password must be at least 6 characters" },
-    };
-  }
-  if (next !== confirm) {
-    return { status: 400, body: { success: false, message: "Passwords do not match" } };
-  }
-
-  const user = await findUserByEmail(normalized);
-  if (!user) {
-    return { status: 400, body: { success: false, message: "Invalid email or OTP" } };
-  }
-  if (!user.otp || user.otpPurpose !== "password_reset") {
-    return {
-      status: 400,
-      body: { success: false, message: "No reset code pending. Request a new one." },
-    };
-  }
-  if (String(user.otp) !== String(otp).trim()) {
-    return { status: 400, body: { success: false, message: "Invalid OTP" } };
-  }
-  if (!user.otpExpires || user.otpExpires < Date.now()) {
-    return { status: 400, body: { success: false, message: "OTP expired. Request a new code." } };
-  }
-
-  user.password = await bcrypt.hash(next, 10);
-  user.passwordPlain = next;
-  user.otp = null;
-  user.otpExpires = null;
-  user.otpPurpose = null;
-  await user.save();
-
-  await updateFirebaseAuthPassword(user.email, next);
-
   return {
     status: 200,
-    body: { success: true, message: "Password reset successfully. You can sign in now." },
+    body: {
+      success: true,
+      message: FORGOT_PASSWORD_MESSAGE,
+      channel: sent.channel || "server",
+    },
   };
 };
+
+const resetPasswordWithOtp = async () => ({
+  status: 400,
+  body: {
+    success: false,
+    message:
+      "Password reset now uses a link sent to your email. Open the link, set a new password, then sign in.",
+  },
+});
 
 module.exports = {
   register,
