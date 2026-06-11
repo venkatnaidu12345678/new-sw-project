@@ -378,7 +378,12 @@ const addVehicle = async (user, body, files = {}) => {
       body: { success: false, message: "RC (registration certificate) image is required" },
     };
   }
-
+  if (!images.car_image) {
+    return {
+      status: 400,
+      body: { success: false, message: "Vehicle photo is required" },
+    };
+  }
   if (issue_date && expiry_date && new Date(issue_date) > new Date(expiry_date)) {
     return {
       status: 400,
