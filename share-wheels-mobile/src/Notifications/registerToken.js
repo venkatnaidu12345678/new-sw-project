@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { registerFcmTokenApi } from "../ApiService/AuthApiService";
-import { getDeviceTokenWithPermission } from "./FCMService";
+import { getDeviceTokenWithPermission, wasFcmTokenFailureLogged } from "./FCMService";
 import { wakeBackendIfRemote } from "../Utils/wakeBackend";
 
 const FCM_STORAGE_KEY = "FCM_DEVICE_TOKEN";
@@ -49,9 +49,11 @@ export async function syncFcmTokenWithBackend(options = {}) {
     fcmToken = await getDeviceTokenWithPermission();
   }
   if (!fcmToken) {
-    console.warn(
-      "[FCM] no device token — allow Notifications in Android settings; confirm release SHA in Firebase and replace google-services.json (npm run android:sha)"
-    );
+    if (!wasFcmTokenFailureLogged()) {
+      console.warn(
+        "[FCM] no device token — allow Notifications in Android settings; add app SHA fingerprints in Firebase and replace google-services.json (npm run android:sha)"
+      );
+    }
     return null;
   }
 

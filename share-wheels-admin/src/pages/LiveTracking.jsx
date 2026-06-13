@@ -1,72 +1,23 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-import { getActiveTracking, getTrackingDetail } from "../api/client";
+import { useEffect, useState, useMemo } from "react";
 import PageHeader from "../components/ui/PageHeader";
 import Loading from "../components/ui/Loading";
 import SearchInput from "../components/ui/SearchInput";
 import AdminPageShell from "../components/ui/AdminPageShell";
 import Pagination from "../components/ui/Pagination";
+import GoogleTrackingMap from "../components/maps/GoogleTrackingMap";
+import { usePlannedRoutePath } from "../hooks/usePlannedRoutePath";
 import { usePagination } from "../hooks/usePagination";
+import {
+  useAdminLiveTracking,
+  normalizeTrackingLocation,
+} from "../hooks/useAdminLiveTracking";
 import { Alert, btnClass, Table, Th, Td } from "../components/ui/primitives";
-import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
-import markerIcon from "leaflet/dist/images/marker-icon.png";
-import markerShadow from "leaflet/dist/images/marker-shadow.png";
-
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: markerIcon2x,
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow,
-});
-
-const roleIcon = (role) =>
-  L.divIcon({
-    className: "",
-    html: `<div style="
-      width:34px;height:34px;border-radius:50%;
-      display:flex;align-items:center;justify-content:center;
-      font-size:17px;border:2px solid #fff;
-      box-shadow:0 2px 6px rgba(0,0,0,.35);
-      background:${role === "driver" ? "#2563eb" : role === "courier" ? "#d97706" : "#16a34a"};
-    ">${role === "driver" ? "D" : role === "courier" ? "C" : "P"}</div>`,
-    iconSize: [34, 34],
-    iconAnchor: [17, 17],
-  });
-
-const DEFAULT_CENTER = [17.385, 78.4867];
-
-const normalizeLocation = (loc) => {
-  if (!loc) return null;
-  const lat = Number(loc.lat ?? loc.latitude);
-  const lng = Number(loc.lng ?? loc.longitude);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  return { lat, lng, updatedAt: loc.updatedAt };
-};
 
 const rideKey = (id) => (id == null ? "" : String(id));
 
-const FitBounds = ({ points }) => {
-  const map = useMap();
-  useEffect(() => {
-    if (!points?.length) return;
-    if (points.length === 1) {
-      map.setView(points[0], 14);
-    } else {
-      map.fitBounds(points, { padding: [40, 40] });
-    }
-  }, [points, map]);
-  return null;
-};
-
-const collectMarkers = (ride, detail) => {
+const collectMarkers = (ride, routeEndpoints = {}) => {
   const markers = [];
-  const lt = detail?.liveTracking || ride?.liveTracking;
-  const driverLoc =
-    normalizeLocation(detail?.location) ||
-    normalizeLocation(lt?.driverLocation) ||
-    normalizeLocation(ride?.location);
+  const driverLoc = normalizeTrackingLocation(ride?.location);
 
   if (driverLoc) {
     markers.push({
@@ -77,14 +28,9 @@ const collectMarkers = (ride, detail) => {
     });
   }
 
-  const participants =
-    detail?.participants ||
-    detail?.liveTracking?.participantLocations ||
-    ride?.participants ||
-    [];
-
+  const participants = ride?.participants || [];
   participants.forEach((p, i) => {
-    const loc = normalizeLocation(p.location || p);
+    const loc = normalizeTrackingLocation(p.location || p);
     if (!loc) return;
     if (p.role === "driver" && driverLoc) return;
     markers.push({
@@ -95,60 +41,78 @@ const collectMarkers = (ride, detail) => {
     });
   });
 
+  const rideId = ride?.rideId || "ride";
+  if (routeEndpoints.from) {
+    markers.push({
+      key: `${rideId}-route-from`,
+      lat: routeEndpoints.from.lat,
+      lng: routeEndpoints.from.lng,
+      role: "route-from",
+      label: routeEndpoints.from.label || "Pickup",
+    });
+  }
+  if (routeEndpoints.to) {
+    markers.push({
+      key: `${rideId}-route-to`,
+      lat: routeEndpoints.to.lat,
+      lng: routeEndpoints.to.lng,
+      role: "route-to",
+      label: routeEndpoints.to.label || "Destination",
+    });
+  }
+
+  const stopovers = ride?.stopovers || [];
+  stopovers.forEach((stop, index) => {
+    const lat = Number(stop?.lat ?? stop?.latitude);
+    const lng = Number(stop?.lng ?? stop?.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    markers.push({
+      key: `${rideId}-stopover-${index}`,
+      lat,
+      lng,
+      role: "stopover",
+      label: stop?.label || `Stop ${index + 1}`,
+    });
+  });
+
   return markers;
 };
 
 export default function LiveTracking() {
-  const [rides, setRides] = useState([]);
+  const { rides, loading, error, socketConnected, refresh } = useAdminLiveTracking();
   const [selectedId, setSelectedId] = useState(null);
-  const [detail, setDetail] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
 
-  const load = useCallback(async () => {
-    try {
-      const res = await getActiveTracking();
-      const list = (res.rides || []).map((r) => ({
-        ...r,
-        rideId: rideKey(r.rideId),
-        location: normalizeLocation(r.location),
-      }));
-      setRides(list);
-      setError("");
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (!selectedId && rides.length > 0) {
+      setSelectedId(rides[0].rideId);
     }
-  }, []);
+  }, [rides, selectedId]);
 
   useEffect(() => {
-    load();
-    const interval = setInterval(load, 5000);
-    return () => clearInterval(interval);
-  }, [load]);
-
-  useEffect(() => {
-    if (!selectedId) {
-      setDetail(null);
-      return;
+    if (selectedId && !rides.some((r) => rideKey(r.rideId) === rideKey(selectedId))) {
+      setSelectedId(rides[0]?.rideId || null);
     }
-    getTrackingDetail(selectedId)
-      .then((res) => {
-        const ride = res.ride || {};
-        setDetail({
-          ...ride,
-          location: normalizeLocation(ride.location || ride.liveTracking?.driverLocation),
-        });
-      })
-      .catch(() => setDetail(null));
-  }, [selectedId]);
+  }, [rides, selectedId]);
 
   const selectedRide = useMemo(
     () => rides.find((r) => rideKey(r.rideId) === rideKey(selectedId)),
     [rides, selectedId]
   );
+
+  const savedPolyline = selectedRide?.routePolyline || "";
+  const routeStopovers = selectedRide?.stopovers || [];
+
+  const { plannedPath, endpoints: routeEndpoints, loading: routeLoading, error: routeError } =
+    usePlannedRoutePath({
+      fromCoords: selectedRide?.fromCoords || null,
+      toCoords: selectedRide?.toCoords || null,
+      fromLabel: selectedRide?.from || "",
+      toLabel: selectedRide?.to || "",
+      savedPolyline,
+      stopovers: routeStopovers,
+      enabled: !!selectedRide,
+    });
 
   const filteredRides = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -159,60 +123,80 @@ export default function LiveTracking() {
     });
   }, [rides, search]);
 
-  const { page, setPage, paginatedItems, totalPages, totalItems, pageSize } = usePagination(filteredRides, {
-    pageSize: 6,
-    resetDeps: [search],
-  });
+  const { page, setPage, paginatedItems, totalPages, totalItems, pageSize } = usePagination(
+    filteredRides,
+    {
+      pageSize: 6,
+      resetDeps: [search],
+    }
+  );
 
-  const pathPositions = useMemo(() => {
-    const path = detail?.liveTracking?.locationHistory || selectedRide?.path || [];
+  const gpsPath = useMemo(() => {
+    const path = selectedRide?.path || [];
     return path
       .map((p) => {
         const lat = Number(p.lat);
         const lng = Number(p.lng);
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-        return [lat, lng];
+        return { lat, lng };
       })
       .filter(Boolean);
-  }, [detail, selectedRide]);
+  }, [selectedRide]);
 
   const allMarkers = useMemo(() => {
     if (selectedRide) {
-      return collectMarkers(selectedRide, detail);
+      return collectMarkers(selectedRide, routeEndpoints);
     }
-    return rides.flatMap((r) => collectMarkers(r, null));
-  }, [rides, selectedRide, detail]);
-
-  const mapCenter = useMemo(() => {
-    if (allMarkers.length) return [allMarkers[0].lat, allMarkers[0].lng];
-    if (pathPositions.length) return pathPositions[pathPositions.length - 1];
-    return DEFAULT_CENTER;
-  }, [allMarkers, pathPositions]);
-
-  const fitPoints = useMemo(
-    () => allMarkers.map((m) => [m.lat, m.lng]),
-    [allMarkers]
-  );
+    return rides.flatMap((r) => collectMarkers(r));
+  }, [rides, selectedRide, routeEndpoints]);
 
   return (
     <AdminPageShell>
       <PageHeader
         compact
         title="Live ride tracking"
-        subtitle="Driver, passenger, and courier GPS when a ride is started"
+        subtitle="Real-time via WebSocket — route lines in blue"
       />
-      <div className="mb-2 flex shrink-0 flex-wrap gap-3 text-xs font-semibold text-slate-600">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-brand-600 ring-2 ring-white" /> Driver
+      <div className="mb-2 flex shrink-0 flex-wrap items-center gap-3 text-xs font-semibold text-slate-600">
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 ${
+            socketConnected ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"
+          }`}
+        >
+          <span
+            className={`h-2 w-2 rounded-full ${socketConnected ? "bg-emerald-500" : "bg-amber-500"}`}
+          />
+          {socketConnected ? "Live socket connected" : "Connecting…"}
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-emerald-600 ring-2 ring-white" /> Passenger
+          <span className="h-2.5 w-2.5 rounded-full bg-[#1D4ED8] ring-2 ring-white" /> Driver
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-amber-600 ring-2 ring-white" /> Courier
+          <span className="h-2.5 w-2.5 rounded-full bg-[#059669] ring-2 ring-white" /> Passenger
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-[#EA580C] ring-2 ring-white" /> Courier
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-[#10B981] ring-2 ring-white" /> Start
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-[#E11D48] ring-2 ring-white" /> End
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-4 w-6 rounded bg-indigo-400/90" /> Planned
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-4 w-6 rounded bg-sky-500" /> Live GPS
         </span>
       </div>
       {error ? <Alert className="mb-2 shrink-0">{error}</Alert> : null}
+      {routeError && selectedRide ? (
+        <Alert className="mb-2 shrink-0">Route: {routeError}</Alert>
+      ) : null}
+      {routeLoading && selectedRide && !savedPolyline ? (
+        <p className="mb-2 shrink-0 text-xs font-medium text-slate-500">Loading route directions…</p>
+      ) : null}
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[340px_1fr]">
         <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm">
           <h3 className="mb-2 shrink-0 text-sm font-bold text-slate-800">
@@ -224,13 +208,13 @@ export default function LiveTracking() {
               placeholder="Search route or driver"
               onDebouncedChange={setSearch}
             />
-            <button type="button" className={btnClass("secondary", "sm")} onClick={load}>
+            <button type="button" className={btnClass("secondary", "sm")} onClick={refresh}>
               Refresh
             </button>
           </div>
           <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
             {loading && rides.length === 0 ? (
-              <Loading message="Loading active rides..." className="flex-1 py-6" />
+              <Loading message="Connecting to live tracking…" className="flex-1 py-6" />
             ) : totalItems === 0 ? (
               <p className="py-6 text-center text-sm text-slate-500">No active rides match your search.</p>
             ) : (
@@ -278,25 +262,12 @@ export default function LiveTracking() {
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-slate-200/80 shadow-sm">
-          <MapContainer center={mapCenter} zoom={13} style={{ height: "100%", width: "100%" }}>
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            <FitBounds points={fitPoints} />
-            {allMarkers.map((m) => (
-              <Marker key={m.key} position={[m.lat, m.lng]} icon={roleIcon(m.role)}>
-                <Popup>
-                  <strong>{m.label}</strong>
-                  <br />
-                  {m.role}
-                </Popup>
-              </Marker>
-            ))}
-            {pathPositions.length > 1 && (
-              <Polyline positions={pathPositions} color="#2563eb" weight={4} />
-            )}
-          </MapContainer>
+          <GoogleTrackingMap
+            markers={allMarkers}
+            plannedPath={plannedPath}
+            gpsPath={gpsPath}
+            fitSessionKey={selectedId || ""}
+          />
         </div>
       </div>
     </AdminPageShell>

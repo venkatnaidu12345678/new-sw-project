@@ -1,4 +1,3 @@
-import Geolocation from "@react-native-community/geolocation";
 import {
   connectAppSocket,
   getAppSocket,
@@ -8,7 +7,7 @@ import {
 import {
   startLocationWatch,
   getCachedCoords,
-  acquireGpsInstant,
+  acquireGpsPrecise,
   isGeolocationReady,
   setRideGpsMode,
 } from "../Utils/gpsService";
@@ -17,7 +16,8 @@ import { hasLocationPermission } from "../Utils/locationPermissions";
 import { normalizeRideId } from "./liveTrackingState";
 import { getActiveRideTracking } from "../Utils/activeRideTracking";
 
-const SEND_INTERVAL_MS = 4000;
+const SEND_INTERVAL_MS = 1500;
+const MIN_PUBLISH_MOVE_SQ = 1.2e-9;
 
 let session = null;
 
@@ -65,42 +65,54 @@ export async function startLiveLocationPublishing({ rideId, token }) {
   setRideGpsMode(true);
   requestBackgroundLocationForActiveRide().catch(() => {});
 
-  let watchId = null;
-  let intervalId = null;
-  let lastSent = 0;
+  let watchHandle = null;
   let cancelled = false;
+  let lastSent = 0;
+  let lastPublished = null;
+
+  const movedEnough = (coords) => {
+    if (!lastPublished) return true;
+    const dLat = coords.latitude - lastPublished.latitude;
+    const dLng = coords.longitude - lastPublished.longitude;
+    return dLat * dLat + dLng * dLng >= MIN_PUBLISH_MOVE_SQ;
+  };
+
+  const accuracyImproved = (coords) => {
+    if (!Number.isFinite(coords?.accuracy) || !Number.isFinite(lastPublished?.accuracy)) {
+      return false;
+    }
+    return coords.accuracy < lastPublished.accuracy - 4;
+  };
 
   const publish = (coords) => {
     if (cancelled || !coords) return;
     const now = Date.now();
-    if (now - lastSent < SEND_INTERVAL_MS) return;
+    const shouldSend =
+      movedEnough(coords) ||
+      accuracyImproved(coords) ||
+      now - lastSent >= SEND_INTERVAL_MS;
+
+    if (!shouldSend) return;
+
     lastSent = now;
+    lastPublished = coords;
     emitAndPersist(id, token, coords.latitude, coords.longitude);
   };
 
   await connectAppSocket();
   await joinRideRoom(id);
 
-  watchId = startLocationWatch(publish, () => {});
+  watchHandle = startLocationWatch(publish, () => {});
 
   const cached = getCachedCoords();
   if (cached) publish(cached);
-  else acquireGpsInstant().then(publish).catch(() => {});
-
-  intervalId = setInterval(() => {
-    const c = getCachedCoords();
-    if (c) publish(c);
-    if (!getAppSocket()?.connected) {
-      connectAppSocket().catch(() => {});
-    }
-  }, 15000);
+  acquireGpsPrecise().then(publish).catch(() => {});
 
   session = {
     rideId: id,
     stop: () => {
       cancelled = true;
-      if (intervalId) clearInterval(intervalId);
-      if (watchId != null) Geolocation.clearWatch(watchId);
+      watchHandle?.clear?.();
       leaveRideRoom(id);
     },
   };

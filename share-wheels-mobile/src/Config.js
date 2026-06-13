@@ -119,4 +119,7 @@ export const endPoints = {
   registerFcmTokenurl: "/auth/register-fcm-token",
   pushStatusurl: "/auth/push-status",
   legalPoliciesurl: "/legal/policies",
+  subscriptionPlansurl: "/subscriptions/plans",
+  mySubscriptionurl: "/subscriptions/me",
+  subscribePlanurl: "/subscriptions/subscribe",
 };

@@ -88,7 +88,25 @@ const getOpenRequests = async (user) => {
   return { status: 200, body: openRequests };
 };
 
+const driverSubscriptionService = require("./driverSubscriptionService");
+
 const pickPassenger = async (user, { passenger_rideId, rideId }) => {
+  const entitlement = await driverSubscriptionService.assertCanPickEnroute(
+    user._id,
+    rideId
+  );
+  if (!entitlement.ok) {
+    return {
+      status: entitlement.status || 403,
+      body: {
+        success: false,
+        message: entitlement.message,
+        code: entitlement.code,
+        subscription: entitlement.subscription || null,
+      },
+    };
+  }
+
   if (!passenger_rideId || !rideId) return { status: 400, body: { message: "passenger_rideId and rideId are required" } };
   if (!mongoose.Types.ObjectId.isValid(passenger_rideId)) return { status: 400, body: { message: "Invalid passenger_rideId" } };
   if (!mongoose.Types.ObjectId.isValid(rideId)) return { status: 400, body: { message: "Invalid rideId" } };
@@ -111,6 +129,8 @@ const pickPassenger = async (user, { passenger_rideId, rideId }) => {
   const passengerEntry = {
     userId: passengerRide.creator,
     requires_seats: passengerRide.seats_needed,
+    from: passengerRide.from || ride.from,
+    to: passengerRide.to || ride.to,
     ride_amount: passengerRide.amount_will || 0,
     status: "accepted",
     joinedAt: new Date(),
@@ -159,6 +179,8 @@ const pickPassenger = async (user, { passenger_rideId, rideId }) => {
     passengerRideId: passengerRide._id.toString(),
     type: "passenger",
   });
+
+  await driverSubscriptionService.recordEnroutePick(user._id, rideId);
 
   const detailsRes = await getRideDetails(rideId, user._id);
 

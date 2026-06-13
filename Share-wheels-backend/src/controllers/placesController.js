@@ -30,6 +30,29 @@ module.exports = {
         originLng: req.query.originLng,
         destLat: req.query.destLat,
         destLng: req.query.destLng,
+        from: req.query.from,
+        to: req.query.to,
+        waypoints: req.query.waypoints,
+      })
+    ),
+
+  alternativeRoutes: async (req, res) =>
+    handle(res, () =>
+      googleMapsService.getAlternativeRoutes({
+        originLat: req.query.originLat,
+        originLng: req.query.originLng,
+        destLat: req.query.destLat,
+        destLng: req.query.destLng,
+        from: req.query.from,
+        to: req.query.to,
+      })
+    ),
+
+  stopoverCandidates: async (req, res) =>
+    handle(res, () =>
+      googleMapsService.getStopoverCandidates({
+        polyline: req.body?.polyline || req.query.polyline,
+        max: req.body?.max || req.query.max,
       })
     ),
 };

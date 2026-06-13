@@ -19,6 +19,10 @@ import {
 
 const messaging = () => getFCMMessaging();
 
+let tokenFailureLogged = false;
+
+export const wasFcmTokenFailureLogged = () => tokenFailureLogged;
+
 export async function hasNotificationPermission() {
   const msg = messaging();
   if (Platform.OS === "ios") {
@@ -81,15 +85,18 @@ export async function getDeviceToken() {
     }
     return await getToken(msg);
   } catch (error) {
-    const code = error?.code || error?.nativeErrorCode || "";
-    console.warn(
-      "[FCM] getToken failed:",
-      error.message,
-      code ? `(code: ${code})` : "",
-      Platform.OS === "android"
-        ? "— for release APK add release SHA-1/SHA-256 in Firebase and refresh google-services.json"
-        : ""
-    );
+    if (!tokenFailureLogged) {
+      tokenFailureLogged = true;
+      const code = error?.code || error?.nativeErrorCode || "";
+      console.warn(
+        "[FCM] getToken failed:",
+        error.message,
+        code ? `(code: ${code})` : "",
+        Platform.OS === "android"
+          ? "— add debug + release SHA-1/SHA-256 in Firebase → Project settings → Your apps → com.sharewheels.app, then download a new google-services.json (npm run android:sha)"
+          : ""
+      );
+    }
     return null;
   }
 }

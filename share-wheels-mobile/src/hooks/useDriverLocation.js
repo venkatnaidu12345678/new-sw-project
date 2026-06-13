@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
-  acquireGpsInstant,
   acquireGpsForSharing,
+  acquireGpsPrecise,
   getCachedCoords,
   isGeolocationReady,
 } from "../Utils/gpsService";
@@ -36,19 +36,18 @@ export const pushDriverLocationNow = async (rideId, token, coords) => {
     return coords;
   }
 
-  const cached = getCachedCoords();
-  if (cached) {
-    publishLocationOnce(id, token, cached.latitude, cached.longitude);
-    return cached;
+  try {
+    const fix = await acquireGpsPrecise();
+    publishLocationOnce(id, token, fix.latitude, fix.longitude);
+    return fix;
+  } catch {
+    const cached = getCachedCoords();
+    if (cached) {
+      publishLocationOnce(id, token, cached.latitude, cached.longitude);
+      return cached;
+    }
+    return null;
   }
-
-  acquireGpsInstant()
-    .then((fix) =>
-      publishLocationOnce(id, token, fix.latitude, fix.longitude)
-    )
-    .catch(() => {});
-
-  return cached || null;
 };
 
 /** @deprecated Permissions are requested at sign-in only. */

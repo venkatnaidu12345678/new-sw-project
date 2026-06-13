@@ -200,9 +200,13 @@ const DriverParticipantsSheet = ({
 
   rideFrom,
 
+  rideTo,
+
   rideStatus,
 
   isRideStarted,
+
+  onViewParticipantRoute,
 
   onStartVerify,
 
@@ -260,9 +264,13 @@ const DriverParticipantsSheet = ({
 
         rideFrom={rideFrom}
 
+        rideTo={rideTo}
+
         rideStatus={rideStatus}
 
         isRideStarted={isRideStarted}
+
+        onViewParticipantRoute={onViewParticipantRoute}
 
         onVerifyPassenger={(item) => onStartVerify?.(item, "passenger")}
 

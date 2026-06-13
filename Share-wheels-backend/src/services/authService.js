@@ -79,6 +79,13 @@ const register = async ({ name, email, mobile, gender, password }) => {
     );
   }
 
+  try {
+    const { ensureDefaultSubscription } = require("./driverSubscriptionService");
+    await ensureDefaultSubscription(user._id);
+  } catch (subErr) {
+    console.warn("[Register] Free plan assignment skipped:", subErr?.message);
+  }
+
   const token = issueToken(user);
   return {
     status: 200,

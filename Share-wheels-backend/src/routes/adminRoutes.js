@@ -5,6 +5,7 @@ const adminLocationController = require("../controllers/adminLocationController"
 const adminFeedbackController = require("../controllers/adminFeedbackController");
 const adminLegalController = require("../controllers/adminLegalController");
 const adminLookupController = require("../controllers/adminLookupController");
+const adminSubscriptionController = require("../controllers/adminSubscriptionController");
 const adminAuthMiddleware = require("../middlewares/adminAuthMiddleware");
 const adUploadMiddleware = require("../middlewares/adUploadMiddleware");
 
@@ -26,6 +27,7 @@ router.get("/passenger-rides", adminController.listPassengerRides);
 router.get("/couriers", adminController.listCouriers);
 router.patch("/rides/:id/status", adminController.updateRideStatus);
 router.get("/tracking/active", adminController.activeTracking);
+router.get("/maps/directions", adminController.routeDirections);
 router.get("/tracking/:id", adminController.trackingDetail);
 
 router.get("/ads/meta", adminAdController.getMeta);
@@ -55,5 +57,11 @@ router.post("/lookups", adminLookupController.createType);
 router.post("/lookups/bulk", adminLookupController.bulkUpsertTypes);
 router.patch("/lookups/:id", adminLookupController.updateType);
 router.delete("/lookups/:id", adminLookupController.deleteType);
+
+router.get("/subscription-plans/meta", adminSubscriptionController.getMeta);
+router.get("/subscription-plans", adminSubscriptionController.listPlans);
+router.post("/subscription-plans", adminSubscriptionController.createPlan);
+router.patch("/subscription-plans/:id", adminSubscriptionController.updatePlan);
+router.delete("/subscription-plans/:id", adminSubscriptionController.deletePlan);
 
 module.exports = router;

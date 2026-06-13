@@ -15,11 +15,6 @@ import {
 import LinearGradient from "react-native-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import {
-  launchImageLibrary,
-  launchCamera,
-} from "react-native-image-picker";
-
 import PersonalInformationCard from "../Components/PersonalInformationCard";
 import Supportcard from "../Components/Supportcard";
 import { navigateRoot } from "../Utils/navigationRoot";
@@ -40,7 +35,7 @@ import Icon from "react-native-vector-icons/Ionicons";
 import { AUTH_COLORS } from "../theme/authTheme";
 import { uploadAndSetProfileImage } from "../ApiService/imageApiService";
 import { userProfile } from "../ApiService/ridesApiServices";
-import { isRemoteImageUrl } from "../Utils/imageUpload";
+import { isRemoteImageUrl, showImageSourcePicker } from "../Utils/imageUpload";
 import { useTheme } from "../context/ThemeContext";
 import { useCoachMarks } from "../context/CoachMarksContext";
 import ChangePasswordModal from "./ChangePasswordModal";
@@ -103,7 +98,7 @@ const MyProfile = () => {
       const file = {
         uri: asset.uri,
         type: asset.type || "image/jpeg",
-        name: asset.fileName || "profile.jpg",
+        name: asset.name || asset.fileName || "profile.jpg",
       };
       const result = await uploadAndSetProfileImage(token, file);
       const url = result?.profile_img;
@@ -154,35 +149,12 @@ const MyProfile = () => {
     ]);
   };
 
-  // 🔥 Image picker
-  const pickImage = () => {
-    Alert.alert("Upload Image", "Choose an option", [
-      { text: "Camera", onPress: openCamera },
-      { text: "Gallery", onPress: openGallery },
-      { text: "Cancel", style: "cancel" },
-    ]);
-  };
-
-  const openCamera = async () => {
-    const result = await launchCamera({
-      mediaType: "photo",
-      quality: 0.8,
-    });
-
-    if (!result.didCancel && result.assets?.length > 0) {
-      await persistProfilePhoto(result.assets[0]);
-    }
-  };
-
-  const openGallery = async () => {
-    const result = await launchImageLibrary({
-      mediaType: "photo",
-      quality: 0.8,
-      includeBase64: false,
-    });
-
-    if (!result.didCancel && result.assets?.length > 0) {
-      await persistProfilePhoto(result.assets[0]);
+  const pickImage = async () => {
+    try {
+      const asset = await showImageSourcePicker("profile.jpg", "Upload Image");
+      if (asset) await persistProfilePhoto(asset);
+    } catch (err) {
+      Alert.alert("Upload failed", err?.message || "Could not select image");
     }
   };
 
@@ -254,6 +226,23 @@ const MyProfile = () => {
 
         <Text style={themedStyles.sectionHeading}>Account details</Text>
         <View style={themedStyles.menuCard}>
+          <TouchableOpacity
+            style={themedStyles.menuRow}
+            onPress={() => navigation.navigate("DriverSubscription")}
+            activeOpacity={0.85}
+          >
+            <View style={[themedStyles.menuIcon, { backgroundColor: colors.tintBlue }]}>
+              <Icon name="card-outline" size={22} color={colors.primary} />
+            </View>
+            <View style={themedStyles.themeTextCol}>
+              <Text style={themedStyles.menuTitle}>Driver subscription</Text>
+              <Text style={themedStyles.themeSub}>
+                Plans for picking en route passengers & couriers
+              </Text>
+            </View>
+            <Icon name="chevron-forward" size={20} color={colors.textMuted} />
+          </TouchableOpacity>
+          <View style={themedStyles.menuDivider} />
           <TouchableOpacity
             style={themedStyles.menuRow}
             onPress={() => setPasswordModalVisible(true)}

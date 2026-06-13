@@ -81,6 +81,7 @@ const ParticipantCard = ({
   onRemove,
   onDrop,
   onDeliver,
+  onViewRoute,
   highlightDrop = false,
   highlightDeliver = false,
   onPress,
@@ -168,6 +169,16 @@ const ParticipantCard = ({
             colors={colors}
           />
         ) : null}
+        {onViewRoute ? (
+          <ActionChip
+            icon="map-outline"
+            label="Route"
+            onPress={onViewRoute}
+            variant="default"
+            styles={styles}
+            colors={colors}
+          />
+        ) : null}
         <ActionChip
           icon="call-outline"
           label="Call"
@@ -182,14 +193,16 @@ const ParticipantCard = ({
           styles={styles}
           colors={colors}
         />
-        <ActionChip
-          icon="person-remove-outline"
-          label="Remove"
-          onPress={onRemove}
-          variant="remove"
-          styles={styles}
-          colors={colors}
-        />
+        {onRemove ? (
+          <ActionChip
+            icon="person-remove-outline"
+            label="Remove"
+            onPress={onRemove}
+            variant="remove"
+            styles={styles}
+            colors={colors}
+          />
+        ) : null}
       </View>
     </View>
   );

@@ -4,42 +4,76 @@ import AuthButton from "../../Components/AuthButton";
 import AuthTextInput from "../../Components/AuthTextInput";
 import AuthScreenLayout from "../../Components/auth/AuthScreenLayout";
 import { forgotPasswordApi } from "../../ApiService/AuthApiService";
+import { sendFirebasePasswordResetEmail } from "../../Utils/firebaseAuth";
 import { validateEmail } from "../../Utils";
 import { AUTH_COLORS } from "../../theme/authTheme";
 import { getApiErrorMessage } from "../../Utils/apiErrors";
+
+const firebaseAuthNotEnabledMessage =
+  "Password reset is not set up in Firebase yet. In Firebase Console open Authentication → Sign-in method and enable Email/Password.";
+
+const mapFirebaseClientError = (err) => {
+  const code = String(err?.code || "");
+  const message = String(err?.message || "");
+  if (
+    code.includes("configuration-not-found") ||
+    message.toLowerCase().includes("configuration")
+  ) {
+    return firebaseAuthNotEnabledMessage;
+  }
+  if (code.includes("user-not-found")) {
+    return "No account found for this email.";
+  }
+  return message || "Could not send reset email.";
+};
 
 const ForgotPasswordPage = ({ navigation }) => {
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSendOtp = async () => {
+  const handleSendResetLink = async () => {
     const emailError = validateEmail(email.trim());
     if (emailError) {
       setError(emailError);
       return;
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
     setLoading(true);
     try {
-      const res = await forgotPasswordApi({ email: email.trim().toLowerCase() });
-      if (res?.success !== false) {
+      const res = await forgotPasswordApi({ email: normalizedEmail });
+
+      if (res?.success !== false && !res?.useClientReset) {
         Alert.alert(
           "Check your email",
-          res?.message || "If this email is registered, a reset code has been sent.",
-          [
-            {
-              text: "Enter code",
-              onPress: () =>
-                navigation.navigate("ResetPassword", {
-                  email: email.trim().toLowerCase(),
-                }),
-            },
-          ]
+          res?.message ||
+            "Password reset email sent. Check spam or junk if it is not in your inbox, open the link, set a new password, then sign in.",
+          [{ text: "Back to sign in", onPress: () => navigation.navigate("Signin") }]
         );
-      } else {
-        Alert.alert("Could not send code", getApiErrorMessage(res, "Try again later."));
+        return;
       }
+
+      if (res?.useClientReset || res?.code === "FIREBASE_AUTH_NOT_ENABLED") {
+        try {
+          await sendFirebasePasswordResetEmail(normalizedEmail);
+          Alert.alert(
+            "Check your email",
+            "A password reset link has been sent. Open it, set a new password, then sign in.",
+            [{ text: "Back to sign in", onPress: () => navigation.navigate("Signin") }]
+          );
+          return;
+        } catch (clientErr) {
+          Alert.alert(
+            "Could not send link",
+            mapFirebaseClientError(clientErr) ||
+              getApiErrorMessage(res, "Try again later.")
+          );
+          return;
+        }
+      }
+
+      Alert.alert("Could not send link", getApiErrorMessage(res, "Try again later."));
     } catch (err) {
       Alert.alert("Error", getApiErrorMessage(err, "Could not connect to server."));
     } finally {
@@ -52,7 +86,7 @@ const ForgotPasswordPage = ({ navigation }) => {
       showBack
       onBack={() => navigation.goBack()}
       title="Forgot password"
-      subtitle="Enter your registered email. We will send a 6-digit reset code."
+      subtitle="Enter your registered email. We will send a secure password reset link to your inbox."
       footer={
         <Text style={styles.footer}>
           Remember your password?{" "}
@@ -75,7 +109,12 @@ const ForgotPasswordPage = ({ navigation }) => {
       />
       {!!error && <Text style={styles.error}>{error}</Text>}
 
-      <AuthButton type="signin" title="Send reset code" onPress={handleSendOtp} loading={loading} />
+      <AuthButton
+        type="signin"
+        title="Send reset link"
+        onPress={handleSendResetLink}
+        loading={loading}
+      />
     </AuthScreenLayout>
   );
 };

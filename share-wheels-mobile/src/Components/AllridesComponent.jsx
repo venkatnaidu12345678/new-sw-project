@@ -42,6 +42,7 @@ const SearchRideCard = ({ item, onPress }) => {
   const seats = item?.availableSeats ?? 0;
   const price = item?.ride_amount ?? 0;
   const vehicleLabel = formatVehicleLabel(item?.vehicle);
+  const stopoverCount = Array.isArray(item?.stopovers) ? item.stopovers.length : 0;
 
   return (
     <TouchableOpacity
@@ -121,6 +122,12 @@ const SearchRideCard = ({ item, onPress }) => {
             icon="people-outline"
             label={`${seats} seat${seats !== 1 ? "s" : ""}`}
           />
+          {stopoverCount > 0 ? (
+            <MetaChip
+              icon="git-commit-outline"
+              label={`${stopoverCount} stop${stopoverCount !== 1 ? "s" : ""}`}
+            />
+          ) : null}
         </View>
 
         <View style={styles.ctaRow}>

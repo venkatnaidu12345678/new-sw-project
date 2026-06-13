@@ -5,7 +5,7 @@ export const CR = {
   heroIcon: "#2563EB",
   sections: {
     vehicle: { icon: "car-sport", bg: "#DBEAFE", color: "#1D4ED8" },
-    route: { icon: "navigate", bg: "#D1FAE5", color: "#059669" },
+    route: { icon: "navigate", bg: "#DBEAFE", color: "#2563EB" },
     schedule: { icon: "calendar", bg: "#E0E7FF", color: "#4F46E5" },
     pricing: { icon: "cash", bg: "#FEF3C7", color: "#D97706" },
     optional: { icon: "options", bg: "#FCE7F3", color: "#DB2777" },
@@ -30,7 +30,7 @@ export const getCreateRideTheme = (c) => ({
   heroIcon: c.primary,
   sections: {
     vehicle: { icon: "car-sport", bg: c.tintBlue, color: c.primary },
-    route: { icon: "navigate", bg: c.tintGreen, color: c.successText },
+    route: { icon: "navigate", bg: c.tintBlue, color: c.primary },
     schedule: { icon: "calendar", bg: c.tintBlue, color: c.primaryText },
     pricing: { icon: "cash", bg: c.warningBg, color: c.warningText },
     optional: { icon: "options", bg: c.tintPurple, color: "#DB2777" },

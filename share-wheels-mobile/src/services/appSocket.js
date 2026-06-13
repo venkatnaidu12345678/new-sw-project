@@ -192,6 +192,22 @@ export function leaveRideRoom(rideId) {
   }
 }
 
+/** Socket snapshot for live map (replaces HTTP tracking bootstrap). */
+export async function requestRideTrackingSnapshot(rideId) {
+  const id = rideId?.toString?.() || rideId;
+  if (!id) return null;
+  const s = await connectAppSocket();
+  if (!s?.connected) return null;
+
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), 10000);
+    s.emit("requestRideTracking", id, (body) => {
+      clearTimeout(timer);
+      resolve(body?.success ? body : null);
+    });
+  });
+}
+
 const enrouteKey = ({ from, to, date }) =>
   `${from}|${to}|${date ? new Date(date).toISOString().split("T")[0] : "any"}`;
 
