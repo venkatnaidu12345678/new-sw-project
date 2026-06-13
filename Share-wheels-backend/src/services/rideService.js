@@ -31,6 +31,12 @@ const {
 } = require("../utils/socketEmit");
 const { toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
 const {
+  closeStandaloneRequestsAfterJoin,
+  getUserCourierParticipatedRides,
+  getUserPassengerParticipatedRides,
+  shouldHideStandaloneByParticipation,
+} = require("../utils/participantRequestCleanup");
+const {
   buildOrderedCorridor,
   matchesForwardCorridor,
 } = require("../utils/enrouteCorridorUtils");
@@ -437,54 +443,30 @@ const postponeRide = async (user, { rideId, newStartTime, reason }) => {
   };
 };
 
-/** Hide standalone open requests once user has joined this driver ride. */
-const closeStandalonePassengerRequestsAfterJoin = async (userId, ride) => {
-  const fromRegex = { $regex: escapeRegex(String(ride.from).trim()), $options: "i" };
-  const toRegex = { $regex: escapeRegex(String(ride.to).trim()), $options: "i" };
-  const open = await PassengerRide.find({
-    creator: userId,
-    status: "pending",
-    from: fromRegex,
-    to: toRegex,
-    $or: [{ assigned_to: { $exists: false } }, { "assigned_to.rideId": null }],
-  }).lean();
-
-  if (!open.length) return;
-
-  await PassengerRide.updateMany(
-    { _id: { $in: open.map((p) => p._id) } },
-    {
-      $set: {
-        status: "cancelled",
-        assigned_to: { userId: ride.creator, rideId: ride._id },
-      },
-    }
-  );
-
-  const dateKey = toEnrouteDateKey(ride.date);
-  open.forEach((p) => {
-    emitEnrouteRequestRemoved(ride.from, ride.to, dateKey, {
-      passengerRideId: p._id.toString(),
-      type: "passenger",
-    });
-  });
-};
-
-const addPassengerDirectly = async (ride, user, seats, total_amount) => {
+const addPassengerDirectly = async (
+  ride,
+  user,
+  seats,
+  total_amount,
+  { standalonePassengerRideId } = {}
+) => {
   const userId = user._id;
+  const segment = await resolvePassengerBookingSegment(userId, ride, {
+    standalonePassengerRideId,
+  });
   const passengerEntry = {
     userId,
     requires_seats: seats,
-    from: ride.from,
-    to: ride.to,
+    from: segment.from,
+    to: segment.to,
     ride_amount: total_amount,
     status: "accepted",
     joinedAt: new Date(),
   };
   await ensureParticipantBoardingOtp(passengerEntry, userId, {
     rideId: ride._id,
-    from: ride.from,
-    to: ride.to,
+    from: segment.from,
+    to: segment.to,
   });
   ride.passengers.push(passengerEntry);
   ride.availableSeats -= seats;
@@ -507,8 +489,18 @@ const addPassengerDirectly = async (ride, user, seats, total_amount) => {
     { upsert: true }
   );
 
-  await closeStandalonePassengerRequestsAfterJoin(userId, ride);
-  emitMyRequestsUpdated(userId, { action: "passenger_joined", rideId: ride._id.toString() });
+  await closeStandaloneRequestsAfterJoin(userId, ride, {
+    explicitPassengerRideId: standalonePassengerRideId,
+  });
+  emitMyRequestsUpdated(userId, {
+    action: "passenger_joined",
+    rideId: ride._id.toString(),
+    from: ride.from,
+    to: ride.to,
+    ...(standalonePassengerRideId
+      ? { passengerRideId: String(standalonePassengerRideId) }
+      : {}),
+  });
   emitRideParticipantsUpdated(ride._id, {
     action: "passenger_joined",
     userId: userId.toString(),
@@ -524,7 +516,7 @@ const addPassengerDirectly = async (ride, user, seats, total_amount) => {
   return passengerEntry;
 };
 
-const sendPassengerRequest = async (user, { rideId, requires_seats }) => {
+const sendPassengerRequest = async (user, { rideId, requires_seats, standalonePassengerRideId }) => {
   const userId = user._id;
   const seats = Number(requires_seats);
   if (!rideId || !Number.isFinite(seats) || seats < 1) {
@@ -591,9 +583,14 @@ const sendPassengerRequest = async (user, { rideId, requires_seats }) => {
   }
 
   const total_amount = ride.ride_amount * seats;
+  const bookingSegment = await resolvePassengerBookingSegment(userId, ride, {
+    standalonePassengerRideId,
+  });
 
   if (ride.QuickReserve) {
-    await addPassengerDirectly(ride, user, seats, total_amount);
+    await addPassengerDirectly(ride, user, seats, total_amount, {
+      standalonePassengerRideId,
+    });
     return {
       status: 200,
       body: {
@@ -611,6 +608,8 @@ const sendPassengerRequest = async (user, { rideId, requires_seats }) => {
   ride.passenger_requested_ride.push({
     userId,
     requires_seats: seats,
+    from: bookingSegment.from,
+    to: bookingSegment.to,
     ride_amount: total_amount,
     requestedAt: new Date(),
   });
@@ -632,10 +631,17 @@ const sendPassengerRequest = async (user, { rideId, requires_seats }) => {
     { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
   );
 
-  await closeStandalonePassengerRequestsAfterJoin(userId, ride);
+  await closeStandaloneRequestsAfterJoin(userId, ride, {
+    explicitPassengerRideId: standalonePassengerRideId,
+  });
   emitMyRequestsUpdated(userId, {
     action: "passenger_request_sent",
     rideId: ride._id.toString(),
+    from: ride.from,
+    to: ride.to,
+    ...(standalonePassengerRideId
+      ? { passengerRideId: String(standalonePassengerRideId) }
+      : {}),
   });
   emitRideRequestUpdated(ride._id, {
     action: "passenger_request_sent",
@@ -664,6 +670,93 @@ const sendPassengerRequest = async (user, { rideId, requires_seats }) => {
 
 const refIdStr = (ref) =>
   ref?._id?.toString?.() || ref?.toString?.() || "";
+
+const normalizeRouteLabel = (value) => String(value || "").trim();
+
+const routesMatch = (fromA, toA, fromB, toB) =>
+  normalizeRouteLabel(fromA).toLowerCase() === normalizeRouteLabel(fromB).toLowerCase() &&
+  normalizeRouteLabel(toA).toLowerCase() === normalizeRouteLabel(toB).toLowerCase();
+
+/** Passenger corridor segment (e.g. stopover town → stopover town), not always the full driver ride. */
+const resolvePassengerBookingSegment = async (
+  userId,
+  ride,
+  { standalonePassengerRideId } = {}
+) => {
+  const rideFrom = ride.from;
+  const rideTo = ride.to;
+
+  if (standalonePassengerRideId && mongoose.Types.ObjectId.isValid(standalonePassengerRideId)) {
+    const passengerRide = await PassengerRide.findById(standalonePassengerRideId)
+      .select("from to creator")
+      .lean();
+    if (passengerRide && String(passengerRide.creator) === String(userId)) {
+      return {
+        from: normalizeRouteLabel(passengerRide.from) || rideFrom,
+        to: normalizeRouteLabel(passengerRide.to) || rideTo,
+      };
+    }
+  }
+
+  const assigned = await PassengerRide.findOne({
+    creator: userId,
+    "assigned_to.rideId": ride._id,
+    status: { $in: ["aisgned_passenger", "in_car"] },
+  })
+    .select("from to")
+    .lean();
+
+  if (assigned) {
+    return {
+      from: normalizeRouteLabel(assigned.from) || rideFrom,
+      to: normalizeRouteLabel(assigned.to) || rideTo,
+    };
+  }
+
+  return { from: rideFrom, to: rideTo };
+};
+
+const resolveBookedSegmentForList = (
+  ride,
+  activeData,
+  role,
+  passengerSegmentByRideId,
+  courierSegmentByRideId
+) => {
+  if (!activeData || role === "driver") return null;
+
+  const rideFrom = ride.from;
+  const rideTo = ride.to;
+  let from = normalizeRouteLabel(activeData.from);
+  let to = normalizeRouteLabel(activeData.to);
+
+  if (
+    role === "passenger" &&
+    (!from || !to || routesMatch(from, to, rideFrom, rideTo))
+  ) {
+    const fallback = passengerSegmentByRideId.get(String(ride._id));
+    if (fallback?.from && fallback?.to) {
+      from = fallback.from;
+      to = fallback.to;
+    }
+  }
+
+  if (
+    role === "courier" &&
+    (!from || !to || routesMatch(from, to, rideFrom, rideTo))
+  ) {
+    const fallback = courierSegmentByRideId.get(String(ride._id));
+    if (fallback?.from && fallback?.to) {
+      from = fallback.from;
+      to = fallback.to;
+    }
+  }
+
+  if (!from) from = normalizeRouteLabel(rideFrom);
+  if (!to) to = normalizeRouteLabel(rideTo);
+  if (routesMatch(from, to, rideFrom, rideTo)) return null;
+  return { from, to };
+};
 
 /** Inclusion-only — cannot mix `-password` exclusions with named fields in MongoDB projections */
 const USER_PUBLIC_FIELDS = "name email mobile profile_img gender userNo";
@@ -731,6 +824,40 @@ const listRidesByPhase = async (user, completed) => {
     .sort(completed ? { date: -1, startTime: -1 } : { date: 1, startTime: 1 })
     .lean();
 
+  const assignedPassengerRides = await PassengerRide.find({
+    creator: userId,
+    "assigned_to.rideId": { $in: rides.map((r) => r._id) },
+  })
+    .select("from to assigned_to")
+    .lean();
+
+  const passengerSegmentByRideId = new Map();
+  for (const pr of assignedPassengerRides) {
+    const rideId = pr.assigned_to?.rideId?.toString?.();
+    if (!rideId) continue;
+    passengerSegmentByRideId.set(rideId, {
+      from: normalizeRouteLabel(pr.from),
+      to: normalizeRouteLabel(pr.to),
+    });
+  }
+
+  const assignedCourierRequests = await Courier.find({
+    creator: userId,
+    "driver_assigned_courier.rideId": { $in: rides.map((r) => r._id) },
+  })
+    .select("from to driver_assigned_courier")
+    .lean();
+
+  const courierSegmentByRideId = new Map();
+  for (const courier of assignedCourierRequests) {
+    const rideId = courier.driver_assigned_courier?.rideId?.toString?.();
+    if (!rideId) continue;
+    courierSegmentByRideId.set(rideId, {
+      from: normalizeRouteLabel(courier.from),
+      to: normalizeRouteLabel(courier.to),
+    });
+  }
+
   const allowedStatuses = completed
     ? ["completed", "cancelled", "expired"]
     : ["pending", "started"];
@@ -771,46 +898,98 @@ const listRidesByPhase = async (user, completed) => {
         });
       }
       if (passengerData) {
+        const bookedSegment = resolveBookedSegmentForList(
+          ride,
+          passengerData,
+          "passenger",
+          passengerSegmentByRideId,
+          courierSegmentByRideId
+        );
+        const activeData = bookedSegment
+          ? { ...passengerData, from: bookedSegment.from, to: bookedSegment.to }
+          : passengerData;
         results.push({
           ...ride,
           ...scheduleMeta,
           myRole: "passenger",
           roleContext: "passengers",
           bookingStatus: "confirmed",
-          activeData: passengerData,
+          activeData,
+          ...(bookedSegment
+            ? { bookedFrom: bookedSegment.from, bookedTo: bookedSegment.to }
+            : {}),
           ride_amount: passengerData.ride_amount ?? ride.ride_amount,
           requires_seats: passengerData.requires_seats,
         });
       } else if (pendingPassengerReq) {
+        const bookedSegment = resolveBookedSegmentForList(
+          ride,
+          pendingPassengerReq,
+          "passenger",
+          passengerSegmentByRideId,
+          courierSegmentByRideId
+        );
+        const activeData = bookedSegment
+          ? { ...pendingPassengerReq, from: bookedSegment.from, to: bookedSegment.to }
+          : pendingPassengerReq;
         results.push({
           ...ride,
           ...scheduleMeta,
           myRole: "passenger",
           roleContext: "passenger_requested_ride",
           bookingStatus: "pending_approval",
-          activeData: pendingPassengerReq,
+          activeData,
+          ...(bookedSegment
+            ? { bookedFrom: bookedSegment.from, bookedTo: bookedSegment.to }
+            : {}),
           ride_amount: pendingPassengerReq.ride_amount ?? ride.ride_amount,
           requires_seats: pendingPassengerReq.requires_seats,
         });
       }
       if (courierData) {
+        const bookedSegment = resolveBookedSegmentForList(
+          ride,
+          courierData,
+          "courier",
+          passengerSegmentByRideId,
+          courierSegmentByRideId
+        );
+        const activeData = bookedSegment
+          ? { ...courierData, from: bookedSegment.from, to: bookedSegment.to }
+          : courierData;
         results.push({
           ...ride,
           ...scheduleMeta,
           myRole: "courier",
           roleContext: "all_deliveries",
           bookingStatus: "confirmed",
-          activeData: courierData,
+          activeData,
+          ...(bookedSegment
+            ? { bookedFrom: bookedSegment.from, bookedTo: bookedSegment.to }
+            : {}),
           ride_amount: courierData.amount_will ?? ride.ride_amount,
         });
       } else if (pendingCourierReq) {
+        const bookedSegment = resolveBookedSegmentForList(
+          ride,
+          pendingCourierReq,
+          "courier",
+          passengerSegmentByRideId,
+          courierSegmentByRideId
+        );
+        const activeData = bookedSegment
+          ? { ...pendingCourierReq, from: bookedSegment.from, to: bookedSegment.to }
+          : pendingCourierReq;
         results.push({
           ...ride,
           ...scheduleMeta,
           myRole: "courier",
           roleContext: "users_request_Couriers",
           bookingStatus: "pending_approval",
-          activeData: pendingCourierReq,
+          activeData,
+          ...(bookedSegment
+            ? { bookedFrom: bookedSegment.from, bookedTo: bookedSegment.to }
+            : {}),
           ride_amount: pendingCourierReq.amount_will ?? ride.ride_amount,
         });
       }
@@ -849,7 +1028,7 @@ const getRideDetails = async (rideId, viewerId) => {
   if (!mongoose.Types.ObjectId.isValid(rideId)) return { status: 400, body: { success: false, message: "Invalid Ride ID" } };
   let ride = await Ride.findById(rideId)
     .select(
-      "passengers all_deliveries passenger_requested_ride users_request_Couriers status creator vehicle from to fromCoords toCoords date startTime ride_amount availableSeats CanCarryCourier QuickReserve postponeCount postponeReason postponedAt originalScheduledStart cancel_reason"
+      "passengers all_deliveries passenger_requested_ride users_request_Couriers status creator vehicle from to fromCoords toCoords stopovers routePolyline selectedRouteIndex date startTime ride_amount availableSeats CanCarryCourier QuickReserve postponeCount postponeReason postponedAt originalScheduledStart cancel_reason"
     )
     .populate("creator", USER_FIELDS)
     .populate("passengers.userId", USER_FIELDS)
@@ -1108,9 +1287,6 @@ const fetchLinkedRide = async (rideId, userId) => {
   return serializeMatchingRide(ride, userId);
 };
 
-const routeKey = (from, to) =>
-  `${String(from || "").trim().toLowerCase()}|${String(to || "").trim().toLowerCase()}`;
-
 const buildMyPassengerRequests = async (user) => {
   await expireStaleOpenRequests();
   const userId = new mongoose.Types.ObjectId(user._id);
@@ -1121,7 +1297,15 @@ const buildMyPassengerRequests = async (user) => {
     $or: [{ assigned_to: { $exists: false } }, { "assigned_to.rideId": null }],
   }).lean();
 
-  const standalonePassengerRequests = passengerData.map((p) => ({
+  const participatedRides = await getUserPassengerParticipatedRides(userId);
+
+  const visiblePassengerData = passengerData.filter(
+    (p) =>
+      !p.assigned_to?.rideId &&
+      !shouldHideStandaloneByParticipation(p, participatedRides)
+  );
+
+  const standalonePassengerRequests = visiblePassengerData.map((p) => ({
     requestId: p._id,
     passengerRideId: p._id,
     requestKind: "standalone",
@@ -1135,26 +1319,11 @@ const buildMyPassengerRequests = async (user) => {
     luggage: p.luggage_included,
     requestedAt: p.createdAt,
     status: p.status,
+    assignedRide: p.assigned_to?.rideId || null,
     type: "passenger",
   }));
 
-  const activeJoinOnRoute = await Ride.find({
-    status: { $in: ["pending", "started"] },
-    $or: [
-      { "passenger_requested_ride.userId": userId },
-      { "passengers.userId": userId },
-    ],
-  })
-    .select("from to")
-    .lean();
-
-  const joinedRoutes = new Set(
-    activeJoinOnRoute.map((r) => routeKey(r.from, r.to))
-  );
-
-  const passengerRequestsBase = standalonePassengerRequests.filter(
-    (p) => !joinedRoutes.has(routeKey(p.from, p.to))
-  );
+  const passengerRequestsBase = standalonePassengerRequests;
 
   return Promise.all(
     passengerRequestsBase.map(async (req) => {
@@ -1176,28 +1345,21 @@ const buildMyCourierRequests = async (user) => {
 
   const courierRequestsData = await Courier.find({
     creator: userId,
-    courier_status: { $in: ["pending", "request_to_driver"] },
+    courier_status: "pending",
     $or: [
       { driver_assigned_courier: { $exists: false } },
       { "driver_assigned_courier.rideId": null },
     ],
   }).lean();
 
-  const activeCourierOnRoute = await Ride.find({
-    status: { $in: ["pending", "started"] },
-    $or: [
-      { "users_request_Couriers.userId": userId },
-      { "all_deliveries.userId": userId },
-    ],
-  })
-    .select("from to")
-    .lean();
-
-  const pickedRoutes = new Set(
-    activeCourierOnRoute.map((r) => routeKey(r.from, r.to))
-  );
+  const participatedRides = await getUserCourierParticipatedRides(userId);
 
   const courierRequestsBase = courierRequestsData
+    .filter(
+      (c) =>
+        !c.driver_assigned_courier?.rideId &&
+        !shouldHideStandaloneByParticipation(c, participatedRides)
+    )
     .map((c) => ({
       requestId: c._id,
       requestKind: "courier",
@@ -1216,8 +1378,7 @@ const buildMyCourierRequests = async (user) => {
       assignedRide: c.driver_assigned_courier?.rideId || null,
       requestedAt: c.createdAt,
       type: "courier",
-    }))
-    .filter((c) => !pickedRoutes.has(routeKey(c.from, c.to)));
+    }));
 
   return Promise.all(
     courierRequestsBase.map(async (c) => {

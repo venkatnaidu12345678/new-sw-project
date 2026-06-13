@@ -248,27 +248,61 @@ const getPlaceDetails = async (placeId) => {
 const ROUTE_FIELD_MASK =
   "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.routeLabels";
 
-const mapRouteRow = (route, index) => {
+const mapRouteRow = (route, index, labelOverride = "") => {
   const labels = Array.isArray(route?.routeLabels) ? route.routeLabels : [];
+  let label = labelOverride || `Route ${index + 1}`;
+  if (!labelOverride) {
+    if (labels.includes("DEFAULT_ROUTE") || index === 0) {
+      label = "Recommended";
+    } else if (labels.includes("DEFAULT_ROUTE_ALTERNATE")) {
+      label = `Alternative ${index}`;
+    } else if (index > 0) {
+      label = `Alternative ${index}`;
+    }
+  }
   return {
     index,
     polyline: route?.polyline?.encodedPolyline || "",
     distanceMeters: route?.distanceMeters ?? null,
     durationSeconds: parseDurationSeconds(route?.duration),
-    label:
-      labels.includes("DEFAULT_ROUTE") || index === 0
-        ? "Recommended"
-        : `Alternative ${index}`,
+    label,
     isRecommended: index === 0,
   };
 };
 
-const computeAlternativeRoutes = async ({
+const polylineKey = (polyline) => String(polyline || "").trim().slice(0, 64);
+
+const mergeUniqueRouteRows = (rows) => {
+  const seen = new Set();
+  const merged = [];
+  rows.forEach((row) => {
+    const polyline = String(row?.polyline || "").trim();
+    if (!polyline) return;
+    const key = polylineKey(polyline);
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push({ ...row, index: merged.length });
+  });
+  return merged.map((row, index) => ({
+    ...row,
+    index,
+    label:
+      index === 0
+        ? row.label || "Recommended"
+        : row.label || `Alternative ${index}`,
+    isRecommended: index === 0,
+  }));
+};
+
+const computeRouteWithOptions = async ({
   originLat,
   originLng,
   destLat,
   destLng,
   waypoints = [],
+  computeAlternativeRoutes = false,
+  routeModifiers = null,
+  routingPreference = "TRAFFIC_AWARE",
 }) => {
   if (!hasGoogleKey()) {
     return { status: 503, body: { success: false, message: "Google Maps API key not configured" } };
@@ -287,8 +321,16 @@ const computeAlternativeRoutes = async ({
     origin: latLngLocation(oLat, oLng),
     destination: latLngLocation(dLat, dLng),
     travelMode: "DRIVE",
-    routingPreference: "TRAFFIC_UNAWARE",
-    computeAlternativeRoutes: true,
+    routingPreference,
+    units: "METRIC",
+    languageCode: "en-IN",
+    computeAlternativeRoutes: !!computeAlternativeRoutes,
+    routeModifiers: {
+      avoidTolls: false,
+      avoidHighways: false,
+      avoidFerries: false,
+      ...(routeModifiers || {}),
+    },
   };
 
   const stops = parseWaypoints(waypoints);
@@ -335,6 +377,51 @@ const computeAlternativeRoutes = async ({
       count: routes.length,
     },
   };
+};
+
+const computeAlternativeRoutes = async ({
+  originLat,
+  originLng,
+  destLat,
+  destLng,
+  waypoints = [],
+}) => {
+  return computeRouteWithOptions({
+    originLat,
+    originLng,
+    destLat,
+    destLng,
+    waypoints,
+    computeAlternativeRoutes: true,
+  });
+};
+
+const supplementAlternativeRoutes = async (coords, routes) => {
+  const variants = [
+    { label: "Avoid tolls", modifiers: { avoidTolls: true } },
+    { label: "Avoid highways", modifiers: { avoidHighways: true } },
+    { label: "Scenic route", modifiers: { avoidHighways: true, avoidTolls: true } },
+  ];
+
+  let merged = [...routes];
+  for (const variant of variants) {
+    if (merged.length >= 3) break;
+    const result = await computeRouteWithOptions({
+      ...coords,
+      computeAlternativeRoutes: false,
+      routeModifiers: variant.modifiers,
+    });
+    if (result.status !== 200) continue;
+    const row = result.body.routes?.[0];
+    if (!row?.polyline) continue;
+    merged.push({
+      ...row,
+      label: variant.label,
+      isRecommended: false,
+    });
+    merged = mergeUniqueRouteRows(merged);
+  }
+  return merged;
 };
 
 /** Settlement types in priority order: city → town → village → sub-district. */
@@ -463,20 +550,28 @@ const getAlternativeRoutes = async (params = {}) => {
     };
   }
 
-  const routeResult = await computeAlternativeRoutes({
+  const coords = {
     originLat: origin.lat,
     originLng: origin.lng,
     destLat: destination.lat,
     destLng: destination.lng,
     waypoints: params.waypoints,
-  });
+  };
 
+  const routeResult = await computeAlternativeRoutes(coords);
   if (routeResult.status !== 200) return routeResult;
+
+  let routes = mergeUniqueRouteRows(routeResult.body.routes || []);
+  if (routes.length < 2) {
+    routes = await supplementAlternativeRoutes(coords, routes);
+  }
 
   return {
     status: 200,
     body: {
-      ...routeResult.body,
+      success: true,
+      routes,
+      count: routes.length,
       origin,
       destination,
     },

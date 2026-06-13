@@ -11,7 +11,8 @@ const {
   emitMyRequestsUpdated,
   emitEnrouteRequestRemoved,
 } = require("../utils/socketEmit");
-const { escapeRegex } = require("../utils/rideDateQueryUtils");
+const { escapeRegex, toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
+const { closeStandaloneRequestsAfterJoin, linkStandaloneCouriersForRideRequest } = require("../utils/participantRequestCleanup");
 const { expirePendingRideIfStale } = require("./rideExpiryService");
 const { syncLiveTrackingRoster } = require("./rideTrackingService");
 const {
@@ -133,8 +134,61 @@ const createCourierRequest = async (user, body) => {
   return { status: 201, body: { success: true, message: "Courier request created successfully", data: newCourier } };
 };
 
+const normalizeRouteLabel = (value) => String(value || "").trim();
+
+const routesMatch = (fromA, toA, fromB, toB) =>
+  normalizeRouteLabel(fromA).toLowerCase() === normalizeRouteLabel(fromB).toLowerCase() &&
+  normalizeRouteLabel(toA).toLowerCase() === normalizeRouteLabel(toB).toLowerCase();
+
+/** Corridor delivery segment (may differ from the driver's full ride). */
+const resolveCourierBookingSegment = async (
+  userId,
+  ride,
+  { standaloneCourierId, from: bodyFrom, to: bodyTo } = {}
+) => {
+  const rideFrom = ride.from;
+  const rideTo = ride.to;
+
+  if (standaloneCourierId && mongoose.Types.ObjectId.isValid(standaloneCourierId)) {
+    const courier = await Courier.findById(standaloneCourierId)
+      .select("from to creator")
+      .lean();
+    if (courier && String(courier.creator) === String(userId)) {
+      return {
+        from: normalizeRouteLabel(courier.from) || rideFrom,
+        to: normalizeRouteLabel(courier.to) || rideTo,
+      };
+    }
+  }
+
+  const assigned = await Courier.findOne({
+    creator: userId,
+    "driver_assigned_courier.rideId": ride._id,
+    courier_status: {
+      $in: ["driver_assigned", "picked_up", "in_transit", "request_to_driver"],
+    },
+  })
+    .select("from to")
+    .lean();
+
+  if (assigned) {
+    return {
+      from: normalizeRouteLabel(assigned.from) || rideFrom,
+      to: normalizeRouteLabel(assigned.to) || rideTo,
+    };
+  }
+
+  const from = normalizeRouteLabel(bodyFrom);
+  const to = normalizeRouteLabel(bodyTo);
+  if (from && to && !routesMatch(from, to, rideFrom, rideTo)) {
+    return { from, to };
+  }
+
+  return { from: rideFrom, to: rideTo };
+};
+
 const requestCourier = async (user, body) => {
-  const { rideId } = body;
+  const { rideId, standaloneCourierId } = body;
   if (!rideId || !mongoose.Types.ObjectId.isValid(rideId)) return { status: 400, body: { success: false, message: "Invalid rideId" } };
   const normalized = normalizeCourierCreateBody(body);
   const {
@@ -203,11 +257,20 @@ const requestCourier = async (user, body) => {
     return { status: 400, body: { success: false, message: passengerConflict.message } };
   }
 
+  const bookingSegment = await resolveCourierBookingSegment(user._id, ride, {
+    standaloneCourierId,
+    from,
+    to,
+  });
+
   const courierData = {
     userId: user._id,
     courierNumber: `CR-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-    from,
-    to,
+    from: bookingSegment.from,
+    to: bookingSegment.to,
+    ...(standaloneCourierId && mongoose.Types.ObjectId.isValid(standaloneCourierId)
+      ? { courierId: standaloneCourierId }
+      : {}),
     courier_type,
     what_to_deliver,
     courier_img,
@@ -224,38 +287,22 @@ const requestCourier = async (user, body) => {
   if (ride.QuickReserve) {
     await ensureParticipantBoardingOtp(courierData, user._id, {
       rideId: ride._id,
-      from: ride.from,
-      to: ride.to,
+      from: bookingSegment.from,
+      to: bookingSegment.to,
     });
     ride.all_deliveries.push(courierData);
     await ride.save();
 
-    const linkedQr = await Courier.find({
-      creator: user._id,
-      courier_status: "pending",
-      from: { $regex: escapeRegex(from), $options: "i" },
-      to: { $regex: escapeRegex(to), $options: "i" },
-    }).select("_id");
-    if (linkedQr.length) {
-      await Courier.updateMany(
-        { _id: { $in: linkedQr.map((c) => c._id) } },
-        {
-          $set: {
-            courier_status: "driver_assigned",
-            driver_assigned_courier: { userId: ride.creator, rideId: ride._id },
-          },
-        }
-      );
-      linkedQr.forEach((c) => {
-        emitEnrouteRequestRemoved(ride.from, ride.to, ride.date, {
-          courierId: c._id.toString(),
-          type: "courier",
-        });
-      });
-    }
+    await closeStandaloneRequestsAfterJoin(user._id, ride, {
+      explicitCourierId: standaloneCourierId,
+      explicitPassengerRideId: body.standalonePassengerRideId,
+    });
     emitMyRequestsUpdated(user._id, {
       action: "courier_joined",
       rideId: ride._id.toString(),
+      from: ride.from,
+      to: ride.to,
+      ...(standaloneCourierId ? { courierId: String(standaloneCourierId) } : {}),
     });
     emitRideParticipantsUpdated(ride._id, {
       action: "courier_joined",
@@ -282,38 +329,21 @@ const requestCourier = async (user, body) => {
   ride.users_request_Couriers.push(courierData);
   await ride.save();
 
-  const linkedCouriers = await Courier.find({
-    creator: user._id,
-    courier_status: "pending",
-    from: { $regex: escapeRegex(from), $options: "i" },
-    to: { $regex: escapeRegex(to), $options: "i" },
-  }).select("_id");
-
-  if (linkedCouriers.length) {
-    await Courier.updateMany(
-      { _id: { $in: linkedCouriers.map((c) => c._id) } },
-      {
-        $set: {
-          courier_status: "request_to_driver",
-          driver_assigned_courier: { userId: ride.creator, rideId: ride._id },
-        },
-      }
-    );
-  }
+  const linkedCourierIds = await linkStandaloneCouriersForRideRequest(user._id, ride, {
+    explicitCourierId: standaloneCourierId,
+  });
 
   emitMyRequestsUpdated(user._id, {
     action: "courier_request_sent",
     rideId: ride._id.toString(),
+    from: ride.from,
+    to: ride.to,
+    ...(linkedCourierIds[0] ? { courierId: linkedCourierIds[0] } : {}),
+    ...(standaloneCourierId ? { courierId: String(standaloneCourierId) } : {}),
   });
   emitRideRequestUpdated(ride._id, {
     action: "courier_request_sent",
     userId: user._id.toString(),
-  });
-  linkedCouriers.forEach((c) => {
-    emitEnrouteRequestRemoved(ride.from, ride.to, ride.date, {
-      courierId: c._id.toString(),
-      type: "courier",
-    });
   });
 
   await notifyUser(ride.creator, {
@@ -351,11 +381,41 @@ const acceptCourier = async (user, { rideId, courierId }) => {
   if (passengerConflict.blocked) {
     return { status: 400, body: { success: false, message: passengerConflict.message } };
   }
-  const deliveryEntry = { ...courierData.toObject(), assignedAt: new Date() };
+
+  let segFrom = normalizeRouteLabel(courierData.from) || ride.from;
+  let segTo = normalizeRouteLabel(courierData.to) || ride.to;
+  if (routesMatch(segFrom, segTo, ride.from, ride.to)) {
+    if (courierData.courierId && mongoose.Types.ObjectId.isValid(courierData.courierId)) {
+      const linked = await Courier.findById(courierData.courierId).select("from to").lean();
+      if (linked?.from && linked?.to) {
+        segFrom = linked.from;
+        segTo = linked.to;
+      }
+    } else {
+      const linked = await Courier.findOne({
+        creator: courierData.userId,
+        "driver_assigned_courier.rideId": ride._id,
+      })
+        .sort({ updatedAt: -1 })
+        .select("from to")
+        .lean();
+      if (linked?.from && linked?.to) {
+        segFrom = linked.from;
+        segTo = linked.to;
+      }
+    }
+  }
+
+  const deliveryEntry = {
+    ...courierData.toObject(),
+    from: segFrom,
+    to: segTo,
+    assignedAt: new Date(),
+  };
   await ensureParticipantBoardingOtp(deliveryEntry, deliveryEntry.userId, {
     rideId: ride._id,
-    from: ride.from,
-    to: ride.to,
+    from: segFrom,
+    to: segTo,
   });
   const updateResult = await Ride.updateOne(
     { _id: rideId, "users_request_Couriers._id": new mongoose.Types.ObjectId(courierId) },
@@ -366,6 +426,15 @@ const acceptCourier = async (user, { rideId, courierId }) => {
   );
   if (updateResult.modifiedCount === 0) return { status: 400, body: { success: false, message: "Failed to move courier" } };
   const courierUserId = courierData.userId?.toString?.() || courierData.userId;
+  const rideForCleanup = await Ride.findById(rideId).select("creator from to date").lean();
+  if (rideForCleanup && courierUserId) {
+    await closeStandaloneRequestsAfterJoin(courierUserId, rideForCleanup);
+  }
+  emitEnrouteRequestRemoved(ride.from, ride.to, toEnrouteDateKey(ride.date), {
+    type: "courier",
+    userId: courierUserId,
+    courierId: courierId.toString(),
+  });
   emitRideParticipantsUpdated(rideId, {
     action: "courier_accepted",
     courierId: courierId.toString(),
@@ -378,6 +447,16 @@ const acceptCourier = async (user, { rideId, courierId }) => {
       rideId: rideId.toString(),
     });
   }
+  const driver = await User.findById(user._id);
+  await notifyUser(courierUserId, {
+    title: "Courier delivery accepted",
+    body: `${driver?.name || "Driver"} accepted your courier on their ride`,
+    type: "courier_assigned",
+    data: {
+      rideId: rideId.toString(),
+      courierId: courierId.toString(),
+    },
+  });
   return { status: 200, body: { success: true, message: "Courier accepted successfully" } };
 };
 
@@ -388,9 +467,25 @@ const rejectCourier = async (user, { rideId, courierId }) => {
   const ride = await Ride.findById(rideId);
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
   if (ride.creator.toString() !== user._id.toString()) return { status: 403, body: { success: false, message: "Only driver allowed" } };
-  const exists = ride.users_request_Couriers.some((c) => c._id.toString() === courierId);
-  if (!exists) return { status: 404, body: { success: false, message: "Courier not found in requests" } };
+  const courierReq = ride.users_request_Couriers.find(
+    (c) => c._id.toString() === courierId.toString()
+  );
+  if (!courierReq) return { status: 404, body: { success: false, message: "Courier not found in requests" } };
+  const courierUserId = courierReq.userId?.toString?.() || courierReq.userId;
   await Ride.updateOne({ _id: rideId }, { $pull: { users_request_Couriers: { _id: new mongoose.Types.ObjectId(courierId) } } });
+  const driver = await User.findById(user._id);
+  if (courierUserId) {
+    await notifyUser(courierUserId, {
+      title: "Courier request declined",
+      body: `${driver?.name || "Driver"} declined your courier request`,
+      type: "courier_reject",
+      data: { rideId: ride._id.toString(), courierId: courierId.toString() },
+    });
+    emitMyRequestsUpdated(courierUserId, {
+      action: "courier_request_rejected",
+      rideId: ride._id.toString(),
+    });
+  }
   emitRideRequestUpdated(rideId, { action: "courier_rejected", courierId: courierId.toString() });
   return { status: 200, body: { success: true, message: "Courier rejected and removed" } };
 };
@@ -408,6 +503,12 @@ const removeDelivery = async (user, { rideId, courierId }) => {
     (d) => d._id?.toString() !== courierId.toString()
   );
   await ride.save();
+  await notifyUser(courierUserId, {
+    title: "Removed from ride",
+    body: "You have been removed from the courier delivery by the driver.",
+    type: "courier_removed",
+    data: { rideId: ride._id.toString(), courierId: courierId.toString() },
+  });
   emitRideParticipantsUpdated(rideId, {
     action: "courier_removed",
     courierId: courierId.toString(),
@@ -417,4 +518,11 @@ const removeDelivery = async (user, { rideId, courierId }) => {
   return { status: 200, body: { success: true, message: "Removed successfully" } };
 };
 
-module.exports = { createCourierRequest, requestCourier, acceptCourier, rejectCourier, removeDelivery };
+module.exports = {
+  createCourierRequest,
+  requestCourier,
+  acceptCourier,
+  rejectCourier,
+  removeDelivery,
+  resolveCourierBookingSegment,
+};

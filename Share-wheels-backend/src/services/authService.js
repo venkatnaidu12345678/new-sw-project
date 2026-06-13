@@ -262,6 +262,15 @@ const registerFcmToken = async (user, fcmToken) => {
   };
 };
 
+const clearFcmToken = async (user) => {
+  user.fcmToken = undefined;
+  await user.save();
+  return {
+    status: 200,
+    body: { success: true, message: "FCM token cleared" },
+  };
+};
+
 const getPushStatus = async (user) => {
   const { isFirebaseReady } = require("../utils/firebaseAdmin");
   return {
@@ -653,6 +662,7 @@ module.exports = {
   verifyOtp,
   verifyToken,
   registerFcmToken,
+  clearFcmToken,
   getPushStatus,
   updateProfileImage,
   sendNotification,

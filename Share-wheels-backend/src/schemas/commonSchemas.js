@@ -93,6 +93,7 @@ const passengerRequestOnRideSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     requires_seats: { type: Number, min: 1, default: 1 },
+    ...routeFields,
     ride_amount: rideAmountField,
     requestedAt: { type: Date, default: Date.now },
   },
