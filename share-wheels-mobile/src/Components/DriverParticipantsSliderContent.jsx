@@ -214,6 +214,7 @@ const DriverParticipantsSliderContent = ({
   passengerRequests,
   courierRequests,
   rideFrom,
+  rideTo,
   rideStatus,
   isRideStarted,
   onVerifyPassenger,
@@ -226,6 +227,7 @@ const DriverParticipantsSliderContent = ({
   onRemoveCourier,
   onPressPassenger,
   onPressCourier,
+  onViewParticipantRoute,
   onAcceptPassenger,
   onRejectPassenger,
   onAcceptCourier,
@@ -358,16 +360,13 @@ const DriverParticipantsSliderContent = ({
             role="passenger"
             subtitleLines={[
               item?.userId?.email || "No email",
-              `Pickup: ${rideFrom}`,
+              `${item?.from || rideFrom || "—"} → ${item?.to || rideTo || "—"}`,
               `${item?.requires_seats || 1} seat(s)`,
             ]}
             fare={getPassengerFare(item)}
             verified={!!item?.isBoardingVerified}
             tripStatus={item?.status}
-            showVerify={
-              !item?.isBoardingVerified &&
-              (rideStatus === "pending" || rideStatus === "started")
-            }
+            showVerify={!item?.isBoardingVerified && isRideStarted}
             onVerify={() => onVerifyPassenger(item)}
             onDrop={
               canDropPassenger(item)
@@ -377,7 +376,16 @@ const DriverParticipantsSliderContent = ({
             highlightDrop={canDropPassenger(item)}
             onCall={() => onCall(item?.userId?.mobile, "passenger")}
             onMessage={() => onMessage(item, "passenger")}
-            onRemove={() => onRemovePassenger(item)}
+            onRemove={
+              !item?.isBoardingVerified
+                ? () => onRemovePassenger(item)
+                : undefined
+            }
+            onViewRoute={
+              isRideStarted && onViewParticipantRoute
+                ? () => onViewParticipantRoute(item, "passenger")
+                : undefined
+            }
             onPress={() => onPressPassenger(item)}
           />
         );
@@ -391,16 +399,13 @@ const DriverParticipantsSliderContent = ({
             courier={item}
             subtitleLines={[
               item?.userId?.email || "No email",
-              item?.userId?.mobile || "",
+              `${item?.from || rideFrom || "—"} → ${item?.to || rideTo || "—"}`,
             ]}
             fare={item?.amount_will || 0}
             fareLabel="Amount"
             verified={!!item?.isBoardingVerified}
             tripStatus={item?.status}
-            showVerify={
-              !item?.isBoardingVerified &&
-              (rideStatus === "pending" || rideStatus === "started")
-            }
+            showVerify={!item?.isBoardingVerified && isRideStarted}
             onVerify={() => onVerifyCourier(item)}
             onDeliver={
               canDeliverCourier(item)
@@ -410,7 +415,16 @@ const DriverParticipantsSliderContent = ({
             highlightDeliver={canDeliverCourier(item)}
             onCall={() => onCall(item?.userId?.mobile, "courier")}
             onMessage={() => onMessage(item, "courier")}
-            onRemove={() => onRemoveCourier(item._id)}
+            onRemove={
+              !item?.isBoardingVerified
+                ? () => onRemoveCourier(item._id)
+                : undefined
+            }
+            onViewRoute={
+              isRideStarted && onViewParticipantRoute
+                ? () => onViewParticipantRoute(item, "courier")
+                : undefined
+            }
             onPress={() => onPressCourier(item)}
           />
         );

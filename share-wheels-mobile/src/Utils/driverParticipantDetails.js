@@ -24,21 +24,24 @@ const fmtDateTime = (value) => {
 const receiver = (item) =>
   item?.courier_receiver_details || item?.receiver || {};
 
-export const buildDriverPassengerDetail = (item, rideFrom, rideTo) => ({
+export const buildDriverPassengerDetail = (item, rideFrom, rideTo) => {
+  const from = item?.from || rideFrom;
+  const to = item?.to || rideTo;
+  return {
   role: "passenger",
   name: item?.userId?.name || "Passenger",
   user: item?.userId,
   subtitle: [item?.userId?.gender, tripStatusLabel(item?.status)].filter(Boolean).join(" · "),
   verified: !!item?.isBoardingVerified,
-  route: rideFrom && rideTo ? `${rideFrom} → ${rideTo}` : rideFrom || "",
+  route: from && to ? `${from} → ${to}` : from || "",
   status: item?.status || "accepted",
   rows: [
     { label: "Mobile", value: item?.userId?.mobile },
     { label: "Email", value: item?.userId?.email },
     { label: "Gender", value: item?.userId?.gender },
     { label: "User ID", value: item?.userId?.userNo },
-    { label: "Pickup", value: rideFrom },
-    { label: "Drop", value: rideTo },
+    { label: "Pickup", value: from },
+    { label: "Drop", value: to },
     { label: "Seats Booked", value: item?.requires_seats || 1 },
     { label: "Trip Status", value: tripStatusLabel(item?.status) },
     { label: "Joined At", value: fmtDateTime(item?.joinedAt) },
@@ -49,7 +52,8 @@ export const buildDriverPassengerDetail = (item, rideFrom, rideTo) => ({
   ],
   price: getPassengerFare(item),
   priceLabel: "Fare",
-});
+};
+};
 
 export const buildDriverCourierDetail = (item, rideFrom, rideTo) => {
   const recv = receiver(item);

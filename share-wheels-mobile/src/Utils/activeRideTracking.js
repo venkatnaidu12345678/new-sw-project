@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { setRideGpsMode } from "./gpsService";
+import { setRideGpsMode, restartLocationWatchIfActive } from "./gpsService";
 import { requestBackgroundLocationForActiveRide } from "./locationPermissions";
 
 const KEY = "ACTIVE_RIDE_TRACKING";
@@ -8,6 +8,7 @@ export const setActiveRideTracking = async (rideId) => {
   const id = rideId?.toString?.() || rideId;
   if (!id) return;
   setRideGpsMode(true);
+  restartLocationWatchIfActive();
   requestBackgroundLocationForActiveRide().catch(() => {});
   await AsyncStorage.setItem(KEY, JSON.stringify({ rideId: id, since: Date.now() }));
 };

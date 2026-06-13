@@ -192,6 +192,7 @@ const DashboardPage = () => {
         from: fromValue,
         to: toValue,
         date: formatLocalISODate(date),
+        rideType: "long",
       };
 
       const list = await getAllRides(token, filters);

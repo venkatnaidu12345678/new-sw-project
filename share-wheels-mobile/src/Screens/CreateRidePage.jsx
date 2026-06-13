@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
+import { BackHandler } from "react-native";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -40,6 +41,8 @@ const CreateRidePage = () => {
 
   const [fromCoords, setFromCoords] = useState(null);
   const [toCoords, setToCoords] = useState(null);
+  const [routePlan, setRoutePlan] = useState(null);
+  const [routeMapFullscreen, setRouteMapFullscreen] = useState(false);
 
   const [rideData, setRideData] = useState({
     from: "",
@@ -119,6 +122,14 @@ const CreateRidePage = () => {
       return;
     }
 
+    const hasEndpoints =
+      (fromCoords?.lat != null && toCoords?.lat != null) ||
+      (rideData.from.trim() && rideData.to.trim());
+    if (hasEndpoints && !routePlan?.routePolyline) {
+      alertValidation("Select a route on the map before publishing.");
+      return;
+    }
+
     try {
       setLoading(true);
       const token = await AsyncStorage.getItem("token");
@@ -140,6 +151,9 @@ const CreateRidePage = () => {
         CanCarryCourier: rideData.CanCarryCourier,
         QuickReserve: rideData.QuickReserve,
         rideType: rideData.rideType,
+        routePolyline: routePlan?.routePolyline || undefined,
+        selectedRouteIndex: routePlan?.selectedRouteIndex ?? 0,
+        stopovers: routePlan?.stopovers || [],
       };
 
       const response = await createRideApi(token, payload);
@@ -180,30 +194,46 @@ const CreateRidePage = () => {
     alertSuccess("Vehicle saved. You can create your ride now.");
   };
 
+  useEffect(() => {
+    if (!routeMapFullscreen) return undefined;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      setRouteMapFullscreen(false);
+      return true;
+    });
+    return () => sub.remove();
+  }, [routeMapFullscreen]);
+
   return (
     <>
       <KeyboardAwareScreen
         style={{ flex: 1, backgroundColor: CR.pageBg }}
-        scrollable
+        scrollable={!routeMapFullscreen}
+        scrollViewProps={{ scrollEnabled: !routeMapFullscreen }}
         header={
-          <ScreenHeader
-            title="Create ride"
-            backgroundColor={CR.pageBg}
-            onBack={() => {
-              if (navigation.canGoBack()) navigation.goBack();
-              else navigation.navigate("Navigator", { screen: "Home" });
-            }}
-          />
+          routeMapFullscreen ? null : (
+            <ScreenHeader
+              title="Create ride"
+              backgroundColor={CR.pageBg}
+              onBack={() => {
+                if (navigation.canGoBack()) navigation.goBack();
+                else navigation.navigate("Navigator", { screen: "Home" });
+              }}
+            />
+          )
         }
         headerStyle={{
           paddingHorizontal: DS.spacing.screen,
           paddingTop: DS.spacing.md,
           backgroundColor: CR.pageBg,
         }}
-        contentContainerStyle={{
-          paddingHorizontal: DS.spacing.screen,
-          paddingBottom: 120,
-        }}
+        contentContainerStyle={
+          routeMapFullscreen
+            ? { flexGrow: 1, paddingHorizontal: 0, paddingBottom: 0 }
+            : {
+                paddingHorizontal: DS.spacing.screen,
+                paddingBottom: 120,
+              }
+        }
       >
         <CreateRideComponentOne
           ref={formRef}
@@ -214,19 +244,32 @@ const CreateRidePage = () => {
           vehicleInfo={vehicleInfo}
           userName={userName}
           onPressAddVehicle={openVehicleForm}
+          fromCoords={fromCoords}
+          toCoords={toCoords}
+          onRoutePlanChange={setRoutePlan}
+          routeMapFullscreen={routeMapFullscreen}
+          onRouteMapFullscreenChange={setRouteMapFullscreen}
           onPlaceSelect={(field, place) => {
-            if (field === "from") setFromCoords(place);
-            if (field === "to") setToCoords(place);
+            if (field === "from") {
+              setFromCoords(place);
+              setRoutePlan(null);
+            }
+            if (field === "to") {
+              setToCoords(place);
+              setRoutePlan(null);
+            }
           }}
         />
       </KeyboardAwareScreen>
 
-      <FixedButton
-        title="Publish ride"
-        onPress={handlePress}
-        loading={loading}
-        disabled={loading}
-      />
+      {!routeMapFullscreen ? (
+        <FixedButton
+          title="Publish ride"
+          onPress={handlePress}
+          loading={loading}
+          disabled={loading}
+        />
+      ) : null}
 
       <AddVehicleModal
         visible={showVehicleForm}

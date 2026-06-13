@@ -344,13 +344,14 @@ export const normalizeRidesList = (data) => {
 };
 
 export const getAllRides = async (token, filters = {}) => {
-  const { from, to, date } = filters;
+  const { from, to, date, rideType = "long" } = filters;
 
   try {
     const queryParams = new URLSearchParams();
     if (from) queryParams.append("from", from);
     if (to) queryParams.append("to", to);
     if (date) queryParams.append("date", date);
+    if (rideType) queryParams.append("rideType", rideType);
 
     const response = await fetch(
       `${baseUrl}${endPoints.getallridesurl}?${queryParams.toString()}`,
@@ -840,7 +841,12 @@ export const pickCourierApi = async (token, payload) => {
     try {
       const data = JSON.parse(text);
       if (!res.ok) {
-        return { success: false, message: data?.message || "Request failed" };
+        return {
+          success: false,
+          message: data?.message || "Request failed",
+          code: data?.code,
+          subscription: data?.subscription,
+        };
       }
       return { success: true, ...data };
     } catch {
@@ -875,6 +881,8 @@ export const pickPassengerApi = async (token, payload) => {
       return {
         success: false,
         message: data?.message || "Request failed",
+        code: data?.code,
+        subscription: data?.subscription,
       };
     }
 

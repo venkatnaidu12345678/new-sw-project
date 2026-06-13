@@ -51,6 +51,18 @@ const rideSchema = new mongoose.Schema(
     scheduledStartNotifiedAt: { type: Date, default: null },
     fromCoords: coordsSchema,
     toCoords: coordsSchema,
+    routePolyline: { type: String, default: "" },
+    selectedRouteIndex: { type: Number, default: 0 },
+    stopovers: {
+      type: [
+        {
+          label: { type: String, trim: true },
+          lat: Number,
+          lng: Number,
+        },
+      ],
+      default: [],
+    },
     liveTracking: { type: liveTrackingSchema, default: () => ({}) },
   },
   { timestamps: true }

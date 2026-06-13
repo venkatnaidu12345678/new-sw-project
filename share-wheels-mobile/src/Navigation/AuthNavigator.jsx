@@ -7,7 +7,6 @@ import LoginPage from "../Screens/Login/LoginPage";
 import SignupPage from "../Screens/Signup/SignupPage";
 import OtpVerificationPage from "../Screens/OtpVerification/OtpVerificationPage";
 import ForgotPasswordPage from "../Screens/ForgotPassword/ForgotPasswordPage";
-import ResetPasswordPage from "../Screens/ForgotPassword/ResetPasswordPage";
 import BottomNavigator from "../Components/BottomNavigator";
 import CreateRidePage from "../Screens/CreateRidePage";
 import PassengerRequest from "../Screens/PassengerRequest";
@@ -20,6 +19,7 @@ import RideChat from "../Screens/RideChat";
 import RideLiveMap from "../Screens/RideLiveMap";
 import RideHistory from "../Components/RideHistory";
 import Legal from "../Components/Legal";
+import DriverSubscriptionScreen from "../Screens/DriverSubscriptionScreen";
 import NotificationScreen from "../Components/NotificationScreen";
 import { userProfile } from "../ApiService/ridesApiServices";
 import { verifyTokenApi } from "../ApiService/AuthApiService";
@@ -201,11 +201,6 @@ const AuthNavigator = () => {
               options={{ animation: "slide_from_right" }}
               component={ForgotPasswordPage}
             />
-            <Stack.Screen
-              name="ResetPassword"
-              options={{ animation: "slide_from_right" }}
-              component={ResetPasswordPage}
-            />
           </>
         ) : (
           <>
@@ -221,6 +216,11 @@ const AuthNavigator = () => {
             <Stack.Screen name="RideLiveMap" component={RideLiveMap} />
             <Stack.Screen name="RideHistory" component={RideHistory} />
             <Stack.Screen name="Legal" component={Legal} />
+            <Stack.Screen
+              name="DriverSubscription"
+              component={DriverSubscriptionScreen}
+              options={{ animation: "slide_from_right" }}
+            />
             <Stack.Screen name="NotificationScreen" component={NotificationScreen} />
           </>
         )}

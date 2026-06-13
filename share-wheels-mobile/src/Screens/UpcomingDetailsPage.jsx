@@ -11,7 +11,13 @@ import {
 } from "react-native";
 
 import BottomSlider from "../Components/BottomSlider";
-import EnRoute from "../Components/EnRoute";
+import EnRoute, {
+  buildEnrouteDragHeader,
+  enrouteSheetStyles,
+} from "../Components/EnRoute";
+import DriverEnrouteHub from "../Components/DriverEnrouteHub";
+import { useEnrouteRequests } from "../hooks/useEnrouteRequests";
+import { getMySubscription } from "../ApiService/subscriptionApiService";
 import FixedButton from "../Components/FixedButton";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -64,6 +70,7 @@ import VerifyBoardingPopover from "../Components/ui/VerifyBoardingPopover";
 import RemovePassengerPopover from "../Components/ui/RemovePassengerPopover";
 import {
   getParticipantUserId,
+  normalizeNavigationParamId,
   getParticipantUserNo,
 } from "../Utils/participantIds";
 import VerifyBoardingPanel from "../Components/VerifyBoardingPanel";
@@ -112,6 +119,7 @@ const UpcomingDetailsPage = ({ route }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const participantSheetStyles = useThemedStyles(participantsSheetStyles);
+  const enrouteSheetThemedStyles = useThemedStyles(enrouteSheetStyles);
   const { rideData } = route.params || {};
   const { setRefreshUpcomingrides, ProfileDetails } = profileData() || {};
 
@@ -129,6 +137,8 @@ const UpcomingDetailsPage = ({ route }) => {
 
   const [activeSlider, setActiveSlider] = useState(null);
   const [participantTabIndex, setParticipantTabIndex] = useState(0);
+  const [enrouteTabIndex, setEnrouteTabIndex] = useState(0);
+  const [driverSubscription, setDriverSubscription] = useState(null);
   const [loadingRide, setLoadingRide] = useState(false);
   const [rideActionLoading, setRideActionLoading] = useState(false);
   const [rideStarted, setRideStarted] = useState(
@@ -165,6 +175,10 @@ const UpcomingDetailsPage = ({ route }) => {
   const [scheduleInfo, setScheduleInfo] = useState({
     date: rideData?.date,
     startTime: rideData?.startTime,
+  });
+  const [routeMeta, setRouteMeta] = useState({
+    stopovers: rideData?.stopovers || [],
+    routePolyline: rideData?.routePolyline || "",
   });
   const [driverActionSubmitting, setDriverActionSubmitting] = useState(false);
   const myUserId =
@@ -229,6 +243,12 @@ const UpcomingDetailsPage = ({ route }) => {
         startTime: data.startTime ?? prev.startTime,
       }));
     }
+    if (data.stopovers != null || data.routePolyline != null) {
+      setRouteMeta({
+        stopovers: data.stopovers ?? [],
+        routePolyline: data.routePolyline ?? "",
+      });
+    }
   }, []);
 
   const fetchRideDetails = useCallback(
@@ -263,11 +283,39 @@ const UpcomingDetailsPage = ({ route }) => {
     onRequestUpdated: refreshRideDetailsQuiet,
   });
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchRideDetails({ showLoading: true });
-    }, [fetchRideDetails])
-  );
+  const enrouteStopovers = routeMeta.stopovers?.length
+    ? routeMeta.stopovers
+    : rideData?.stopovers || [];
+  const enrouteRoutePolyline =
+    routeMeta.routePolyline || rideData?.routePolyline || "";
+
+  const enrouteRequests = useEnrouteRequests({
+    from: rideData?.from,
+    to: rideData?.to,
+    date: scheduleInfo.date || rideData?.date,
+    rideId: rideIdStr,
+    stopovers: enrouteStopovers,
+    routePolyline: enrouteRoutePolyline,
+    enabled:
+      isDriver &&
+      !!rideData?.from &&
+      !!rideData?.to &&
+      !detailsLoading,
+  });
+
+  const loadDriverSubscription = useCallback(async () => {
+    if (!isDriver) return;
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) return;
+      const res = await getMySubscription(token);
+      if (isMountedRef.current) {
+        setDriverSubscription(res?.subscription || null);
+      }
+    } catch (err) {
+      if (__DEV__) console.warn("[subscription]", err?.message);
+    }
+  }, [isDriver]);
 
   const handleEnroutePickSuccess = useCallback(
     (_item, response) => {
@@ -275,9 +323,43 @@ const UpcomingDetailsPage = ({ route }) => {
         applyRideDetails(response.details);
       }
       fetchRideDetails();
+      enrouteRequests.refresh();
+      loadDriverSubscription();
       refreshUpcomingList();
     },
-    [applyRideDetails, fetchRideDetails, refreshUpcomingList]
+    [
+      applyRideDetails,
+      fetchRideDetails,
+      enrouteRequests.refresh,
+      loadDriverSubscription,
+      refreshUpcomingList,
+    ]
+  );
+
+  const openDriverSubscription = useCallback(() => {
+    navigation.navigate("DriverSubscription");
+  }, [navigation]);
+
+  const handleSubscriptionRequired = useCallback(
+    (response) => {
+      Alert.alert(
+        "Subscription required",
+        response?.message ||
+          "Choose a driver subscription plan to pick en route passengers and couriers.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "View plans", onPress: openDriverSubscription },
+        ]
+      );
+    },
+    [openDriverSubscription]
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchRideDetails({ showLoading: true });
+      loadDriverSubscription();
+    }, [fetchRideDetails, loadDriverSubscription])
   );
 
   const countIncoming = (messages, userId) => {
@@ -474,12 +556,16 @@ const UpcomingDetailsPage = ({ route }) => {
     return "Passenger View";
   }, [isDriver, isCourier]);
 
-  const rideNavParams = () => ({
-    rideId: rideData?._id,
-    rideTitle: `${rideData?.from} → ${rideData?.to}`,
-    myRole: isDriver ? "driver" : isCourier ? "courier" : "passenger",
-    rideStatus: rideStatus || rideData?.status,
-  });
+  const rideNavParams = (focusParticipantId = null) => {
+    const focusId = normalizeNavigationParamId(focusParticipantId);
+    return {
+      rideId: rideData?._id,
+      rideTitle: `${rideData?.from} → ${rideData?.to}`,
+      myRole: isDriver ? "driver" : isCourier ? "courier" : "passenger",
+      rideStatus: rideStatus || rideData?.status,
+      ...(focusId ? { focusParticipantId: focusId } : {}),
+    };
+  };
 
   const openDirectChat = (peer) => {
     const peerUser = peer?.userId || peer;
@@ -498,9 +584,22 @@ const UpcomingDetailsPage = ({ route }) => {
     });
   };
 
-  const openLiveMap = () => {
-    navigation.navigate("RideLiveMap", rideNavParams());
+  const openLiveMap = (focusParticipantId = null) => {
+    navigation.navigate("RideLiveMap", rideNavParams(focusParticipantId));
   };
+
+  const openParticipantRoute = useCallback(
+    (item) => {
+      const focusId = item?._id || getParticipantUserId(item);
+      if (!focusId) {
+        openLiveMap();
+        return;
+      }
+      setActiveSlider(null);
+      openLiveMap(String(focusId));
+    },
+    [navigation, rideData, isDriver, isCourier, rideStatus]
+  );
 
   const handleAcceptPassenger = useCallback(async (passengerId) => {
     const token = await AsyncStorage.getItem("token");
@@ -528,6 +627,17 @@ const UpcomingDetailsPage = ({ route }) => {
       const normalizedId = String(passengerId || "");
       if (!normalizedId) {
         Alert.alert("Error", "Could not identify passenger.");
+        return false;
+      }
+
+      const passenger = passengers.find(
+        (p) => getParticipantUserId(p) === normalizedId
+      );
+      if (passenger?.isBoardingVerified) {
+        Alert.alert(
+          "Cannot remove",
+          "This passenger is already verified and cannot be removed."
+        );
         return false;
       }
 
@@ -657,6 +767,7 @@ const UpcomingDetailsPage = ({ route }) => {
 
   const requestRemovePassenger = useCallback(
     (item) => {
+      if (item?.isBoardingVerified) return;
       const id = getParticipantUserId(item);
       if (!id) return;
       const stillOnRide = passengers.some(
@@ -701,15 +812,29 @@ const UpcomingDetailsPage = ({ route }) => {
 
   const startVerifyFromParticipants = useCallback(
     async (item, role) => {
+      if (!isRideStarted) {
+        Alert.alert(
+          "Start ride first",
+          "Start the ride before verifying passenger or courier OTP."
+        );
+        return;
+      }
       if (item?.isBoardingVerified) return;
       const prepared = await prepareVerifyParticipant(item, role);
       if (!prepared) return;
       setVerifyTarget(prepared);
     },
-    [prepareVerifyParticipant]
+    [prepareVerifyParticipant, isRideStarted]
   );
 
   const openOtpSlider = async () => {
+    if (!isRideStarted) {
+      Alert.alert(
+        "Start ride first",
+        "Start the ride before verifying passenger or courier OTP."
+      );
+      return;
+    }
     setActiveSlider("otp");
     setVerifyTarget(null);
     await refreshVerification();
@@ -845,25 +970,12 @@ const UpcomingDetailsPage = ({ route }) => {
   const handleStartRide = () => {
     if (rideActionLoading || normalizedRideStatus === "started") return;
 
-    if (isDriver && verification?.pending > 0 && !schedulePassed && !scheduleEarly) {
-      Alert.alert(
-        "Verification required",
-        `Verify ${verification.pending} passenger(s)/courier(s) before starting, or start anyway.`,
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Enter OTP", onPress: openOtpSlider },
-          { text: "Start anyway", onPress: runStartRide },
-        ]
-      );
-      return;
-    }
-
-    if (isDriver && verification?.pending > 0 && (schedulePassed || scheduleEarly)) {
+    if (isDriver && (schedulePassed || scheduleEarly)) {
       Alert.alert(
         scheduleEarly ? "Start early?" : "Start ride?",
         scheduleEarly
-          ? `Scheduled for ${formatScheduledStart(rideData)}. ${verification.pending} participant(s) not verified — you can still start now.`
-          : `${verification.pending} participant(s) not verified — you can still start now.`,
+          ? `Scheduled for ${formatScheduledStart(rideData)}. Start now?`
+          : "Scheduled time has passed. Start now?",
         [
           { text: "Cancel", style: "cancel" },
           { text: "Start ride", onPress: runStartRide },
@@ -980,6 +1092,15 @@ const UpcomingDetailsPage = ({ route }) => {
   };
 
   const handleRemoveCourier = async (courierId) => {
+    const courier = couriers.find((c) => String(c?._id) === String(courierId));
+    if (courier?.isBoardingVerified) {
+      Alert.alert(
+        "Cannot remove",
+        "This courier is already verified and cannot be removed."
+      );
+      return;
+    }
+
     try {
       const token = await AsyncStorage.getItem("token");
       const payload = {
@@ -1013,7 +1134,7 @@ const UpcomingDetailsPage = ({ route }) => {
           </Text>
         </TouchableOpacity>
 
-        {isDriver && (
+        {isDriver && isRideStarted && (
           <TouchableOpacity
             style={[styles.otpButton, { borderColor: roleColor }]}
             onPress={openOtpSlider}
@@ -1038,7 +1159,7 @@ const UpcomingDetailsPage = ({ route }) => {
         {isRideStarted && (
           <TouchableOpacity
             style={[styles.otpButton, { borderColor: colors.successText, marginLeft: 8 }]}
-            onPress={openLiveMap}
+            onPress={() => openLiveMap()}
           >
             <Text style={[styles.otpText, { color: colors.successText }]}>Map</Text>
           </TouchableOpacity>
@@ -1093,7 +1214,7 @@ const UpcomingDetailsPage = ({ route }) => {
                   : "All passengers and couriers verified. You can start the ride."
                 : normalizedRideStatus === "started"
                   ? `${verification.pending} of ${verification.total} still need OTP verification — verify anytime during the ride.`
-                  : `${verification.pending} of ${verification.total} still need OTP verification.`}
+                  : `${verification.pending} of ${verification.total} need OTP verification after you start the ride.`}
             </Text>
           </View>
         )}
@@ -1244,14 +1365,21 @@ const UpcomingDetailsPage = ({ route }) => {
               onOpenPending={() => openParticipantsSlider(2)}
             />
 
-            <TouchableOpacity
-              style={styles.sendRequestBtn}
-              onPress={() => setActiveSlider("enroute")}
-            >
-              <Text style={styles.sendRequestText}>
-                Send Request to en route Passengers
-              </Text>
-            </TouchableOpacity>
+            <DriverEnrouteHub
+              passengerCount={enrouteRequests.counts.passengers}
+              courierCount={enrouteRequests.counts.couriers}
+              loading={enrouteRequests.loading}
+              picksRemaining={driverSubscription?.picksRemaining}
+              ridesRemaining={driverSubscription?.ridesRemaining}
+              isFreePlan={driverSubscription?.isFree}
+              planName={driverSubscription?.plan?.name}
+              onOpen={() => {
+                enrouteRequests.refresh();
+                loadDriverSubscription();
+                setEnrouteTabIndex(0);
+                setActiveSlider("enroute");
+              }}
+            />
           </>
         )}
         {!isDriver && (
@@ -1349,7 +1477,7 @@ const UpcomingDetailsPage = ({ route }) => {
               : activeSlider === "cancelRide"
                 ? 0.55
                 : activeSlider === "enroute"
-                  ? 0.72
+                  ? 0.88
                   : 0.65
         }
         dragHeader={
@@ -1365,7 +1493,16 @@ const UpcomingDetailsPage = ({ route }) => {
                 passengerRequests,
                 courierRequests,
               })
-            : null
+            : activeSlider === "enroute"
+              ? buildEnrouteDragHeader({
+                  styles: enrouteSheetThemedStyles,
+                  colors,
+                  activeTabIndex: enrouteTabIndex,
+                  onTabChange: setEnrouteTabIndex,
+                  passengers: enrouteRequests.counts.passengers,
+                  couriers: enrouteRequests.counts.couriers,
+                })
+              : null
         }
       >
         {activeSlider === "participants" && (
@@ -1379,8 +1516,10 @@ const UpcomingDetailsPage = ({ route }) => {
             passengerRequests={passengerRequests}
             courierRequests={courierRequests}
             rideFrom={rideData?.from}
+            rideTo={rideData?.to}
             rideStatus={normalizedRideStatus}
             isRideStarted={isRideStarted}
+            onViewParticipantRoute={openParticipantRoute}
             onStartVerify={startVerifyFromParticipants}
             onDropPassenger={handleDropPassenger}
             onDeliverCourier={handleDeliverCourier}
@@ -1458,13 +1597,24 @@ const UpcomingDetailsPage = ({ route }) => {
 
         {/* ENROUTE */}
         {activeSlider === "enroute" && (
-          <EnRoute
-            from={rideData?.from}
-            to={rideData?.to}
-            date={formatLocalISODate(rideData?.date)}
-            rideId={rideData?._id}
-            onPickSuccess={handleEnroutePickSuccess}
-          />
+          <View style={enrouteSheetThemedStyles.body}>
+            <EnRoute
+              from={rideData?.from}
+              to={rideData?.to}
+              date={scheduleInfo.date || rideData?.date}
+              rideId={rideData?._id}
+              stopovers={enrouteStopovers}
+              routePolyline={enrouteRoutePolyline}
+              onPickSuccess={handleEnroutePickSuccess}
+              onSubscriptionRequired={handleSubscriptionRequired}
+              data={enrouteRequests.data}
+              loading={enrouteRequests.loading}
+              onRefresh={enrouteRequests.refresh}
+              removeItem={enrouteRequests.removeItem}
+              activeTabIndex={enrouteTabIndex}
+              onTabChange={setEnrouteTabIndex}
+            />
+          </View>
         )}
 
         {activeSlider === "cancelRide" && (

@@ -43,6 +43,10 @@ const buildTrackingPayload = (ride, user, role, lat, lng, now) => ({
   userId: user._id.toString(),
   participantId: user._id.toString(),
   name: user.name || "User",
+  fromCoords: ride.fromCoords || null,
+  toCoords: ride.toCoords || null,
+  routePolyline: ride.routePolyline || "",
+  stopovers: ride.stopovers || [],
   driver: {
     id:
       ride.creator?._id?.toString?.() ||
@@ -71,7 +75,7 @@ const updateParticipantLocation = async (user, rideId, body) => {
   }
 
   const ride = await Ride.findById(rideId).select(
-    "status creator passengers all_deliveries liveTracking from to"
+    "status creator passengers all_deliveries liveTracking from to date fromCoords toCoords routePolyline stopovers"
   );
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
 
@@ -173,42 +177,61 @@ const requestParticipantLocationAccess = async (driverUser, { rideId, targetUser
   };
 };
 
-const getActiveRidesForAdmin = async () => {
-  const rides = await Ride.find({
-    status: "started",
-  })
-    .populate("creator", "name mobile")
-    .populate("passengers.userId", "name")
-    .select("from to status liveTracking passengers date startTime")
-    .lean();
-
-  const list = rides.map((r) => ({
-    rideId: r._id.toString(),
-    from: r.from,
-    to: r.to,
-    status: r.status,
-    date: r.date,
-    startTime: r.startTime,
-    driver: r.creator,
-    passengerCount: r.passengers?.length || 0,
-    location: pickDriverLocation(r.liveTracking),
-    participants: (r.liveTracking?.participantLocations || []).map((p) => ({
-      userId: p.userId?.toString?.() || String(p.userId),
-      role: p.role,
-      name: p.name,
-      location:
-        Number.isFinite(p.lat) && Number.isFinite(p.lng)
-          ? { lat: p.lat, lng: p.lng, updatedAt: p.updatedAt }
-          : null,
-    })),
-    path: (r.liveTracking?.locationHistory || []).filter(
-      (pt) => Number.isFinite(pt.lat) && Number.isFinite(pt.lng)
-    ),
-    startedAt: r.liveTracking?.startedAt,
-    isTracking: !!r.liveTracking?.isActive,
+const mapParticipantLocations = (rows = []) =>
+  rows.map((p) => ({
+    userId: p.userId?.toString?.() || String(p.userId),
+    role: p.role,
+    name: p.name,
+    location:
+      Number.isFinite(p.lat) && Number.isFinite(p.lng)
+        ? { lat: p.lat, lng: p.lng, updatedAt: p.updatedAt }
+        : null,
   }));
 
+const mapRideToActiveRow = (r) => ({
+  rideId: r._id.toString(),
+  from: r.from,
+  to: r.to,
+  fromCoords: r.fromCoords || null,
+  toCoords: r.toCoords || null,
+  routePolyline: r.routePolyline || "",
+  stopovers: r.stopovers || [],
+  status: r.status,
+  date: r.date,
+  startTime: r.startTime,
+  driver: r.creator,
+  passengerCount: r.passengers?.length || 0,
+  location: pickDriverLocation(r.liveTracking),
+  participants: mapParticipantLocations(r.liveTracking?.participantLocations || []),
+  path: (r.liveTracking?.locationHistory || []).filter(
+    (pt) => Number.isFinite(pt.lat) && Number.isFinite(pt.lng)
+  ),
+  startedAt: r.liveTracking?.startedAt,
+  isTracking: !!r.liveTracking?.isActive,
+});
+
+const ACTIVE_RIDE_SELECT =
+  "from to status liveTracking passengers fromCoords toCoords routePolyline stopovers date startTime";
+
+const getActiveRidesForAdmin = async () => {
+  const rides = await Ride.find({ status: "started" })
+    .populate("creator", "name mobile")
+    .populate("passengers.userId", "name")
+    .select(ACTIVE_RIDE_SELECT)
+    .lean();
+
+  const list = rides.map(mapRideToActiveRow);
   return { status: 200, body: { success: true, rides: list } };
+};
+
+const getActiveRideRowById = async (rideId) => {
+  if (!mongoose.Types.ObjectId.isValid(rideId)) return null;
+  const ride = await Ride.findById(rideId)
+    .populate("creator", "name mobile")
+    .populate("passengers.userId", "name")
+    .select(ACTIVE_RIDE_SELECT)
+    .lean();
+  return ride ? mapRideToActiveRow(ride) : null;
 };
 
 const getRideTracking = async (rideId) => {
@@ -218,7 +241,9 @@ const getRideTracking = async (rideId) => {
   const ride = await Ride.findById(rideId)
     .populate("creator", "name mobile email")
     .populate("passengers.userId", "name mobile")
-    .select("from to status liveTracking passengers fromCoords toCoords date startTime")
+    .select(
+      "from to status liveTracking passengers fromCoords toCoords routePolyline stopovers date startTime"
+    )
     .lean();
 
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
@@ -243,6 +268,8 @@ const getRideTracking = async (rideId) => {
         passengers: ride.passengers,
         fromCoords: ride.fromCoords,
         toCoords: ride.toCoords,
+        routePolyline: ride.routePolyline || "",
+        stopovers: ride.stopovers || [],
         liveTracking,
         location: pickDriverLocation(ride.liveTracking),
         participants: liveTracking?.participantLocations || [],
@@ -266,8 +293,10 @@ const getTrackingForUser = async (user, rideId) => {
   }
   const ride = await Ride.findById(rideId)
     .select(
-      "creator passengers.userId all_deliveries.userId status liveTracking from to fromCoords toCoords"
+      "creator passengers all_deliveries status liveTracking from to date fromCoords toCoords routePolyline stopovers"
     )
+    .populate("passengers.userId", "name profile_img")
+    .populate("all_deliveries.userId", "name profile_img")
     .lean();
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
 
@@ -303,6 +332,34 @@ const getTrackingForUser = async (user, rideId) => {
     ensureEntry(d.userId, "courier", "Courier");
   });
 
+  let participantLocations = Array.from(byUserId.values());
+  const myUserIdStr = user._id.toString();
+
+  if (role === "driver") {
+    participantLocations = participantLocations.filter(
+      (p) => p.role === "passenger" || p.role === "courier"
+    );
+  } else {
+    participantLocations = participantLocations
+      .filter((p) => p.role === "driver")
+      .map((p) => ({
+        userId: p.userId,
+        role: p.role,
+        name: p.name,
+        lat: p.lat,
+        lng: p.lng,
+        updatedAt: p.updatedAt,
+      }));
+  }
+
+  const driverLocation = pickDriverLocation(liveTracking);
+  const liveTrackingForViewer = {
+    ...liveTracking,
+    driverLocation,
+    participantLocations,
+    locationHistory: liveTracking.locationHistory || [],
+  };
+
   return {
     status: 200,
     body: {
@@ -313,14 +370,24 @@ const getTrackingForUser = async (user, rideId) => {
       to: ride.to,
       fromCoords: ride.fromCoords || null,
       toCoords: ride.toCoords || null,
-      myUserId: user._id.toString(),
-      liveTracking: {
-        ...liveTracking,
-        driverLocation: pickDriverLocation(liveTracking),
-        participantLocations: Array.from(byUserId.values()),
-      },
+      routePolyline: ride.routePolyline || "",
+      stopovers: ride.stopovers || [],
+      myUserId: myUserIdStr,
+      date: ride.date || null,
+      passengers: ride.passengers || [],
+      couriers: ride.all_deliveries || [],
+      liveTracking: liveTrackingForViewer,
     },
   };
+};
+
+const emitRideTrackingSnapshot = async (socket, rideId) => {
+  if (!socket?.user || !rideId) return null;
+  const result = await getTrackingForUser(socket.user, rideId);
+  if (result.status !== 200) return null;
+  const payload = { rideId: String(rideId), ...result.body };
+  socket.emit("rideTrackingSnapshot", payload);
+  return payload;
 };
 
 const activeRosterUserIds = (ride) => {
@@ -358,6 +425,10 @@ const syncLiveTrackingRoster = async (rideId) => {
     from: ride.from,
     to: ride.to,
     status: ride.status,
+    fromCoords: ride.fromCoords || null,
+    toCoords: ride.toCoords || null,
+    routePolyline: ride.routePolyline || "",
+    stopovers: ride.stopovers || [],
     driverLocation: pickDriverLocation(ride.liveTracking),
     participantLocations: pruned.map(serializeParticipantRow),
     path: ride.liveTracking.locationHistory || [],
@@ -370,8 +441,11 @@ module.exports = {
   updateParticipantLocation,
   requestParticipantLocationAccess,
   getActiveRidesForAdmin,
+  getActiveRideRowById,
+  mapRideToActiveRow,
   getRideTracking,
   getTrackingForUser,
+  emitRideTrackingSnapshot,
   emitLocation,
   syncLiveTrackingRoster,
 };

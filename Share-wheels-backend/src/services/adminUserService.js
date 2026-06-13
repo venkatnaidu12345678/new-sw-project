@@ -54,6 +54,13 @@ const createUser = async (body) => {
     isTermsAndServicesAccepted: !!body.isTermsAndServicesAccepted,
   });
 
+  try {
+    const { ensureDefaultSubscription } = require("./driverSubscriptionService");
+    await ensureDefaultSubscription(user._id);
+  } catch (subErr) {
+    console.warn("[Admin createUser] Free plan assignment skipped:", subErr?.message);
+  }
+
   return {
     status: 201,
     body: {

@@ -34,4 +34,6 @@ module.exports = {
   activeTracking: async (req, res) => handle(res, () => adminDashboardService.getActiveTracking()),
   trackingDetail: async (req, res) =>
     handle(res, () => adminDashboardService.getTrackingDetail(req.params.id)),
+  routeDirections: async (req, res) =>
+    handle(res, () => adminDashboardService.getRouteDirections(req.query)),
 };

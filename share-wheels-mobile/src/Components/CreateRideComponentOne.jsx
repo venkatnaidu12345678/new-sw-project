@@ -12,6 +12,7 @@ import Icon from "react-native-vector-icons/Ionicons";
 import LinearGradient from "react-native-linear-gradient";
 
 import FromToInput from "./FromToInput.jsx";
+import RouteStopoversPicker from "./maps/RouteStopoversPicker";
 import VehicleInfo from "./VehicleInfo.jsx";
 import DriverDateAndSeats from "./DriverDateAndSeats.jsx";
 import ToggleComponent from "./ToggleComponent";
@@ -62,6 +63,11 @@ const CreateRideComponentOne = forwardRef(
       userName,
       onPressAddVehicle,
       onPlaceSelect,
+      fromCoords,
+      toCoords,
+      onRoutePlanChange,
+      routeMapFullscreen = false,
+      onRouteMapFullscreenChange,
     },
     ref
   ) => {
@@ -128,6 +134,30 @@ const CreateRideComponentOne = forwardRef(
       ? formatDisplayTime(rideData.startTime) || String(rideData.startTime).trim()
       : "Select start time";
 
+    const routeMapTitle =
+      rideData.from && rideData.to
+        ? `${rideData.from} → ${rideData.to}`
+        : "Choose your route";
+
+    if (routeMapFullscreen) {
+      return (
+        <View style={styles.routeMapFullscreenHost}>
+          <RouteStopoversPicker
+            fromCoords={fromCoords}
+            toCoords={toCoords}
+            fromLabel={rideData.from}
+            toLabel={rideData.to}
+            rideDate={rideData.date}
+            theme={CR}
+            onChange={onRoutePlanChange}
+            isFullscreen={routeMapFullscreen}
+            onFullscreenChange={onRouteMapFullscreenChange}
+            fullscreenTitle={routeMapTitle}
+          />
+        </View>
+      );
+    }
+
     return (
       <View style={styles.root}>
         <LinearGradient
@@ -187,6 +217,18 @@ const CreateRideComponentOne = forwardRef(
             fields={fields}
             variant="route"
             onPlaceSelect={onPlaceSelect}
+          />
+          <RouteStopoversPicker
+            fromCoords={fromCoords}
+            toCoords={toCoords}
+            fromLabel={rideData.from}
+            toLabel={rideData.to}
+            rideDate={rideData.date}
+            theme={CR}
+            onChange={onRoutePlanChange}
+            isFullscreen={routeMapFullscreen}
+            onFullscreenChange={onRouteMapFullscreenChange}
+            fullscreenTitle={routeMapTitle}
           />
         </FormSection>
 
@@ -336,6 +378,10 @@ export default CreateRideComponentOne;
 
 const makeStyles = (CR, input) =>
   StyleSheet.create({
+  routeMapFullscreenHost: {
+    flex: 1,
+    minHeight: 400,
+  },
   root: {
     flex: 1,
   },

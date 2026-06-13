@@ -10,6 +10,7 @@ const connectDatabase = () => {
 
   const { ensureDefaultAdmin } = require("./ensureDefaultAdmin");
   const { ensureDefaultLookupTypes } = require("./ensureDefaultLookupTypes");
+  const { ensureDefaultSubscriptionPlan } = require("./ensureDefaultSubscriptionPlan");
   const { ensureUserNos } = require("./ensureUserNos");
   const { startRideExpiryJob } = require("../jobs/rideExpiryJob");
   const { startNotificationCleanupJob } = require("../jobs/notificationCleanupJob");
@@ -21,6 +22,7 @@ const connectDatabase = () => {
       try {
         await ensureDefaultAdmin();
         await ensureDefaultLookupTypes();
+        await ensureDefaultSubscriptionPlan();
         await ensureUserNos();
         startRideExpiryJob();
         startNotificationCleanupJob();

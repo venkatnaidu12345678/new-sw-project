@@ -20,8 +20,12 @@ export const api = async (path, options = {}) => {
     } catch {
       const snippet = raw.replace(/<[^>]+>/g, " ").trim().slice(0, 120);
       if (/cannot (GET|POST|PUT|PATCH|DELETE)/i.test(snippet)) {
+        const usingRemote =
+          API_BASE.startsWith("http") && !/localhost|127\.0\.0\.1/.test(API_BASE);
         throw new Error(
-          `${snippet}. Restart the Share Wheels backend (port 3001) so admin location routes load.`
+          usingRemote
+            ? `${snippet}. This admin UI is calling ${API_BASE} — deploy the latest backend there, or set VITE_API_URL=/api in share-wheels-admin/.env and restart npm run dev to use localhost:3001.`
+            : `${snippet}. Restart Share Wheels backend on port 3001 (npm run dev in Share-wheels-backend), then refresh this page.`
         );
       }
       throw new Error(snippet || `Invalid response (${res.status})`);
@@ -94,6 +98,10 @@ export const deleteUser = (id) =>
 
 export const getActiveTracking = () => api("/admin/tracking/active");
 export const getTrackingDetail = (id) => api(`/admin/tracking/${id}`);
+export const getAdminRouteDirections = (params = {}) => {
+  const q = new URLSearchParams(params).toString();
+  return api(`/admin/maps/directions?${q}`);
+};
 
 export const getAdsMeta = () => api("/admin/ads/meta");
 export const getAds = (params = {}) => {
@@ -149,6 +157,21 @@ export const updateLegalPolicies = (policies) =>
     method: "PUT",
     body: JSON.stringify(policies),
   });
+
+export const getSubscriptionPlansMeta = () => api("/admin/subscription-plans/meta");
+export const getSubscriptionPlans = (params = {}) => {
+  const q = new URLSearchParams(params).toString();
+  return api(`/admin/subscription-plans${q ? `?${q}` : ""}`);
+};
+export const createSubscriptionPlan = (body) =>
+  api("/admin/subscription-plans", { method: "POST", body: JSON.stringify(body) });
+export const updateSubscriptionPlan = (id, body) =>
+  api(`/admin/subscription-plans/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+export const deleteSubscriptionPlan = (id) =>
+  api(`/admin/subscription-plans/${id}`, { method: "DELETE" });
 
 export const uploadAdMedia = async (file, mediaType = "image") => {
   const token = getToken();

@@ -277,10 +277,22 @@ const updateUserVerification = async (userId, isVerified) => {
 };
 
 const rideTrackingService = require("./rideTrackingService");
+const googleMapsService = require("./googleMapsService");
 
 const getActiveTracking = async () => rideTrackingService.getActiveRidesForAdmin();
 
 const getTrackingDetail = async (rideId) => rideTrackingService.getRideTracking(rideId);
+
+const getRouteDirections = async (query = {}) =>
+  googleMapsService.getDirections({
+    originLat: query.originLat,
+    originLng: query.originLng,
+    destLat: query.destLat,
+    destLng: query.destLng,
+    from: query.from,
+    to: query.to,
+    waypoints: query.waypoints,
+  });
 
 module.exports = {
   getDashboardStats,
@@ -293,4 +305,5 @@ module.exports = {
   updateUserVerification,
   getActiveTracking,
   getTrackingDetail,
+  getRouteDirections,
 };

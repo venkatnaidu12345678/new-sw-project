@@ -61,7 +61,12 @@ export const normalizeTrackingApi = (apiBody) => {
     to: apiBody.to,
     fromCoords: apiBody.fromCoords || null,
     toCoords: apiBody.toCoords || null,
+    routePolyline: apiBody.routePolyline || "",
+    stopovers: apiBody.stopovers || [],
     myUserId: normalizeRideId(apiBody.myUserId),
+    date: apiBody.date || null,
+    passengers: Array.isArray(apiBody.passengers) ? apiBody.passengers : [],
+    couriers: Array.isArray(apiBody.couriers) ? apiBody.couriers : [],
     liveTracking: {
       ...lt,
       driverLocation: driverLocation
@@ -92,7 +97,13 @@ export const mergeSocketLocation = (prev, payload) => {
     (eventRole === "driver" ? eventPoint : null);
 
   if (driverPoint) {
-    lt.driverLocation = { ...driverPoint, updatedAt: payload.location?.updatedAt };
+    lt.driverLocation = {
+      ...driverPoint,
+      updatedAt:
+        payload.driverLocation?.updatedAt ??
+        payload.location?.updatedAt ??
+        new Date().toISOString(),
+    };
   }
 
   if (Array.isArray(payload.participantLocations)) {
@@ -132,9 +143,18 @@ export const mergeSocketLocation = (prev, payload) => {
 
   return {
     ...base,
+    role: payload.role ?? base.role,
     status: payload.status ?? base.status,
     from: payload.from ?? base.from,
     to: payload.to ?? base.to,
+    fromCoords: payload.fromCoords ?? base.fromCoords,
+    toCoords: payload.toCoords ?? base.toCoords,
+    routePolyline: payload.routePolyline ?? base.routePolyline,
+    stopovers: payload.stopovers ?? base.stopovers,
+    date: payload.date ?? base.date,
+    passengers: payload.passengers ?? base.passengers,
+    couriers: payload.couriers ?? base.couriers,
+    myUserId: normalizeRideId(payload.myUserId) || base.myUserId,
     liveTracking: {
       ...lt,
       participantLocations: participants,
@@ -177,19 +197,60 @@ export const applyLocalGps = (prev, { userId, role, name, latitude, longitude })
   };
 };
 
-export const countOnMap = (tracking) => {
-  const lt = tracking?.liveTracking || {};
-  let driver = hasCoords(lt.driverLocation) ? 1 : 0;
+/** Strip other participants' GPS from non-driver viewers (map + counts). */
+export const filterTrackingForViewer = (tracking, viewerRole, myUserId) => {
+  if (!tracking) return tracking;
+  const role = normalizeRole(viewerRole);
+  const isDriverView = role === "driver";
+  const lt = tracking.liveTracking || {};
+  const myId = normalizeRideId(myUserId);
+
+  if (isDriverView) {
+    const participants = (lt.participantLocations || []).filter(
+      (p) => p.role === "passenger" || p.role === "courier"
+    );
+    return {
+      ...tracking,
+      liveTracking: {
+        ...lt,
+        participantLocations: participants,
+      },
+    };
+  }
+
+  const driverOnly = (lt.participantLocations || []).filter((p) => {
+    if (p.role !== "driver") return false;
+    return hasCoords(p) || hasCoords(lt.driverLocation);
+  });
+
+  return {
+    ...tracking,
+    liveTracking: {
+      ...lt,
+      participantLocations: driverOnly,
+      locationHistory: lt.locationHistory || [],
+    },
+  };
+};
+
+export const countOnMap = (tracking, viewerRole) => {
+  const filtered = filterTrackingForViewer(tracking, viewerRole, tracking?.myUserId);
+  const lt = filtered?.liveTracking || {};
+  const role = (viewerRole || "").toString().toLowerCase();
+  const isDriverView = role === "driver";
+
+  let driver = !isDriverView && hasCoords(lt.driverLocation) ? 1 : 0;
   let passengers = 0;
   let couriers = 0;
+
+  if (!isDriverView) {
+    return { driver, passengers: 0, couriers: 0, total: driver };
+  }
+
   (lt.participantLocations || []).forEach((p) => {
     if (!hasCoords(p)) return;
-    if (p.role === "driver") {
-      driver = 1;
-      return;
-    }
     if (p.role === "courier") couriers += 1;
-    else passengers += 1;
+    else if (p.role === "passenger") passengers += 1;
   });
-  return { driver, passengers, couriers, total: driver + passengers + couriers };
+  return { driver, passengers, couriers, total: passengers + couriers };
 };

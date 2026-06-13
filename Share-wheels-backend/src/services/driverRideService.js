@@ -24,7 +24,10 @@ const {
   isRidePastStartGracePeriod,
 } = require("../utils/rideScheduleUtils");
 const { expireRide, expirePendingRideIfStale } = require("./rideExpiryService");
-const { syncLiveTrackingRoster } = require("./rideTrackingService");
+const {
+  syncLiveTrackingRoster,
+  getActiveRideRowById,
+} = require("./rideTrackingService");
 const { expireStaleOpenRequests } = require("./requestExpiryService");
 const { clearRideChatMessages } = require("./rideChatService");
 const {
@@ -32,11 +35,17 @@ const {
   rejectIfCourierJoiningAsPassenger,
 } = require("../utils/rideParticipantRules");
 const {
-  escapeRegex,
   getRideDayBounds,
   passengerOverlapsRideDay,
   courierOverlapsRideDay,
 } = require("../utils/rideDateQueryUtils");
+const {
+  normalizeStopoverRows,
+  buildOrderedCorridor,
+  matchesForwardCorridor,
+  buildCorridorRegex,
+} = require("../utils/enrouteCorridorUtils");
+const googleMapsService = require("./googleMapsService");
 
 const getBookedSeats = (ride) =>
   (ride.passengers || []).reduce(
@@ -75,6 +84,8 @@ const acceptPassengerRequest = async (user, { rideId, passenger_userId }) => {
   const passengerEntry = {
     userId: reqObj.userId,
     requires_seats: reqObj.requires_seats,
+    from: ride.from,
+    to: ride.to,
     ride_amount: reqObj.ride_amount,
     status: "accepted",
     joinedAt: new Date(),
@@ -248,7 +259,8 @@ const startRide = async (user, { rideId }) => {
   });
 
   if (global.io) {
-    global.io.to("admin:tracking").emit("rideStarted", {
+    const row = await getActiveRideRowById(ride._id);
+    global.io.to("admin:tracking").emit("rideStarted", row || {
       rideId: ride._id.toString(),
       from: ride.from,
       to: ride.to,
@@ -306,7 +318,18 @@ const endRide = async (user, { rideId }) => {
   return { status: 200, body: { success: true, message: "Ride ended successfully", ride } };
 };
 
-const enrouteRequests = async (user, { from, to, date, rideId }) => {
+const loadPolylineTownLabels = async (polyline) => {
+  const result = await googleMapsService.getStopoverCandidates({
+    polyline,
+    max: 20,
+  });
+  if (result.status !== 200) return [];
+  return (result.body.candidates || [])
+    .map((row) => String(row.label || "").trim())
+    .filter(Boolean);
+};
+
+const enrouteRequests = async (user, { from, to, date, rideId, stopovers, routePolyline }) => {
   if (!from || !to || !date) {
     return { status: 400, body: { success: false, message: "from, to and date are required" } };
   }
@@ -318,14 +341,19 @@ const enrouteRequests = async (user, { from, to, date, rideId }) => {
     return { status: 400, body: { success: false, message: "Invalid date" } };
   }
 
-  const fromTrim = String(from).trim();
-  const toTrim = String(to).trim();
+  let fromTrim = String(from).trim();
+  let toTrim = String(to).trim();
   const { start: startOfDay, end: endOfDay } = bounds;
 
+  let stopoverRows = normalizeStopoverRows(stopovers);
+  let polyline = String(routePolyline || "").trim();
   let excludeUserIds = new Set();
+
   if (rideId && mongoose.Types.ObjectId.isValid(rideId)) {
     const ride = await Ride.findById(rideId)
-      .select("passenger_requested_ride.userId passengers.userId users_request_Couriers.userId")
+      .select(
+        "passenger_requested_ride.userId passengers.userId users_request_Couriers.userId stopovers from to routePolyline"
+      )
       .lean();
     if (ride) {
       (ride.passenger_requested_ride || []).forEach((p) => {
@@ -340,19 +368,41 @@ const enrouteRequests = async (user, { from, to, date, rideId }) => {
         const id = c.userId?._id || c.userId;
         if (id) excludeUserIds.add(String(id));
       });
+      fromTrim = String(ride.from || fromTrim).trim();
+      toTrim = String(ride.to || toTrim).trim();
+      if (!stopoverRows.length && ride.stopovers?.length) {
+        stopoverRows = normalizeStopoverRows(ride.stopovers);
+      }
+      if (!polyline && ride.routePolyline) {
+        polyline = String(ride.routePolyline).trim();
+      }
     }
   }
 
+  const corridor = await buildOrderedCorridor({
+    from: fromTrim,
+    to: toTrim,
+    stopovers: stopoverRows,
+    routePolyline: polyline,
+    loadPolylineTowns: loadPolylineTownLabels,
+  });
+
+  const corridorFilter = buildCorridorRegex(corridor);
+
   const passengers = await PassengerRide.find({
-    from: { $regex: escapeRegex(fromTrim), $options: "i" },
-    to: { $regex: escapeRegex(toTrim), $options: "i" },
+    from: corridorFilter,
+    to: corridorFilter,
     status: "pending",
     creator: { $ne: user._id },
     ...passengerOverlapsRideDay(startOfDay, endOfDay),
     $or: [{ assigned_to: { $exists: false } }, { "assigned_to.rideId": null }],
   }).populate("creator", "name gender profile_img");
   const passengerRequests = passengers
-    .filter((p) => !excludeUserIds.has(String(p.creator?._id || p.creator)))
+    .filter(
+      (p) =>
+        !excludeUserIds.has(String(p.creator?._id || p.creator)) &&
+        matchesForwardCorridor(p.from, p.to, corridor)
+    )
     .map((p) => ({
     request_type: "passenger",
     passengerId: p._id,
@@ -369,8 +419,8 @@ const enrouteRequests = async (user, { from, to, date, rideId }) => {
     status: p.status,
   }));
   const couriers = await Courier.find({
-    from: { $regex: escapeRegex(fromTrim), $options: "i" },
-    to: { $regex: escapeRegex(toTrim), $options: "i" },
+    from: corridorFilter,
+    to: corridorFilter,
     creator: { $ne: user._id },
     courier_status: "pending",
     $or: [
@@ -380,7 +430,11 @@ const enrouteRequests = async (user, { from, to, date, rideId }) => {
     ...courierOverlapsRideDay(startOfDay, endOfDay),
   }).populate("creator", "name gender profile_img");
   const courierRequests = couriers
-    .filter((c) => !excludeUserIds.has(String(c.creator?._id || c.creator)))
+    .filter(
+      (c) =>
+        !excludeUserIds.has(String(c.creator?._id || c.creator)) &&
+        matchesForwardCorridor(c.from, c.to, corridor)
+    )
     .map((c) => ({
     request_type: "courier",
     courierId: c._id,
@@ -400,10 +454,38 @@ const enrouteRequests = async (user, { from, to, date, rideId }) => {
     courier_receiver_details: c.courier_receiver_details,
   }));
   const allRequests = [...passengerRequests, ...courierRequests];
-  return { status: 200, body: { success: true, total: allRequests.length, passengers: passengerRequests.length, couriers: courierRequests.length, data: allRequests } };
+  return {
+    status: 200,
+    body: {
+      success: true,
+      total: allRequests.length,
+      passengers: passengerRequests.length,
+      couriers: courierRequests.length,
+      corridor,
+      data: allRequests,
+    },
+  };
 };
 
+const driverSubscriptionService = require("./driverSubscriptionService");
+
 const pickCourier = async (user, { rideId, courierId }) => {
+  const entitlement = await driverSubscriptionService.assertCanPickEnroute(
+    user._id,
+    rideId
+  );
+  if (!entitlement.ok) {
+    return {
+      status: entitlement.status || 403,
+      body: {
+        success: false,
+        message: entitlement.message,
+        code: entitlement.code,
+        subscription: entitlement.subscription || null,
+      },
+    };
+  }
+
   if (!mongoose.Types.ObjectId.isValid(rideId) || !mongoose.Types.ObjectId.isValid(courierId)) return { status: 400, body: { success: false, message: "Invalid IDs" } };
   const ride = await Ride.findById(rideId);
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
@@ -475,6 +557,8 @@ const pickCourier = async (user, { rideId, courierId }) => {
     rideId: ride._id.toString(),
     action: "courier_picked",
   });
+
+  await driverSubscriptionService.recordEnroutePick(user._id, rideId);
 
   const detailsRes = await getRideDetails(rideId, user._id);
 

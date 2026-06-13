@@ -30,12 +30,73 @@ const {
   emitRideRequestUpdated,
 } = require("../utils/socketEmit");
 const { toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
+const {
+  buildOrderedCorridor,
+  matchesForwardCorridor,
+} = require("../utils/enrouteCorridorUtils");
+const googleMapsService = require("./googleMapsService");
+const driverSubscriptionService = require("./driverSubscriptionService");
 const { expireStalePendingRides, expirePendingRideIfStale } = require("./rideExpiryService");
 const { expireStaleOpenRequests } = require("./requestExpiryService");
 const { rejectIfCourierJoiningAsPassenger } = require("../utils/rideParticipantRules");
 const { normalizeStartTimeForStorage } = require("../utils/rideScheduleUtils");
 
 const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const loadPolylineTownLabels = async (polyline) => {
+  const result = await googleMapsService.getStopoverCandidates({ polyline, max: 20 });
+  if (result.status !== 200) return [];
+  return (result.body.candidates || [])
+    .map((row) => String(row.label || "").trim())
+    .filter(Boolean);
+};
+
+const legacyEndpointMatch = (rideFrom, rideTo, searchFrom, searchTo) => {
+  const fromRe = new RegExp(escapeRegex(searchFrom), "i");
+  const toRe = new RegExp(escapeRegex(searchTo), "i");
+  return fromRe.test(String(rideFrom || "")) && toRe.test(String(rideTo || ""));
+};
+
+const rideMatchesPassengerSearch = async (ride, searchFrom, searchTo) => {
+  if (legacyEndpointMatch(ride.from, ride.to, searchFrom, searchTo)) {
+    return true;
+  }
+
+  const hasRouteData =
+    (Array.isArray(ride.stopovers) && ride.stopovers.length > 0) ||
+    String(ride.routePolyline || "").trim();
+  if (!hasRouteData) return false;
+
+  const corridor = await buildOrderedCorridor({
+    from: ride.from,
+    to: ride.to,
+    stopovers: ride.stopovers,
+    routePolyline: ride.routePolyline,
+    loadPolylineTowns: loadPolylineTownLabels,
+  });
+
+  return matchesForwardCorridor(searchFrom, searchTo, corridor);
+};
+
+const applyRideTypeFilter = (filter, rideType) => {
+  const normalized = String(rideType || "").trim().toLowerCase();
+  if (normalized === "long") {
+    filter.$and = [
+      ...(filter.$and || []),
+      {
+        $or: [
+          { rideType: "long" },
+          { rideType: { $exists: false } },
+          { rideType: null },
+        ],
+      },
+    ];
+    return;
+  }
+  if (normalized === "local") {
+    filter.rideType = "local";
+  }
+};
 
 const parseCalendarDateParts = (dateStr) => {
   const parts = String(dateStr).trim().split("-").map(Number);
@@ -87,6 +148,19 @@ const normalizeCoordsPayload = (coords, fallbackLabel) => {
   return { lat, lng, ...(label ? { label } : {}) };
 };
 
+const normalizeStopoversPayload = (stops) => {
+  if (!Array.isArray(stops)) return [];
+  return stops
+    .map((stop) => {
+      const lat = Number(stop?.lat ?? stop?.latitude);
+      const lng = Number(stop?.lng ?? stop?.longitude);
+      const label = String(stop?.label || "").trim();
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || !label) return null;
+      return { label, lat, lng };
+    })
+    .filter(Boolean);
+};
+
 const createRide = async (user, payload) => {
   const {
     from,
@@ -98,8 +172,12 @@ const createRide = async (user, payload) => {
     AlternatePhoneNumber,
     CanCarryCourier,
     QuickReserve,
+    rideType,
     fromCoords,
     toCoords,
+    routePolyline,
+    selectedRouteIndex,
+    stopovers,
   } = payload;
   if (!from || !to || !date || !startTime || !ride_amount) {
     return { status: 400, body: { error: "All required ride fields are missing" } };
@@ -129,13 +207,24 @@ const createRide = async (user, payload) => {
 
   const normalizedFromCoords = normalizeCoordsPayload(fromCoords, from);
   const normalizedToCoords = normalizeCoordsPayload(toCoords, to);
+  const normalizedStopovers = normalizeStopoversPayload(stopovers);
+  const polyline = String(routePolyline || "").trim();
+  const routeIndex = Number.isInteger(Number(selectedRouteIndex))
+    ? Number(selectedRouteIndex)
+    : 0;
+  const normalizedRideType = String(rideType || "long").trim().toLowerCase();
+  const storedRideType = normalizedRideType === "local" ? "local" : "long";
 
   const ride = await Ride.create({
     creator: user._id,
     from,
     to,
+    rideType: storedRideType,
     ...(normalizedFromCoords ? { fromCoords: normalizedFromCoords } : {}),
     ...(normalizedToCoords ? { toCoords: normalizedToCoords } : {}),
+    ...(polyline ? { routePolyline: polyline } : {}),
+    selectedRouteIndex: routeIndex,
+    stopovers: normalizedStopovers,
     availableSeats: availableSeats || 1,
     date: rideDate,
     AlternatePhoneNumber: AlternatePhoneNumber ? String(AlternatePhoneNumber) : undefined,
@@ -158,7 +247,7 @@ const createRide = async (user, payload) => {
 const getRides = async (query, authUser) => {
   await expireStalePendingRides();
 
-  let { from, to, date } = query;
+  let { from, to, date, rideType } = query;
   if (!from || !to || !date) {
     return { status: 400, body: { message: "from, to and date are required" } };
   }
@@ -169,20 +258,39 @@ const getRides = async (query, authUser) => {
     return { status: 400, body: { message: "Invalid date format" } };
   }
 
+  const fromRegex = { $regex: escapeRegex(from), $options: "i" };
+  const toRegex = { $regex: escapeRegex(to), $options: "i" };
+
   const findFilter = {
-    from: { $regex: escapeRegex(from), $options: "i" },
-    to: { $regex: escapeRegex(to), $options: "i" },
     date: { $gte: range.startDate, $lte: range.endDate },
     status: "pending",
+    $or: [
+      { from: fromRegex, to: toRegex },
+      { from: fromRegex },
+      { to: toRegex },
+      { from: toRegex },
+      { to: fromRegex },
+      { "stopovers.label": fromRegex },
+      { "stopovers.label": toRegex },
+    ],
   };
   if (authUser?._id) {
     findFilter.creator = { $ne: authUser._id };
   }
+  applyRideTypeFilter(findFilter, rideType);
 
-  const rides = await Ride.find(findFilter)
+  const candidates = await Ride.find(findFilter)
     .populate("creator", "name email mobile profile_img")
     .sort({ createdAt: -1 })
     .lean();
+
+  const matchResults = await Promise.all(
+    candidates.map(async (ride) => ({
+      ride,
+      matches: await rideMatchesPassengerSearch(ride, from, to),
+    }))
+  );
+  const rides = matchResults.filter((row) => row.matches).map((row) => row.ride);
 
   // Original API: JSON array of rides (empty array when none)
   return { status: 200, body: rides };
@@ -367,6 +475,8 @@ const addPassengerDirectly = async (ride, user, seats, total_amount) => {
   const passengerEntry = {
     userId,
     requires_seats: seats,
+    from: ride.from,
+    to: ride.to,
     ride_amount: total_amount,
     status: "accepted",
     joinedAt: new Date(),
@@ -739,7 +849,7 @@ const getRideDetails = async (rideId, viewerId) => {
   if (!mongoose.Types.ObjectId.isValid(rideId)) return { status: 400, body: { success: false, message: "Invalid Ride ID" } };
   let ride = await Ride.findById(rideId)
     .select(
-      "passengers all_deliveries passenger_requested_ride users_request_Couriers status creator vehicle from to date startTime ride_amount availableSeats CanCarryCourier QuickReserve postponeCount postponeReason postponedAt originalScheduledStart cancel_reason"
+      "passengers all_deliveries passenger_requested_ride users_request_Couriers status creator vehicle from to fromCoords toCoords date startTime ride_amount availableSeats CanCarryCourier QuickReserve postponeCount postponeReason postponedAt originalScheduledStart cancel_reason"
     )
     .populate("creator", USER_FIELDS)
     .populate("passengers.userId", USER_FIELDS)
@@ -800,6 +910,11 @@ const getRideDetails = async (rideId, viewerId) => {
         creator: ride.creator,
         from: ride.from,
         to: ride.to,
+        fromCoords: ride.fromCoords || null,
+        toCoords: ride.toCoords || null,
+        routePolyline: ride.routePolyline || "",
+        selectedRouteIndex: ride.selectedRouteIndex ?? 0,
+        stopovers: ride.stopovers || [],
         date: ride.date,
         startTime: ride.startTime,
         postponeCount: ride.postponeCount || 0,
@@ -903,7 +1018,22 @@ const serializeMatchingRide = (ride, userId) => {
 };
 
 const MATCHING_RIDE_SELECT =
-  "from to date startTime availableSeats ride_amount status vehicle creator CanCarryCourier QuickReserve passenger_requested_ride.userId users_request_Couriers.userId";
+  "from to date startTime availableSeats ride_amount status vehicle creator CanCarryCourier QuickReserve passenger_requested_ride.userId users_request_Couriers.userId stopovers routePolyline";
+
+const filterRidesByDriverSubscription = async (rides) => {
+  if (!Array.isArray(rides) || !rides.length) return [];
+
+  const driverIds = rides
+    .map((ride) => ride.creator?._id || ride.creator)
+    .filter(Boolean);
+  const subscribedDriverIds =
+    await driverSubscriptionService.getActiveSubscribedDriverIds(driverIds);
+
+  return rides.filter((ride) => {
+    const driverId = String(ride.creator?._id || ride.creator || "");
+    return subscribedDriverIds.has(driverId);
+  });
+};
 
 const findMatchingRidesForRequest = async ({
   from,
@@ -920,24 +1050,46 @@ const findMatchingRidesForRequest = async ({
   const range = calendarRangeFromRequestDates(date, dateEnd);
   if (!range) return [];
 
+  const fromRegex = { $regex: escapeRegex(String(from).trim()), $options: "i" };
+  const toRegex = { $regex: escapeRegex(String(to).trim()), $options: "i" };
+
   const filter = {
-    from: { $regex: escapeRegex(String(from).trim()), $options: "i" },
-    to: { $regex: escapeRegex(String(to).trim()), $options: "i" },
     date: { $gte: range.startDate, $lte: range.endDate },
     status: "pending",
     creator: { $ne: userId },
+    $or: [
+      { from: fromRegex, to: toRegex },
+      { from: fromRegex },
+      { to: toRegex },
+      { from: toRegex },
+      { to: fromRegex },
+      { "stopovers.label": fromRegex },
+      { "stopovers.label": toRegex },
+    ],
   };
   if (courierOnly) filter.CanCarryCourier = true;
   if (excludeRideId) filter._id = { $ne: excludeRideId };
 
-  const rides = await Ride.find(filter)
+  const candidates = await Ride.find(filter)
     .select(MATCHING_RIDE_SELECT)
     .populate("creator", "name mobile profile_img")
     .sort({ date: 1, startTime: 1 })
-    .limit(10)
+    .limit(25)
     .lean();
 
-  return rides.map((r) => serializeMatchingRide(r, userId));
+  const searchFrom = String(from).trim();
+  const searchTo = String(to).trim();
+  const matchResults = await Promise.all(
+    candidates.map(async (ride) => ({
+      ride,
+      matches: await rideMatchesPassengerSearch(ride, searchFrom, searchTo),
+    }))
+  );
+  const matchedRides = matchResults.filter((row) => row.matches).map((row) => row.ride);
+
+  const subscribedRides = await filterRidesByDriverSubscription(matchedRides);
+
+  return subscribedRides.slice(0, 10).map((r) => serializeMatchingRide(r, userId));
 };
 
 const fetchLinkedRide = async (rideId, userId) => {
@@ -946,6 +1098,13 @@ const fetchLinkedRide = async (rideId, userId) => {
     .select(MATCHING_RIDE_SELECT)
     .populate("creator", "name mobile profile_img")
     .lean();
+  if (!ride) return null;
+
+  const driverId = ride.creator?._id || ride.creator;
+  const hasSubscription =
+    await driverSubscriptionService.driverHasActiveSubscription(driverId);
+  if (!hasSubscription) return null;
+
   return serializeMatchingRide(ride, userId);
 };
 

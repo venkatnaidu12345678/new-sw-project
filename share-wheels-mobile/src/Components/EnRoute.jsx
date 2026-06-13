@@ -1,211 +1,379 @@
-import React, {
-  useState,
-  useMemo,
-  useEffect,
-  memo,
-} from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
   FlatList,
   Alert,
   ActivityIndicator,
 } from "react-native";
-
-import carIcon from "../assets/caricon.png";
-import courierIcon from "../assets/courier.png";
+import Icon from "react-native-vector-icons/Ionicons";
 import UserAvatar from "./ui/UserAvatar";
 import DriverParticipantPopover from "./ui/DriverParticipantPopover";
 import { profileFromUrl } from "../Utils/profileImage";
 import { buildEnrouteDetail } from "../Utils/driverParticipantDetails";
-import { LAYOUT } from "../theme/layout";
-import { formatLocalISODate } from "../Utils/dateUtils";
-
+import { useTheme } from "../context/ThemeContext";
+import { useThemedStyles } from "../theme/useThemedStyles";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import {
-  enrouteRequest,
-  pickCourierApi,
-  pickPassengerApi,
-} from "../ApiService/ridesApiServices";
-import { useEnrouteSocket } from "../hooks/useAppSocket";
+import { pickCourierApi, pickPassengerApi } from "../ApiService/ridesApiServices";
+import { countEnrouteByType } from "../Utils/enrouteRequestUtils";
+import { useEnrouteRequests } from "../hooks/useEnrouteRequests";
 
-/* ================= CARD ================= */
-const PassengerCard = memo(({ item, onSendRequest, onShowDetails, isSent }) => {
-  const isCourier = item.type === "courier";
+const TABS = ["All", "Passengers", "Couriers"];
 
-  return (
-    <View style={styles.card}>
-      <TouchableOpacity
-        activeOpacity={0.85}
-        onPress={() => onShowDetails(item)}
-        style={styles.cardBody}
-      >
-        <View style={styles.row}>
-          <View style={{ flexDirection: "row", flex: 1 }}>
-            <UserAvatar
-              user={profileFromUrl(item.profile)}
-              size={LAYOUT.sizes.avatarMd + 4}
-              style={styles.profileImage}
-            />
+const TAB_KEY = {
+  All: "all",
+  Passengers: "passenger",
+  Couriers: "courier",
+};
 
-            <View style={{ marginLeft: 10, flex: 1 }}>
-              <Text style={styles.name}>{item.name}</Text>
-              <Text style={styles.details}>{item.details}</Text>
-              <Text style={styles.pickup}>{item.route}</Text>
-              <Text style={styles.tapHint}>Tap for details</Text>
-            </View>
-          </View>
+const TAB_SHORT = {
+  All: "All",
+  Passengers: "Passengers",
+  Couriers: "Couriers",
+};
 
-          <View style={styles.priceContainer}>
-            <Image
-              source={isCourier ? courierIcon : carIcon}
-              style={styles.typeIcon}
-            />
-            <Text style={styles.price}>₹{item.price}</Text>
-          </View>
-        </View>
-      </TouchableOpacity>
+const TAB_ICON = {
+  All: "layers",
+  Passengers: "people",
+  Couriers: "cube",
+};
 
-      <TouchableOpacity
-        style={[styles.button, isSent && styles.sentButton]}
-        onPress={() => onSendRequest(item)}
-        disabled={isSent}
-      >
-        <Text style={[styles.buttonText, isSent && styles.sentText]}>
-          {isSent
-            ? isCourier
-              ? "✓ Courier Picked"
-              : "✓ Passenger Picked"
-            : isCourier
-            ? "Pick Courier"
-            : "Pick Passenger"}
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
-});
-
-/* ================= MAIN ================= */
 const isPickSuccess = (response) =>
   response?.success === true || response?.status === true;
 
-const EnRoutePassengers = ({ from, to, date, rideId, onPickSuccess }) => {
-  const rideDate = formatLocalISODate(date) || "";
+const EnrouteRequestCard = ({
+  item,
+  onPick,
+  onShowDetails,
+  picking,
+  styles,
+  colors,
+}) => {
+  const isCourier = item.type === "courier";
+  const accent = isCourier ? "#EA580C" : colors.successText;
 
-  const [activeTab, setActiveTab] = useState("all");
-  const [sentRequests, setSentRequests] = useState({});
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [reloadapi, setReloadApi] = useState(true);
+  return (
+    <View style={styles.card}>
+      <View style={[styles.cardAccent, { backgroundColor: accent }]} />
+      <View style={styles.cardBody}>
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => onShowDetails(item)}
+          style={styles.cardMain}
+        >
+          <UserAvatar
+            user={profileFromUrl(item.profile)}
+            size={46}
+          />
+          <View style={styles.cardInfo}>
+            <View style={styles.nameRow}>
+              <Text style={styles.name} numberOfLines={1}>
+                {item.name}
+              </Text>
+              <View style={[styles.rolePill, { backgroundColor: `${accent}18` }]}>
+                <Text style={[styles.rolePillText, { color: accent }]}>
+                  {isCourier ? "Courier" : "Passenger"}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.detailLine} numberOfLines={2}>
+              {item.details}
+            </Text>
+            <Text style={styles.routeLine} numberOfLines={1}>
+              {item.route}
+            </Text>
+            {item.timeSlot ? (
+              <Text style={styles.metaLine} numberOfLines={1}>
+                {item.timeSlot}
+              </Text>
+            ) : null}
+            <Text style={styles.tapHint}>Tap for full details</Text>
+          </View>
+          <View style={styles.fareCol}>
+            <Text style={styles.fareLabel}>{isCourier ? "Amount" : "Fare"}</Text>
+            <Text style={styles.fareValue}>₹{item.price}</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.pickBtn, picking && styles.pickBtnDisabled]}
+          onPress={() => onPick(item)}
+          disabled={picking}
+          activeOpacity={0.85}
+        >
+          {picking ? (
+            <ActivityIndicator size="small" color={colors.inverseText} />
+          ) : (
+            <>
+              <Icon
+                name={isCourier ? "cube" : "person-add"}
+                size={17}
+                color={colors.inverseText}
+              />
+              <Text style={styles.pickBtnText}>
+                {isCourier ? "Pick courier" : "Pick passenger"}
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
+
+export const EnrouteSheetHeader = ({
+  tabs = TABS,
+  activeTabIndex,
+  onTabChange,
+  passengers,
+  couriers,
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createHeaderStyles);
+  const activeTab = tabs[activeTabIndex] ?? tabs[0];
+
+  const tabCount = (tab) => {
+    switch (tab) {
+      case "All":
+        return passengers + couriers;
+      case "Passengers":
+        return passengers;
+      case "Couriers":
+        return couriers;
+      default:
+        return 0;
+    }
+  };
+
+  const count = tabCount(activeTab);
+
+  return (
+    <View style={styles.headerInDragZone}>
+      <Text style={styles.subtitle}>
+        {count} {count === 1 ? "item" : "items"} · {TAB_SHORT[activeTab] || activeTab}
+      </Text>
+
+      <View style={styles.segmentBar}>
+        {tabs.map((tab, index) => {
+          const value = tabCount(tab);
+          const active = index === activeTabIndex;
+          return (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.segment, active && styles.segmentActive]}
+              onPress={() => onTabChange(index)}
+              activeOpacity={0.9}
+            >
+              <Icon
+                name={TAB_ICON[tab] || "ellipse"}
+                size={14}
+                color={active ? colors.primary : colors.textMuted}
+              />
+              <Text
+                style={[styles.segmentLabel, active && styles.segmentLabelActive]}
+                numberOfLines={1}
+              >
+                {TAB_SHORT[tab] || tab}
+              </Text>
+              {value > 0 ? (
+                <View style={[styles.segmentBadge, active && styles.segmentBadgeActive]}>
+                  <Text
+                    style={[
+                      styles.segmentBadgeText,
+                      active && styles.segmentBadgeTextActive,
+                    ]}
+                  >
+                    {value}
+                  </Text>
+                </View>
+              ) : null}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+};
+
+export const buildEnrouteDragHeader = ({
+  styles,
+  colors,
+  activeTabIndex,
+  onTabChange,
+  passengers,
+  couriers,
+}) => (
+  <View style={styles.dragHeader}>
+    <View style={styles.titleRow}>
+      <View style={styles.titleLeft}>
+        <View style={[styles.titleIcon, { backgroundColor: colors.infoText || colors.primary }]}>
+          <Icon name="navigate" size={20} color={colors.inverseText} />
+        </View>
+        <View style={styles.titleTextCol}>
+          <Text style={styles.cardTitle}>En route requests</Text>
+          <Text style={styles.cardSubtitle}>
+            Drag down to close · pick nearby passengers & couriers
+          </Text>
+        </View>
+      </View>
+    </View>
+
+    <View style={styles.summaryRow}>
+      <View style={[styles.summaryChip, { backgroundColor: colors.successBg }]}>
+        <Icon name="person" size={16} color={colors.successText} />
+        <Text style={styles.summaryValue}>{passengers}</Text>
+        <Text style={styles.summaryLabel}>Passengers</Text>
+      </View>
+      <View style={[styles.summaryChip, { backgroundColor: colors.tintOrange }]}>
+        <Icon name="cube" size={16} color="#EA580C" />
+        <Text style={styles.summaryValue}>{couriers}</Text>
+        <Text style={styles.summaryLabel}>Couriers</Text>
+      </View>
+      <View style={[styles.summaryChip, { backgroundColor: colors.primaryMuted }]}>
+        <Icon name="layers" size={16} color={colors.primary} />
+        <Text style={styles.summaryValue}>{passengers + couriers}</Text>
+        <Text style={styles.summaryLabel}>Total</Text>
+      </View>
+    </View>
+
+    <EnrouteSheetHeader
+      activeTabIndex={activeTabIndex}
+      onTabChange={onTabChange}
+      passengers={passengers}
+      couriers={couriers}
+    />
+  </View>
+);
+
+export const enrouteSheetStyles = (c) =>
+  StyleSheet.create({
+    dragHeader: {
+      paddingHorizontal: 2,
+      paddingTop: 0,
+      paddingBottom: 4,
+    },
+    titleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 12,
+      paddingHorizontal: 2,
+    },
+    titleLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      flex: 1,
+    },
+    titleIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    cardTitle: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: c.text,
+    },
+    cardSubtitle: {
+      fontSize: 12,
+      color: c.textMuted,
+      marginTop: 2,
+    },
+    titleTextCol: {
+      flex: 1,
+    },
+    summaryRow: {
+      flexDirection: "row",
+      gap: 8,
+      marginBottom: 12,
+      paddingHorizontal: 2,
+    },
+    summaryChip: {
+      flex: 1,
+      borderRadius: 12,
+      paddingVertical: 10,
+      paddingHorizontal: 8,
+      alignItems: "center",
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    summaryValue: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: c.text,
+      marginTop: 4,
+    },
+    summaryLabel: {
+      fontSize: 9,
+      fontWeight: "700",
+      color: c.textMuted,
+      marginTop: 2,
+      textTransform: "uppercase",
+      letterSpacing: 0.35,
+    },
+    body: {
+      flex: 1,
+    },
+  });
+
+const EnRoutePassengers = ({
+  from,
+  to,
+  date,
+  rideId,
+  stopovers = [],
+  routePolyline = "",
+  onPickSuccess,
+  data: externalData,
+  loading: externalLoading,
+  onRefresh: externalRefresh,
+  removeItem: externalRemoveItem,
+  activeTabIndex: externalTabIndex,
+  onTabChange: externalOnTabChange,
+  showInlineHeader = false,
+  onSubscriptionRequired,
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const usesExternalData = externalData !== undefined;
+  const internalEnroute = useEnrouteRequests({
+    from,
+    to,
+    date,
+    rideId,
+    stopovers,
+    routePolyline,
+    enabled: !usesExternalData,
+  });
+  const [internalTabIndex, setInternalTabIndex] = useState(0);
+  const data = usesExternalData ? externalData : internalEnroute.data;
+  const loading = usesExternalData ? !!externalLoading : internalEnroute.loading;
+  const onRefresh = usesExternalData ? externalRefresh : internalEnroute.refresh;
+  const removeItem = usesExternalData ? externalRemoveItem : internalEnroute.removeItem;
+  const activeTabIndex = externalTabIndex ?? internalTabIndex;
+  const onTabChange = externalOnTabChange ?? setInternalTabIndex;
+  const resolvedShowInlineHeader = showInlineHeader || !usesExternalData;
+  const [pickingId, setPickingId] = useState(null);
   const [popoverVisible, setPopoverVisible] = useState(false);
   const [popoverLoading, setPopoverLoading] = useState(false);
   const [popoverDetail, setPopoverDetail] = useState(null);
 
-  const removePickedFromList = (payload) => {
-    if (!payload) return;
-    setData((prev) =>
-      prev.filter((row) => {
-        if (
-          payload.passengerRideId &&
-          row.passengerId?.toString() === payload.passengerRideId.toString()
-        ) {
-          return false;
-        }
-        if (
-          payload.courierId &&
-          row.courierId?.toString() === payload.courierId.toString()
-        ) {
-          return false;
-        }
-        if (
-          payload.userId &&
-          row.creatorId?.toString() === String(payload.userId)
-        ) {
-          return false;
-        }
-        return true;
-      })
-    );
-  };
-
-  useEnrouteSocket({ from, to, date: rideDate, onRequestRemoved: removePickedFromList });
-
-  const fetchData = async () => {
-    if (!from?.trim() || !to?.trim() || !rideDate) {
-      setData([]);
-      return;
-    }
-
-    try {
-      setLoading(true);
-
-      const token = await AsyncStorage.getItem("token");
-
-      const payload = {
-        from: from.trim(),
-        to: to.trim(),
-        date: rideDate,
-        ...(rideId ? { rideId } : {}),
-      };
-
-      const response = await enrouteRequest(token, payload);
-
-      const list = response?.requests ?? [];
-
-      if (response?.success && list.length > 0) {
-        const formatted = list.map((item, index) => {
-          const isCourier = item.request_type
-            ?.toLowerCase()
-            .includes("courier");
-
-          return {
-            id: item._id || index,
-            rideId: item.rideId || item.ride_id,
-            courierId: item.courierId || item.courier_id,
-            passengerId: item.passengerId || item.passenger_id,
-            creatorId: item.creatorId || item.creator?._id,
-            name: item.name || "Unknown",
-            profile: item.profile || null,
-            gender: item.gender || "",
-            timeSlot: item.timeSlot || "",
-            details: isCourier
-              ? item.what_to_deliver || "Courier Item"
-              : `Seats: ${item.seats_needed || 1}`,
-            route: `${from} → ${to}`,
-            price: item.amount ?? item.amount_will ?? 0,
-            type: isCourier ? "courier" : "passenger",
-            raw: item,
-          };
-        });
-
-        setData(formatted);
-      } else {
-        setData([]);
-      }
-    } catch (error) {
-      console.log("FETCH ERROR:", error);
-      Alert.alert("Error", "Failed to load data");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (from && to && rideDate) {
-      fetchData();
-    }
-  }, [from, to, rideDate, reloadapi]);
+  const counts = useMemo(() => countEnrouteByType(data), [data]);
+  const activeTab = TABS[activeTabIndex] ?? TABS[0];
+  const filterKey = TAB_KEY[activeTab] || "all";
 
   const filteredData = useMemo(() => {
-    if (activeTab === "all") return data;
-    return data.filter((item) => item.type === activeTab);
-  }, [activeTab, data]);
+    if (filterKey === "all") return data;
+    return data.filter((item) => item.type === filterKey);
+  }, [data, filterKey]);
 
   const openDetails = (item) => {
-    setPopoverDetail(buildEnrouteDetail(item, from, to, rideDate));
+    setPopoverDetail(buildEnrouteDetail(item, from, to, date));
     setPopoverVisible(true);
     setPopoverLoading(true);
     requestAnimationFrame(() => {
@@ -219,107 +387,141 @@ const EnRoutePassengers = ({ from, to, date, rideId, onPickSuccess }) => {
     setPopoverDetail(null);
   };
 
-  const handleSendRequest = async (item) => {
-    try {
-      const token = await AsyncStorage.getItem("token");
+  const handlePick = useCallback(
+    async (item) => {
+      try {
+        const token = await AsyncStorage.getItem("token");
+        if (!token) {
+          Alert.alert("Error", "User not authenticated");
+          return;
+        }
 
-      if (!token) {
-        Alert.alert("Error", "User not authenticated");
-        return;
+        setPickingId(item.id);
+
+        let response;
+        if (item.type === "courier") {
+          response = await pickCourierApi(token, {
+            rideId,
+            courierId: item.courierId,
+          });
+        } else {
+          response = await pickPassengerApi(token, {
+            rideId,
+            passenger_rideId: item.passengerId,
+          });
+        }
+
+        if (isPickSuccess(response)) {
+          removeItem?.(item.id);
+          onPickSuccess?.(item, response);
+          Alert.alert(
+            "Success",
+            item.type === "courier"
+              ? "Courier picked successfully"
+              : "Passenger picked successfully"
+          );
+        } else if (
+          response?.code &&
+          onSubscriptionRequired
+        ) {
+          onSubscriptionRequired(response);
+        } else {
+          Alert.alert("Error", response?.message || "Failed");
+        }
+      } catch (error) {
+        console.log("Pick enroute error:", error);
+        Alert.alert("Error", "Something went wrong");
+      } finally {
+        setPickingId(null);
       }
-
-      let response;
-
-      if (item.type === "courier") {
-        const payload = {
-          rideId: rideId,
-          courierId: item.courierId,
-        };
-
-        response = await pickCourierApi(token, payload);
-      } else {
-        const payload = {
-          rideId: rideId,
-          passenger_rideId: item.passengerId,
-        };
-
-        response = await pickPassengerApi(token, payload);
-      }
-
-      if (isPickSuccess(response)) {
-        setSentRequests((prev) => ({
-          ...prev,
-          [item.id]: true,
-        }));
-
-        setData((prev) => prev.filter((row) => row.id !== item.id));
-
-        onPickSuccess?.(item, response);
-
-        Alert.alert(
-          "Success",
-          item.type === "courier"
-            ? "Courier picked successfully"
-            : "Passenger picked successfully"
-        );
-      } else {
-        Alert.alert("Error", response?.message || "Failed");
-      }
-    } catch (error) {
-      console.log("SEND ERROR:", error);
-      Alert.alert("Error", "Something went wrong");
-    }
-  };
-
-  const renderItem = ({ item }) => (
-    <PassengerCard
-      item={item}
-      onSendRequest={handleSendRequest}
-      onShowDetails={openDetails}
-      isSent={sentRequests[item.id]}
-    />
+    },
+    [rideId, removeItem, onPickSuccess, onSubscriptionRequired]
   );
 
-  const TabButton = ({ label, value }) => {
-    const isActive = activeTab === value;
+  const renderItem = useCallback(
+    ({ item }) => (
+      <EnrouteRequestCard
+        item={item}
+        onPick={handlePick}
+        onShowDetails={openDetails}
+        picking={pickingId === item.id}
+        styles={styles}
+        colors={colors}
+      />
+    ),
+    [handlePick, pickingId, styles, colors]
+  );
 
-    return (
-      <TouchableOpacity
-        style={[styles.tabButton, isActive && styles.activeTab]}
-        onPress={() => setActiveTab(value)}
-      >
-        <Text style={[styles.tabText, isActive && styles.activeTabText]}>
-          {label}
-        </Text>
-      </TouchableOpacity>
-    );
-  };
+  const emptyCopy = useMemo(() => {
+    switch (activeTab) {
+      case "Passengers":
+        return {
+          icon: "people-outline",
+          title: "No passenger requests",
+          sub: "Passengers on the same route will appear here.",
+        };
+      case "Couriers":
+        return {
+          icon: "cube-outline",
+          title: "No courier requests",
+          sub: "Parcel requests on the same route will appear here.",
+        };
+      default:
+        return {
+          icon: "navigate-outline",
+          title: "No en route requests",
+          sub: "Nearby passengers and couriers on your route appear here.",
+        };
+    }
+  }, [activeTab]);
+
+  const listEmpty = loading ? (
+    <View style={styles.centerBox}>
+      <ActivityIndicator size="large" color={colors.primary} />
+      <Text style={styles.centerText}>Loading nearby requests…</Text>
+    </View>
+  ) : (
+    <View style={styles.centerBox}>
+      <View style={styles.emptyIcon}>
+        <Icon name={emptyCopy.icon} size={36} color={colors.primary} />
+      </View>
+      <Text style={styles.emptyTitle}>{emptyCopy.title}</Text>
+      <Text style={styles.emptySub}>{emptyCopy.sub}</Text>
+      {onRefresh ? (
+        <TouchableOpacity style={styles.refreshBtn} onPress={onRefresh} activeOpacity={0.85}>
+          <Icon name="refresh" size={16} color={colors.primary} />
+          <Text style={styles.refreshBtnText}>Refresh</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>En Route Requests</Text>
-
-      <View style={styles.tabs}>
-        <TabButton label="All" value="all" />
-        <TabButton label="Passengers" value="passenger" />
-        <TabButton label="Courier" value="courier" />
-      </View>
-
-      {loading ? (
-        <ActivityIndicator size="large" style={{ marginTop: 20 }} />
-      ) : filteredData.length === 0 ? (
-        <Text style={{ textAlign: "center", marginTop: 20 }}>
-          No data found
-        </Text>
-      ) : (
-        <FlatList
-          data={filteredData}
-          keyExtractor={(item, index) =>
-            item.id?.toString() || index.toString()
-          }
-          renderItem={renderItem}
+    <View style={styles.root}>
+      {resolvedShowInlineHeader ? (
+        <EnrouteSheetHeader
+          activeTabIndex={activeTabIndex}
+          onTabChange={onTabChange}
+          passengers={counts.passengers}
+          couriers={counts.couriers}
         />
-      )}
+      ) : null}
+
+      <FlatList
+        data={filteredData}
+        key={activeTab}
+        keyExtractor={(item, index) => item.id?.toString() || index.toString()}
+        renderItem={renderItem}
+        showsVerticalScrollIndicator
+        contentContainerStyle={styles.listContent}
+        style={styles.list}
+        keyboardShouldPersistTaps="handled"
+        initialNumToRender={6}
+        windowSize={8}
+        ListEmptyComponent={listEmpty}
+        refreshing={loading}
+        onRefresh={onRefresh}
+      />
 
       <DriverParticipantPopover
         visible={popoverVisible}
@@ -333,71 +535,245 @@ const EnRoutePassengers = ({ from, to, date, rideId, onPickSuccess }) => {
 
 export default EnRoutePassengers;
 
-/* ================= STYLES ================= */
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8F9FB", padding: 16 },
-  title: { fontSize: 18, fontWeight: "600", marginBottom: 16 },
+const createHeaderStyles = (c) =>
+  StyleSheet.create({
+    headerInDragZone: {
+      paddingHorizontal: 2,
+      paddingBottom: 8,
+    },
+    subtitle: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: c.textSecondary,
+      lineHeight: 17,
+      marginBottom: 10,
+    },
+    segmentBar: {
+      flexDirection: "row",
+      backgroundColor: c.chipBg,
+      borderRadius: 14,
+      padding: 5,
+      gap: 5,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    segment: {
+      flex: 1,
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 10,
+      paddingHorizontal: 4,
+      borderRadius: 11,
+      minHeight: 62,
+    },
+    segmentActive: {
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+      shadowColor: c.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 6,
+      elevation: 3,
+    },
+    segmentLabel: {
+      fontSize: 11,
+      fontWeight: "600",
+      color: c.textMuted,
+      marginTop: 4,
+      textAlign: "center",
+    },
+    segmentLabelActive: {
+      color: c.primary,
+      fontWeight: "800",
+    },
+    segmentBadge: {
+      marginTop: 4,
+      minWidth: 20,
+      height: 20,
+      borderRadius: 10,
+      paddingHorizontal: 5,
+      backgroundColor: c.surfaceAlt,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    segmentBadgeActive: {
+      backgroundColor: c.primary,
+    },
+    segmentBadgeText: {
+      fontSize: 10,
+      fontWeight: "800",
+      color: c.textMuted,
+    },
+    segmentBadgeTextActive: {
+      color: c.inverseText,
+    },
+  });
 
-  tabs: { flexDirection: "row", marginBottom: 16 },
-
-  tabButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    marginRight: 10,
-    backgroundColor: "#E5E7EB",
-  },
-
-  activeTab: { backgroundColor: "#1F2937" },
-  tabText: { color: "#6B7280" },
-  activeTabText: { color: "#fff" },
-
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
-    elevation: 2,
-  },
-
-  cardBody: {
-    marginBottom: 12,
-  },
-
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-
-  profileImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: "#E5E7EB",
-  },
-
-  name: { fontSize: 15, fontWeight: "600" },
-  details: { fontSize: 13, color: "#6B7280" },
-  pickup: { fontSize: 13, color: "#6B7280" },
-  tapHint: { fontSize: 11, color: "#2563EB", marginTop: 4, fontWeight: "600" },
-
-  priceContainer: { alignItems: "center" },
-  typeIcon: { width: 20, height: 20, marginBottom: 4 },
-  price: { fontWeight: "600" },
-
-  button: {
-    backgroundColor: "#22C55E",
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-
-  sentButton: {
-    backgroundColor: "#E6F7F0",
-    borderWidth: 1,
-    borderColor: "#22C55E",
-  },
-
-  buttonText: { color: "#fff", fontWeight: "600" },
-  sentText: { color: "#22C55E" },
-});
+const createStyles = (c) =>
+  StyleSheet.create({
+    root: {
+      flex: 1,
+    },
+    list: {
+      flex: 1,
+    },
+    listContent: {
+      paddingTop: 8,
+      paddingBottom: 24,
+      flexGrow: 1,
+    },
+    card: {
+      flexDirection: "row",
+      marginBottom: 12,
+      borderRadius: 14,
+      overflow: "hidden",
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    cardAccent: {
+      width: 4,
+    },
+    cardBody: {
+      flex: 1,
+      padding: 12,
+    },
+    cardMain: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+    },
+    cardInfo: {
+      flex: 1,
+      marginLeft: 10,
+      marginRight: 8,
+    },
+    nameRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginBottom: 4,
+    },
+    name: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: c.text,
+      flexShrink: 1,
+    },
+    rolePill: {
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+    },
+    rolePillText: {
+      fontSize: 10,
+      fontWeight: "700",
+    },
+    detailLine: {
+      fontSize: 12,
+      color: c.textMuted,
+      lineHeight: 16,
+    },
+    routeLine: {
+      fontSize: 12,
+      color: c.textSecondary,
+      marginTop: 4,
+      lineHeight: 16,
+    },
+    metaLine: {
+      fontSize: 11,
+      color: c.textMuted,
+      marginTop: 2,
+    },
+    tapHint: {
+      fontSize: 11,
+      color: c.primary,
+      marginTop: 6,
+      fontWeight: "600",
+    },
+    fareCol: {
+      alignItems: "flex-end",
+      minWidth: 56,
+    },
+    fareLabel: {
+      fontSize: 10,
+      fontWeight: "700",
+      color: c.textMuted,
+      textTransform: "uppercase",
+    },
+    fareValue: {
+      fontSize: 17,
+      fontWeight: "800",
+      color: c.primary,
+      marginTop: 2,
+    },
+    pickBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+      marginTop: 12,
+      paddingVertical: 11,
+      borderRadius: 11,
+      backgroundColor: c.primary,
+    },
+    pickBtnDisabled: {
+      opacity: 0.7,
+    },
+    pickBtnText: {
+      color: c.inverseText,
+      fontWeight: "700",
+      fontSize: 13,
+    },
+    centerBox: {
+      alignItems: "center",
+      paddingVertical: 48,
+      paddingHorizontal: 20,
+    },
+    centerText: {
+      marginTop: 12,
+      fontSize: 14,
+      color: c.textMuted,
+    },
+    emptyIcon: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: c.primaryMuted,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    emptyTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: c.text,
+    },
+    emptySub: {
+      fontSize: 13,
+      color: c.textMuted,
+      marginTop: 6,
+      textAlign: "center",
+      lineHeight: 18,
+    },
+    refreshBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginTop: 16,
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.surface,
+    },
+    refreshBtnText: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: c.primary,
+    },
+  });

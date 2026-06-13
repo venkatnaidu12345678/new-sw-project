@@ -6,10 +6,11 @@ import {
   StyleSheet,
   ActivityIndicator,
   Image,
+  Alert,
 } from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
-import { launchCamera } from "react-native-image-picker";
 import BottomSlider from "../BottomSlider";
+import { showImageSourcePicker } from "../../Utils/imageUpload";
 import {
   StyledTextInput,
   StyledPicker,
@@ -56,20 +57,14 @@ const BookCourierPopover = ({
 
   const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
-  const openCamera = () => {
-    launchCamera(
-      { mediaType: "photo", quality: 0.8 },
-      (res) => {
-        if (res.didCancel || res.errorCode) return;
-        const asset = res.assets?.[0];
-        if (!asset?.uri) return;
-        update("courier_img", {
-          uri: asset.uri,
-          type: asset.type || "image/jpeg",
-          name: asset.fileName || "courier.jpg",
-        });
-      }
-    );
+  const pickParcelPhoto = async () => {
+    try {
+      const asset = await showImageSourcePicker("courier.jpg", "Parcel photo");
+      if (!asset) return;
+      update("courier_img", asset);
+    } catch (err) {
+      Alert.alert("Photo error", err?.message || "Could not select image");
+    }
   };
 
   const canBook = !blockReason && !booking;
@@ -140,7 +135,7 @@ const BookCourierPopover = ({
           />
           <TouchableOpacity
             style={styles.uploadBtn}
-            onPress={openCamera}
+            onPress={pickParcelPhoto}
             disabled={!!blockReason}
           >
             <Icon name="camera" size={18} color={colors.warningText} />

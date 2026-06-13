@@ -43,8 +43,44 @@ const createServerWithSocket = (app) => {
       socket.join(`user:${socket.user._id.toString()}`);
     }
 
-    socket.on("joinRide", (rideId) => {
-      if (rideId) socket.join(`ride:${rideId}`);
+    socket.on("joinRide", async (rideId) => {
+      if (!rideId) return;
+      socket.join(`ride:${rideId}`);
+      if (socket.userType !== "user" || !socket.user?._id) return;
+      try {
+        const rideTrackingService = require("../services/rideTrackingService");
+        await rideTrackingService.emitRideTrackingSnapshot(socket, rideId);
+      } catch (err) {
+        console.warn("[socket] rideTrackingSnapshot:", err?.message || err);
+      }
+    });
+
+    socket.on("requestRideTracking", async (rideId, ack) => {
+      if (socket.userType !== "user" || !socket.user?._id) {
+        if (typeof ack === "function") {
+          ack({ success: false, message: "Unauthorized" });
+        }
+        return;
+      }
+      try {
+        const rideTrackingService = require("../services/rideTrackingService");
+        const result = await rideTrackingService.getTrackingForUser(
+          socket.user,
+          rideId
+        );
+        const body =
+          result.status === 200
+            ? { rideId: String(rideId), ...result.body }
+            : result.body || { success: false, message: "Could not load tracking" };
+        if (typeof ack === "function") ack(body);
+        if (result.status === 200) {
+          socket.emit("rideTrackingSnapshot", body);
+        }
+      } catch (err) {
+        if (typeof ack === "function") {
+          ack({ success: false, message: err.message || "Could not load tracking" });
+        }
+      }
     });
 
     socket.on("leaveRide", (rideId) => {
@@ -65,8 +101,33 @@ const createServerWithSocket = (app) => {
       }
     });
 
-    socket.on("joinAdminTracking", () => {
-      if (socket.userType === "admin") socket.join("admin:tracking");
+    socket.on("joinAdminTracking", async () => {
+      if (socket.userType !== "admin") return;
+      socket.join("admin:tracking");
+      try {
+        const rideTrackingService = require("../services/rideTrackingService");
+        const result = await rideTrackingService.getActiveRidesForAdmin();
+        if (result.status === 200) {
+          socket.emit("activeRidesSnapshot", result.body);
+        }
+      } catch (err) {
+        console.warn("[socket] activeRidesSnapshot:", err?.message || err);
+      }
+    });
+
+    socket.on("requestActiveRides", async (ack) => {
+      if (socket.userType !== "admin") return;
+      try {
+        const rideTrackingService = require("../services/rideTrackingService");
+        const result = await rideTrackingService.getActiveRidesForAdmin();
+        const body = result.body || { success: true, rides: [] };
+        if (typeof ack === "function") ack(body);
+        else socket.emit("activeRidesSnapshot", body);
+      } catch (err) {
+        if (typeof ack === "function") {
+          ack({ success: false, message: err.message || "Could not load rides" });
+        }
+      }
     });
 
     socket.on("updateLocation", async (payload, ack) => {

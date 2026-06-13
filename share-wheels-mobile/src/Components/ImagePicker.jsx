@@ -7,10 +7,7 @@ import {
   StyleSheet,
   Alert,
 } from "react-native";
-import {
-  launchImageLibrary,
-  launchCamera,
-} from "react-native-image-picker";
+import { showImageSourcePicker } from "../Utils/imageUpload";
 
 const EMPTY_IMAGES = { profile: null, license: null, courier: null };
 
@@ -27,64 +24,21 @@ const ImagePicker = ({ onChange, type = "all", resetKey = 0 }) => {
     onChange?.(null);
   }, [resetKey]);
 
-  // 🔥 OPEN OPTIONS (Camera / Gallery)
-  const openPickerOptions = (key) => {
-    Alert.alert("Select Image", "Choose an option", [
-      {
-        text: "Camera",
-        onPress: () => openCamera(key),
-      },
-      {
-        text: "Gallery",
-        onPress: () => openGallery(key),
-      },
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-    ]);
-  };
+  const openPickerOptions = async (key) => {
+    try {
+      const file = await showImageSourcePicker(`${key}-${Date.now()}.jpg`);
+      if (!file) return;
 
-  const openCamera = (key) => {
-    launchCamera(
-      {
-        mediaType: "photo",
-        quality: 0.7,
-        cameraType: "back",
-      },
-      handleResponse(key)
-    );
-  };
+      const updatedImages = { ...images, [key]: file };
+      setImages(updatedImages);
 
-  const openGallery = (key) => {
-    launchImageLibrary(
-      {
-        mediaType: "photo",
-        quality: 0.7,
-      },
-      handleResponse(key)
-    );
-  };
-
-  const handleResponse = (key) => (response) => {
-    if (response.didCancel || response.errorCode) return;
-
-    const asset = response.assets?.[0];
-    if (!asset?.uri) return;
-
-    const file = {
-      uri: asset.uri,
-      type: asset.type || "image/jpeg",
-      name: asset.fileName || `${key}.jpg`,
-    };
-
-    const updatedImages = { ...images, [key]: file };
-    setImages(updatedImages);
-
-    if (type === "courier") {
-      onChange?.(file);
-    } else {
-      onChange?.(updatedImages);
+      if (type === "courier") {
+        onChange?.(file);
+      } else {
+        onChange?.(updatedImages);
+      }
+    } catch (err) {
+      Alert.alert("Image error", err?.message || "Could not select image");
     }
   };
 

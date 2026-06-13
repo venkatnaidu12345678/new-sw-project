@@ -20,6 +20,7 @@ const feedbackRoutes = require("./routes/feedbackRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const legalRoutes = require("./routes/legalRoutes");
 const lookupRoutes = require("./routes/lookupRoutes");
+const subscriptionRoutes = require("./routes/subscriptionRoutes");
 
 const app = express();
 
@@ -71,6 +72,7 @@ app.use("/feedback", feedbackRoutes);
 app.use("/notifications", notificationRoutes);
 app.use("/legal", legalRoutes);
 app.use("/lookups", lookupRoutes);
+app.use("/subscriptions", subscriptionRoutes);
 
 connectDatabase();
 

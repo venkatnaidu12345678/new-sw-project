@@ -1,42 +1,39 @@
 import React from "react";
 import { View, StyleSheet } from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
-import { ROLE_PIN_COLORS } from "./rideMapMarkers";
+import { MAP_PIN_THEME, ROLE_PIN_COLORS, ROLE_MAP_ICONS } from "./mapTheme";
 
-/** Ionicons per role — shown on Google Maps markers */
-export const ROLE_MAP_ICONS = {
-  driver: "car",
-  passenger: "person",
-  courier: "cube",
-};
+export { ROLE_MAP_ICONS };
 
 /**
  * Custom marker pin for react-native-maps (child of Marker).
  */
 const RideMapMarkerIcon = ({ role = "passenger", isMe = false }) => {
   const normalized = (role || "passenger").toLowerCase();
-  const bg = ROLE_PIN_COLORS[normalized] || ROLE_PIN_COLORS.passenger;
-  const iconName = ROLE_MAP_ICONS[normalized] || "location";
+  const theme = MAP_PIN_THEME[normalized] || MAP_PIN_THEME.passenger;
+  const bg = ROLE_PIN_COLORS[normalized] || theme.color;
+  const iconName = ROLE_MAP_ICONS[normalized] || theme.icon;
 
   return (
     <View style={styles.wrap} pointerEvents="none">
       <View
         style={[
           styles.bubble,
-          { backgroundColor: bg },
+          { backgroundColor: bg, borderColor: isMe ? "#FBBF24" : "#FFFFFF" },
           isMe && styles.bubbleMe,
         ]}
       >
         <Icon name={iconName} size={20} color="#FFFFFF" />
       </View>
       <View style={[styles.pointer, { borderTopColor: bg }]} />
+      {isMe ? <View style={styles.meRing} /> : null}
     </View>
   );
 };
 
 export default RideMapMarkerIcon;
 
-const BUBBLE = 40;
+const BUBBLE = 42;
 
 const styles = StyleSheet.create({
   wrap: {
@@ -49,17 +46,25 @@ const styles = StyleSheet.create({
     borderRadius: BUBBLE / 2,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-    shadowColor: "#000",
+    borderWidth: 2.5,
+    shadowColor: "#0F172A",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.28,
-    shadowRadius: 3,
-    elevation: 5,
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 6,
   },
   bubbleMe: {
     borderWidth: 3,
+  },
+  meRing: {
+    position: "absolute",
+    top: -3,
+    width: BUBBLE + 6,
+    height: BUBBLE + 6,
+    borderRadius: (BUBBLE + 6) / 2,
+    borderWidth: 2,
     borderColor: "#FBBF24",
+    opacity: 0.85,
   },
   pointer: {
     width: 0,

@@ -17,30 +17,35 @@ const toPoint = (loc) => {
   return { lat, lng, label: loc.name || loc.label || "" };
 };
 
-export const ROLE_PIN_COLORS = {
-  driver: "#2563EB",
-  passenger: "#16A34A",
-  courier: "#D97706",
-};
+export { ROLE_PIN_COLORS } from "./mapTheme";
 
 export const hasParticipantCoords = (p) =>
   Number.isFinite(Number(p?.lat ?? p?.latitude)) &&
   Number.isFinite(Number(p?.lng ?? p?.longitude));
 
+const normalizeViewerRole = (role) => {
+  const r = (role || "").toString().toLowerCase();
+  if (r === "driver" || r === "passenger" || r === "courier") return r;
+  return "";
+};
+
 /**
  * Build map markers and driver path from ride tracking payload.
- * Includes driver, all passengers, and couriers that have shared GPS.
+ * Driver viewers see passengers/couriers only (self = heading arrow elsewhere).
+ * Passengers and couriers always see the driver's live pin.
  */
 export const buildMarkersFromTracking = (tracking, myRole) => {
   const lt = tracking?.liveTracking || tracking || {};
   const participants = lt.participantLocations || [];
   const driverLoc = toPoint(lt.driverLocation);
   const myId = normalizeRideId(tracking?.myUserId);
+  const viewerRole = normalizeViewerRole(myRole);
+  const isDriverView = viewerRole === "driver";
 
   const markers = [];
   let hasDriverMarker = false;
 
-  if (driverLoc) {
+  if (driverLoc && !isDriverView) {
     hasDriverMarker = true;
     markers.push({
       id: "driver",
@@ -48,8 +53,8 @@ export const buildMarkersFromTracking = (tracking, myRole) => {
       longitude: driverLoc.lng,
       role: "driver",
       title: "Driver",
-      description: driverLoc.label || "Driver",
-      isMe: myRole === "driver",
+      description: driverLoc.label || "Live driver location",
+      isMe: false,
     });
   }
 
@@ -60,7 +65,7 @@ export const buildMarkersFromTracking = (tracking, myRole) => {
     const role = (p.role || "passenger").toLowerCase();
 
     if (role === "driver") {
-      if (!hasDriverMarker) {
+      if (!isDriverView && !hasDriverMarker) {
         hasDriverMarker = true;
         markers.push({
           id: uid || "driver",
@@ -68,12 +73,16 @@ export const buildMarkersFromTracking = (tracking, myRole) => {
           longitude: pt.lng,
           role: "driver",
           title: p.name || "Driver",
-          description: pt.name || "Driver",
-          isMe: myRole === "driver",
+          description: p.name || "Live driver location",
+          isMe: false,
         });
       }
       return;
     }
+
+    if (!isDriverView) return;
+
+    if (role !== "passenger" && role !== "courier") return;
 
     markers.push({
       id: uid || `${role}-${markers.length}`,
@@ -82,14 +91,14 @@ export const buildMarkersFromTracking = (tracking, myRole) => {
       role,
       title: p.name || (role === "courier" ? "Courier" : "Passenger"),
       description: p.name || role,
-      isMe: uid && uid === myId,
+      isMe: !isDriverView && uid && uid === myId,
     });
   });
 
   const path = (lt.locationHistory || [])
     .map((p) => {
-      const lat = Number(p.lat);
-      const lng = Number(p.lng);
+      const lat = Number(p.lat ?? p.latitude);
+      const lng = Number(p.lng ?? p.longitude);
       return Number.isFinite(lat) && Number.isFinite(lng)
         ? { latitude: lat, longitude: lng }
         : null;
@@ -99,6 +108,26 @@ export const buildMarkersFromTracking = (tracking, myRole) => {
   const loading = markers.length === 0 && path.length === 0;
 
   return { markers, path, loading };
+};
+
+/** Stopover pins along the planned route. */
+export const buildStopoverMarkers = (stopovers = []) => {
+  if (!Array.isArray(stopovers)) return [];
+  return stopovers
+    .map((stop, index) => {
+      const point = toPoint(stop);
+      if (!point) return null;
+      return {
+        id: `stopover-${index}-${point.label || index}`,
+        latitude: point.lat,
+        longitude: point.lng,
+        role: "stopover",
+        title: point.label || `Stop ${index + 1}`,
+        description: "Stopover",
+        isMe: false,
+      };
+    })
+    .filter(Boolean);
 };
 
 /** Start/end pins from stored ride route coordinates. */
@@ -132,6 +161,24 @@ export const buildRouteEndpointMarkers = (fromCoords, toCoords) => {
   }
 
   return markers;
+};
+
+/** Bearing in degrees (0 = north) from point A to B. */
+export const computeBearing = (lat1, lng1, lat2, lng2) => {
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δλ = ((lng2 - lng1) * Math.PI) / 180;
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x =
+    Math.cos(φ1) * Math.sin(φ2) -
+    Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+};
+
+/** Driver GPS from live tracking payload. */
+export const getDriverMapPoint = (tracking) => {
+  const lt = tracking?.liveTracking || tracking || {};
+  return toPoint(lt.driverLocation);
 };
 
 /** All coordinates to include when auto-fitting the map camera. */
@@ -182,13 +229,34 @@ export const regionForCoordinates = (coordinates) => {
   };
 };
 
+/** Bearing from the last two GPS history points, if available. */
+export const getDriverHeadingFromHistory = (tracking) => {
+  const history = tracking?.liveTracking?.locationHistory || [];
+  if (history.length < 2) return null;
+  const prev = history[history.length - 2];
+  const curr = history[history.length - 1];
+  const lat1 = Number(prev.lat);
+  const lng1 = Number(prev.lng);
+  const lat2 = Number(curr.lat);
+  const lng2 = Number(curr.lng);
+  if (![lat1, lng1, lat2, lng2].every(Number.isFinite)) return null;
+  return computeBearing(lat1, lng1, lat2, lng2);
+};
+
 /** Count live GPS markers by role (for driver status UI). */
-export const countLiveParticipantsByRole = (tracking) => {
-  const { markers } = buildMarkersFromTracking(tracking);
+export const countLiveParticipantsByRole = (tracking, myRole) => {
+  const { markers } = buildMarkersFromTracking(tracking, myRole);
+  const lt = tracking?.liveTracking || {};
+  const isDriverView = normalizeViewerRole(myRole) === "driver";
+  const driver =
+    markers.filter((m) => m.role === "driver").length ||
+    (!isDriverView && hasParticipantCoords(lt.driverLocation) ? 1 : 0);
+  const passengers = markers.filter((m) => m.role === "passenger").length;
+  const couriers = markers.filter((m) => m.role === "courier").length;
   return {
-    passengers: markers.filter((m) => m.role === "passenger").length,
-    couriers: markers.filter((m) => m.role === "courier").length,
-    driver: markers.filter((m) => m.role === "driver").length,
-    total: markers.length,
+    passengers,
+    couriers,
+    driver,
+    total: driver + passengers + couriers,
   };
 };
