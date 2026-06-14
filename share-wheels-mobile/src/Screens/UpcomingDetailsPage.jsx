@@ -19,6 +19,8 @@ import DriverEnrouteHub from "../Components/DriverEnrouteHub";
 import { useEnrouteRequests } from "../hooks/useEnrouteRequests";
 import { getMySubscription } from "../ApiService/subscriptionApiService";
 import FixedButton from "../Components/FixedButton";
+import UpcomingRouteLines from "../Components/ui/UpcomingRouteLines";
+import { getUpcomingRideRoutes } from "../Utils/upcomingRideRouteUtils";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
@@ -45,9 +47,6 @@ import car from "../assets/car.png";
 import dateIcon from "../assets/dateIcon.png";
 import priceIcon from "../assets/priceIcon.png";
 import clock from "../assets/clock2.png";
-import madhapurIcon from "../assets/madhapuricon.png";
-import kondapurIcon from "../assets/kondapuricon.png";
-import lineIcon from "../assets/lineicon.png";
 import UserAvatar from "../Components/ui/UserAvatar";
 import ScreenContainer from "../Components/ui/ScreenContainer";
 import ScreenHeader from "../Components/ui/ScreenHeader";
@@ -68,6 +67,7 @@ import DriverParticipantsSheet, {
 } from "../Components/ui/DriverParticipantsPopover";
 import VerifyBoardingPopover from "../Components/ui/VerifyBoardingPopover";
 import RemovePassengerPopover from "../Components/ui/RemovePassengerPopover";
+import DriverStopoversPopover from "../Components/ui/DriverStopoversPopover";
 import {
   getParticipantUserId,
   normalizeNavigationParamId,
@@ -90,6 +90,7 @@ import { getRideDisplayFare, getPassengerFare, getCourierFare } from '../Utils/f
 import {
   tripStatusLabel,
   canDriverCompleteRide,
+  countActiveBookedSeats,
   getDriverCompleteRideBlockers,
 } from "../Utils/participantTripStatus";
 import { NOTIFICATIONS_REFRESH_EVENT } from "../context/NotificationsContext";
@@ -145,6 +146,7 @@ const UpcomingDetailsPage = ({ route }) => {
     rideData?.status === "started" || rideData?.ride_status === "started"
   );
   const [passengers, setPassengers] = useState([]);
+  const [stopoversPopoverVisible, setStopoversPopoverVisible] = useState(false);
   const [participantPopoverVisible, setParticipantPopoverVisible] = useState(false);
   const [participantPopoverLoading, setParticipantPopoverLoading] = useState(false);
   const [participantPopoverDetail, setParticipantPopoverDetail] = useState(null);
@@ -179,6 +181,10 @@ const UpcomingDetailsPage = ({ route }) => {
   const [routeMeta, setRouteMeta] = useState({
     stopovers: rideData?.stopovers || [],
     routePolyline: rideData?.routePolyline || "",
+  });
+  const [bookingMeta, setBookingMeta] = useState({
+    from: rideData?.bookedFrom || rideData?.activeData?.from || "",
+    to: rideData?.bookedTo || rideData?.activeData?.to || "",
   });
   const [driverActionSubmitting, setDriverActionSubmitting] = useState(false);
   const myUserId =
@@ -244,9 +250,19 @@ const UpcomingDetailsPage = ({ route }) => {
       }));
     }
     if (data.stopovers != null || data.routePolyline != null) {
-      setRouteMeta({
-        stopovers: data.stopovers ?? [],
-        routePolyline: data.routePolyline ?? "",
+      setRouteMeta((prev) => ({
+        stopovers:
+          Array.isArray(data.stopovers) && data.stopovers.length
+            ? data.stopovers
+            : prev.stopovers || [],
+        routePolyline:
+          String(data.routePolyline || "").trim() || prev.routePolyline || "",
+      }));
+    }
+    if (data.bookedFrom && data.bookedTo) {
+      setBookingMeta({
+        from: data.bookedFrom,
+        to: data.bookedTo,
       });
     }
   }, []);
@@ -278,16 +294,39 @@ const UpcomingDetailsPage = ({ route }) => {
     [fetchRideDetails]
   );
 
-  useRideSocket(rideIdStr, {
-    onParticipantsUpdated: refreshRideDetailsQuiet,
-    onRequestUpdated: refreshRideDetailsQuiet,
-  });
-
   const enrouteStopovers = routeMeta.stopovers?.length
     ? routeMeta.stopovers
     : rideData?.stopovers || [];
   const enrouteRoutePolyline =
     routeMeta.routePolyline || rideData?.routePolyline || "";
+
+  const upcomingRoutes = useMemo(() => {
+    return getUpcomingRideRoutes(
+      {
+        ...rideData,
+        from: rideData?.from,
+        to: rideData?.to,
+        myRole: role,
+        passengers,
+        passengerRequests,
+        couriers,
+        courierRequests,
+        activeData: rideData?.activeData,
+        bookedFrom: bookingMeta.from || rideData?.bookedFrom,
+        bookedTo: bookingMeta.to || rideData?.bookedTo,
+      },
+      { myUserId }
+    );
+  }, [
+    rideData,
+    role,
+    passengers,
+    passengerRequests,
+    couriers,
+    courierRequests,
+    myUserId,
+    bookingMeta,
+  ]);
 
   const enrouteRequests = useEnrouteRequests({
     from: rideData?.from,
@@ -301,6 +340,17 @@ const UpcomingDetailsPage = ({ route }) => {
       !!rideData?.from &&
       !!rideData?.to &&
       !detailsLoading,
+  });
+
+  useRideSocket(rideIdStr, {
+    onParticipantsUpdated: () => {
+      refreshRideDetailsQuiet();
+      enrouteRequests.refresh();
+    },
+    onRequestUpdated: () => {
+      refreshRideDetailsQuiet();
+      enrouteRequests.refresh();
+    },
   });
 
   const loadDriverSubscription = useCallback(async () => {
@@ -318,7 +368,10 @@ const UpcomingDetailsPage = ({ route }) => {
   }, [isDriver]);
 
   const handleEnroutePickSuccess = useCallback(
-    (_item, response) => {
+    (_item, response, pickPayload) => {
+      if (pickPayload) {
+        enrouteRequests.removePickedFromList(pickPayload);
+      }
       if (response?.details) {
         applyRideDetails(response.details);
       }
@@ -330,6 +383,7 @@ const UpcomingDetailsPage = ({ route }) => {
     [
       applyRideDetails,
       fetchRideDetails,
+      enrouteRequests.removePickedFromList,
       enrouteRequests.refresh,
       loadDriverSubscription,
       refreshUpcomingList,
@@ -429,10 +483,7 @@ const UpcomingDetailsPage = ({ route }) => {
     startTime: scheduleInfo.startTime ?? rideData?.startTime,
   };
 
-  const bookedSeats = (passengers || []).reduce(
-    (sum, p) => sum + (Number(p?.requires_seats) || 0),
-    0
-  );
+  const bookedSeats = countActiveBookedSeats(passengers);
 
   const canEditSeats =
     isDriver &&
@@ -558,11 +609,14 @@ const UpcomingDetailsPage = ({ route }) => {
 
   const rideNavParams = (focusParticipantId = null) => {
     const focusId = normalizeNavigationParamId(focusParticipantId);
+    const polyline =
+      String(routeMeta.routePolyline || rideData?.routePolyline || "").trim();
     return {
       rideId: rideData?._id,
       rideTitle: `${rideData?.from} → ${rideData?.to}`,
       myRole: isDriver ? "driver" : isCourier ? "courier" : "passenger",
       rideStatus: rideStatus || rideData?.status,
+      ...(polyline ? { routePolyline: polyline } : {}),
       ...(focusId ? { focusParticipantId: focusId } : {}),
     };
   };
@@ -892,6 +946,9 @@ const UpcomingDetailsPage = ({ route }) => {
       if (!token) return;
       const res = await dropPassengerOnRide(token, rideIdStr, participantId);
       Alert.alert("Dropped", res?.message || "Passenger marked as Dropped");
+      if (res?.availableSeats != null) {
+        setLocalAvailableSeats(res.availableSeats);
+      }
       DeviceEventEmitter.emit(NOTIFICATIONS_REFRESH_EVENT);
       fetchRideDetails();
     } catch (err) {
@@ -1164,6 +1221,16 @@ const UpcomingDetailsPage = ({ route }) => {
             <Text style={[styles.otpText, { color: colors.successText }]}>Map</Text>
           </TouchableOpacity>
         )}
+        {isDriver && enrouteStopovers.length > 0 && (
+          <TouchableOpacity
+            style={[styles.otpButton, { borderColor: colors.primary, marginLeft: 8 }]}
+            onPress={() => setStopoversPopoverVisible(true)}
+          >
+            <Text style={[styles.otpText, { color: colors.primary }]}>
+              Stops ({enrouteStopovers.length})
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* 📜 SCROLLABLE CONTENT */}
@@ -1243,17 +1310,23 @@ const UpcomingDetailsPage = ({ route }) => {
 
         {/* ROUTE */}
         <View style={styles.detailsCard}>
-          <View style={styles.routeRow}>
-            <Image source={madhapurIcon} style={styles.routeIcon} />
-            <Text style={styles.locationTitle}>{rideData?.from}</Text>
-          </View>
-
-          <Image source={lineIcon} style={styles.verticalLineImage} />
-
-          <View style={styles.routeRow}>
-            <Image source={kondapurIcon} style={styles.routeIcon} />
-            <Text style={styles.locationTitle}>{rideData?.to}</Text>
-          </View>
+          <UpcomingRouteLines
+            rideRoute={upcomingRoutes.rideRoute}
+            bookedRoute={upcomingRoutes.bookedRoute}
+            role={role === "courier" ? "courier" : "passenger"}
+          />
+          {isDriver && enrouteStopovers.length > 0 ? (
+            <TouchableOpacity
+              style={styles.stopoversLink}
+              onPress={() => setStopoversPopoverVisible(true)}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.stopoversLinkText, { color: colors.primary }]}>
+                View {enrouteStopovers.length} stopover
+                {enrouteStopovers.length === 1 ? "" : "s"}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         {/* INFO */}
@@ -1660,6 +1733,13 @@ const UpcomingDetailsPage = ({ route }) => {
         onRemove={confirmRemovePassenger}
       />
 
+      <DriverStopoversPopover
+        visible={stopoversPopoverVisible}
+        onClose={() => setStopoversPopoverVisible(false)}
+        from={rideData?.from}
+        to={rideData?.to}
+        stopovers={enrouteStopovers}
+      />
 
       {isDriver && (
         <FixedButton
@@ -1929,6 +2009,16 @@ const createStyles = (c) => {
     marginBottom: LAYOUT.spacing.md,
   },
 
+  stopoversLink: {
+    marginTop: 10,
+    alignSelf: "flex-start",
+  },
+
+  stopoversLinkText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
   routeRow: { flexDirection: "row", alignItems: "center", marginVertical: 10 },
 
   routeIcon: { width: 26, height: 26, marginRight: 10 },
@@ -1937,6 +2027,13 @@ const createStyles = (c) => {
     fontSize: 16,
     fontWeight: "700",
     color: c.text,
+  },
+
+  rideStopsHint: {
+    marginTop: 10,
+    fontSize: 12,
+    color: c.textMuted,
+    lineHeight: 18,
   },
 
   verticalLineImage: {

@@ -53,12 +53,9 @@ const {
   buildCorridorRegex,
 } = require("../utils/enrouteCorridorUtils");
 const googleMapsService = require("./googleMapsService");
+const { getActiveBookedSeats } = require("../utils/rideSeatUtils");
 
-const getBookedSeats = (ride) =>
-  (ride.passengers || []).reduce(
-    (sum, p) => sum + (Number(p.requires_seats) || 0),
-    0
-  );
+const getBookedSeats = getActiveBookedSeats;
 
 const acceptPassengerRequest = async (user, { rideId, passenger_userId }) => {
   if (!rideId || !passenger_userId) return { status: 400, body: { message: "rideId & passenger_userId required" } };

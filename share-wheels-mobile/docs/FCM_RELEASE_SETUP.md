@@ -7,7 +7,10 @@
 3. Backend stores `user.fcmToken` in MongoDB.
 4. On events, `notificationService.notifyUser` sends via **Firebase Admin** (`FIREBASE_SERVICE_ACCOUNT_JSON` on Render).
 
-Debug works when (a) debug SHA is in Firebase, (b) local backend is awake, (c) token sync succeeds.  
+Debug works when (a) debug SHA is in Firebase, (b) local backend is awake, (c) token sync succeeds.
+
+**Quick check:** `npm run fcm:verify` — if `oauth_client` is empty, push cannot work until SHA is added in Firebase.
+
 Release fails if any of these differ.
 
 ## 1. Release SHA fingerprints (required)
@@ -19,7 +22,7 @@ cd share-wheels-mobile
 node scripts/print-android-sha.js
 ```
 
-In [Firebase Console](https://console.firebase.google.com) → Project **sharewheels-5e988** → Android app **com.sharewheels.app** → **Add fingerprint** for **both** SHA-1 and SHA-256 from the **Release** section.
+In [Firebase Console](https://console.firebase.google.com) → Project **share-wheels-4afd2** → Android app **com.sharewheels.app** → **Add fingerprint** for **both** SHA-1 and SHA-256 from the **Debug** section (Metro / `npx react-native run-android`) and **Release** section (release APK).
 
 Download the updated **`android/app/google-services.json`** and rebuild the release APK.
 

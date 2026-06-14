@@ -17,6 +17,7 @@ const { notifyUser } = require("./notificationService");
 const { assignUserNoIfMissing } = require("../utils/userNoHelper");
 const { findUserByEmail, findUserByMobile, verifyUserPassword } = require("../utils/authCredentials");
 const { validateUserFields, EMAIL_RE, MOBILE_RE, normalizeEmail, normalizeMobile } = require("../utils/userValidation");
+const { JWT_EXPIRES_IN } = require("../config/jwt");
 
 const toAuthUser = (user) => ({
   id: user._id,
@@ -32,7 +33,7 @@ const issueToken = (user) => {
   if (!process.env.JWT_SECRET) {
     throw new Error("JWT_SECRET is not configured");
   }
-  return jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+  return jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 };
 
 const register = async ({ name, email, mobile, gender, password }) => {
@@ -242,8 +243,16 @@ const verifyToken = async (authHeader) => {
       status: 200,
       body: { success: true, message: "Token valid", user: { id: user._id, name: user.name, mobile: user.mobile } },
     };
-  } catch {
-    return { status: 401, body: { success: false, message: "Invalid token" } };
+  } catch (err) {
+    const expired = err?.name === "TokenExpiredError";
+    return {
+      status: 401,
+      body: {
+        success: false,
+        message: expired ? "Token expired" : "Invalid token",
+        code: expired ? "TOKEN_EXPIRED" : "TOKEN_INVALID",
+      },
+    };
   }
 };
 

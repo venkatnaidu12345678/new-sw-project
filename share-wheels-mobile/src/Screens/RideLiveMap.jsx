@@ -43,6 +43,7 @@ const RideLiveMap = () => {
     rideTitle,
     myRole,
     rideStatus,
+    routePolyline: routePolylineParam = "",
     focusParticipantId: focusParticipantIdParam = null,
   } = route.params || {};
 
@@ -110,16 +111,19 @@ const RideLiveMap = () => {
     [tracking]
   );
 
+  const savedRoutePolyline =
+    String(tracking?.routePolyline || routePolylineParam || "").trim();
+
   const { route: plannedRoute, loading: routeLoading } = usePlannedRoute(
     tracking?.fromCoords,
     tracking?.toCoords,
-    isStarted && !!tracking,
+    isStarted && (!!tracking || !!savedRoutePolyline),
     {
       from: tracking?.from,
       to: tracking?.to,
       stopovers: tracking?.stopovers || [],
     },
-    tracking?.routePolyline,
+    savedRoutePolyline,
     { socketOnly: true }
   );
 

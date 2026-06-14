@@ -91,7 +91,9 @@ function AppShell() {
       });
 
       unsubTokenRefresh = registerTokenRefreshHandler(() => {
-        syncFcmTokenWithBackend({ force: true }).catch(() => {});
+        syncFcmTokenWithBackend({ force: true }).then(() => {
+          DeviceEventEmitter.emit(NOTIFICATIONS_REFRESH_EVENT);
+        });
       });
 
       const initial = await handleInitialNotification(onNotificationOpen);

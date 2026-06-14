@@ -11,6 +11,7 @@ const {
   canMarkDropped,
   canMarkDelivered,
 } = require("../utils/participantTripStatus");
+const { getActiveBookedSeats } = require("../utils/rideSeatUtils");
 
 const USER_POPULATE = "name email mobile profile_img userNo";
 
@@ -295,8 +296,17 @@ const markPassengerDropped = async (user, { rideId, participantId }) => {
     };
   }
 
+  const seatsFreed = Number(entry.requires_seats) || 1;
+  const alreadyDropped =
+    String(entry.status || "").toLowerCase() === TRIP_STATUS.DROPPED;
+
   entry.status = TRIP_STATUS.DROPPED;
   entry.droppedAt = new Date();
+
+  if (!alreadyDropped) {
+    ride.availableSeats = (Number(ride.availableSeats) || 0) + seatsFreed;
+  }
+
   ride.markModified("passengers");
   await ride.save();
 
@@ -322,6 +332,8 @@ const markPassengerDropped = async (user, { rideId, participantId }) => {
     body: {
       success: true,
       message: "Passenger marked as Dropped",
+      availableSeats: ride.availableSeats,
+      bookedSeats: getActiveBookedSeats(ride),
       participant: {
         role: "passenger",
         participantId: entry._id,

@@ -38,6 +38,13 @@ const isPassengerDropped = (p) => normalizeStatus(p?.status) === TRIP_STATUS.DRO
 
 const isCourierDelivered = (c) => normalizeStatus(c?.status) === TRIP_STATUS.DELIVERED;
 
+/** Seats still occupied (passengers not yet dropped). */
+export const countActiveBookedSeats = (passengers = []) =>
+  passengers.reduce((sum, p) => {
+    if (normalizeStatus(p?.status) === TRIP_STATUS.DROPPED) return sum;
+    return sum + (Number(p?.requires_seats) || 0);
+  }, 0);
+
 /** Driver may complete ride only when every passenger is dropped and every courier is delivered. */
 export const canDriverCompleteRide = (ride) => {
   const passengers = ride?.passengers || [];

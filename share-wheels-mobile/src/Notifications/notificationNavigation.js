@@ -10,6 +10,8 @@ const RIDE_TYPES = new Set([
   "courier_request",
   "courier_joined",
   "courier_assigned",
+  "courier_reject",
+  "courier_removed",
   "ride_cancelled",
   "ride_postponed",
   "ride_started",
@@ -18,11 +20,16 @@ const RIDE_TYPES = new Set([
   "ride_expired",
   "boarding_otp_issued",
   "boarding_otp_updated",
-  "boarding_otp_verified",
   "participant_picked_up",
   "passenger_dropped",
   "courier_delivered",
+  "location_access_requested",
 ]);
+
+const MY_REQUEST_TYPES = {
+  passenger_request_expired: "Passenger",
+  courier_request_expired: "Courier",
+};
 
 /**
  * Resolve navigation target from FCM data payload.
@@ -37,6 +44,8 @@ export function parseNotificationPayload(remoteMessage) {
     peerRole: data.peerRole,
     peerProfileImg: data.senderAvatar || data.peerProfileImg,
     notificationId: data.notificationId,
+    passengerRideId: data.passengerRideId,
+    courierId: data.courierId,
     title: remoteMessage?.notification?.title || data.title,
     body: remoteMessage?.notification?.body || data.body,
   };
@@ -55,6 +64,26 @@ async function findRideForUser(rideId) {
     return null;
   }
 }
+
+const navigateToMyRequests = (navigation, activeTab) => {
+  navigation.navigate("Navigator", {
+    screen: "Request",
+    params: { activeTab },
+  });
+};
+
+const navigateToRideDetails = async (navigation, rideId) => {
+  const ride = await findRideForUser(rideId);
+  if (!ride) return false;
+  navigation.navigate("Navigator", {
+    screen: "Home",
+    params: {
+      screen: "UpcomingDetailsPage",
+      params: { rideData: ride },
+    },
+  });
+  return true;
+};
 
 /**
  * Navigate from a notification tap (background, quit, or foreground).
@@ -77,18 +106,15 @@ export async function handleNotificationOpen(navigation, remoteMessage) {
     return;
   }
 
+  const myRequestTab = MY_REQUEST_TYPES[type];
+  if (myRequestTab) {
+    navigateToMyRequests(navigation, myRequestTab);
+    return;
+  }
+
   if (rideId && RIDE_TYPES.has(type)) {
-    const ride = await findRideForUser(rideId);
-    if (ride) {
-      navigation.navigate("Navigator", {
-        screen: "Home",
-        params: {
-          screen: "UpcomingDetailsPage",
-          params: { rideData: ride },
-        },
-      });
-      return;
-    }
+    const opened = await navigateToRideDetails(navigation, rideId);
+    if (opened) return;
   }
 
   navigation.navigate("NotificationScreen");

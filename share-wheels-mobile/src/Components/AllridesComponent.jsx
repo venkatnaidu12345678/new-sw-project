@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo } from "react";
 import {
   View,
   StyleSheet,
@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   Text,
 } from "react-native";
-import LinearGradient from "react-native-linear-gradient";
 import Icon from "react-native-vector-icons/Ionicons";
 
 import UserAvatar from "./ui/UserAvatar";
@@ -21,6 +20,11 @@ import {
   formatDisplayDate,
   formatRideTimeLabel,
 } from "../Utils/dateUtils";
+import { usePassengerSegmentFare } from "../hooks/usePassengerSegmentFare";
+import {
+  resolveBookingSegmentFromContext,
+  segmentDiffersFromFullRide,
+} from "../Utils/rideCorridorUtils";
 
 const refId = (ref) =>
   ref?._id?.toString?.() || ref?.toString?.() || "";
@@ -30,109 +34,170 @@ const MetaChip = ({ icon, label }) => {
   const { colors } = useTheme();
   return (
     <View style={styles.metaChip}>
-      <Icon name={icon} size={13} color={colors.textMuted} />
+      <Icon name={icon} size={11} color={colors.textMuted} />
       <Text style={styles.metaChipText}>{label}</Text>
     </View>
   );
 };
 
-const SearchRideCard = ({ item, onPress }) => {
+const SearchRideCard = ({ item, onPress, searchSegment }) => {
   const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
   const seats = item?.availableSeats ?? 0;
-  const price = item?.ride_amount ?? 0;
   const vehicleLabel = formatVehicleLabel(item?.vehicle);
   const stopoverCount = Array.isArray(item?.stopovers) ? item.stopovers.length : 0;
 
+  const resolvedSegment = useMemo(() => {
+    if (!searchSegment?.from || !searchSegment?.to) return null;
+    return resolveBookingSegmentFromContext(
+      item,
+      searchSegment.from,
+      searchSegment.to
+    );
+  }, [item, searchSegment?.from, searchSegment?.to]);
+
+  const hasPassengerSegment =
+    resolvedSegment && segmentDiffersFromFullRide(item, resolvedSegment);
+
+  const fareSegment = useMemo(() => {
+    if (hasPassengerSegment) return resolvedSegment;
+    return { from: item?.from, to: item?.to };
+  }, [hasPassengerSegment, resolvedSegment, item?.from, item?.to]);
+
+  const { perSeatFare, segmentKm, fullRouteKm, loading: fareLoading } =
+    usePassengerSegmentFare(item, fareSegment, 1);
+
+  const displayFrom = hasPassengerSegment ? resolvedSegment.from : item.from || "—";
+  const displayTo = hasPassengerSegment ? resolvedSegment.to : item.to || "—";
+  const timeLabel = formatRideTimeLabel(item?.date, item?.startTime);
+  const dateLabel = formatDisplayDate(item?.date, { weekday: false }) || "—";
+
+  const kmText = fareLoading
+    ? "…"
+    : segmentKm != null
+      ? `${segmentKm.toFixed(1)} km`
+      : null;
+
   return (
-    <TouchableOpacity
-      style={styles.card}
-      activeOpacity={0.92}
-      onPress={onPress}
-    >
-      <LinearGradient
-        colors={["#2563EB", "#4F46E5"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={styles.cardAccent}
+    <TouchableOpacity style={styles.cardOuter} activeOpacity={0.9} onPress={onPress}>
+      <View
+        style={[
+          styles.cardAccent,
+          hasPassengerSegment ? styles.cardAccentSegment : styles.cardAccentFull,
+        ]}
       />
 
       <View style={styles.cardBody}>
-        {/* Route */}
-        <View style={styles.routeBlock}>
-          <View style={styles.routeTimeline}>
-            <View style={[styles.routeDot, styles.routeDotFrom]} />
-            <View style={styles.routeLine} />
-            <View style={[styles.routeDot, styles.routeDotTo]} />
-          </View>
-          <View style={styles.routeTextCol}>
-            <View style={styles.routePoint}>
-              <Text style={styles.routeLabel}>From</Text>
-              <Text style={styles.routeCity} numberOfLines={1}>
-                {item.from || "—"}
-              </Text>
-            </View>
-            <View style={[styles.routePoint, styles.routePointTo]}>
-              <Text style={styles.routeLabel}>To</Text>
-              <Text style={styles.routeCity} numberOfLines={1}>
-                {item.to || "—"}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.priceBlock}>
-            <Text style={styles.priceLabel}>per seat</Text>
-            <Text style={styles.priceValue}>₹{price}</Text>
-          </View>
-        </View>
-
-        <View style={styles.divider} />
-
-        {/* Driver */}
-        <View style={styles.driverRow}>
-          <UserAvatar user={item?.creator} size={44} borderColor={colors.border} />
-          <View style={styles.driverCol}>
+        {/* Driver + fare */}
+        <View style={styles.topRow}>
+          <UserAvatar user={item?.creator} size={42} borderColor={colors.border} />
+          <View style={styles.topCenter}>
             <Text style={styles.driverName} numberOfLines={1}>
               {item?.creator?.name || "Driver"}
             </Text>
-            {vehicleLabel ? (
-              <Text style={styles.vehicleText} numberOfLines={1}>
-                {vehicleLabel}
-                {item?.vehicle?.car_no ? ` · ${item.vehicle.car_no}` : ""}
-              </Text>
-            ) : (
-              <Text style={styles.vehicleText}>Vehicle details on request</Text>
-            )}
+            <Text style={styles.vehicleText} numberOfLines={1}>
+              {vehicleLabel || "Vehicle on request"}
+              {item?.vehicle?.car_no ? ` · ${item.vehicle.car_no}` : ""}
+            </Text>
           </View>
-          <View style={styles.chevronWrap}>
-            <Icon name="chevron-forward" size={20} color={colors.textMuted} />
+          <View style={styles.fareBox}>
+            <Text style={styles.fareLabel}>
+              {hasPassengerSegment ? "Segment" : "Per seat"}
+            </Text>
+            <Text style={styles.fareValue}>{fareLoading ? "…" : `₹${perSeatFare}`}</Text>
+            {kmText ? (
+              <View style={styles.fareKmRow}>
+                <Icon name="navigate-outline" size={10} color={colors.primary} />
+                <Text style={styles.fareKm}>{kmText}</Text>
+              </View>
+            ) : null}
           </View>
         </View>
 
-        {/* Meta */}
-        <View style={styles.metaRow}>
-          <MetaChip
-            icon="time-outline"
-            label={formatRideTimeLabel(item?.date, item?.startTime)}
-          />
-          <MetaChip
-            icon="calendar-outline"
-            label={formatDisplayDate(item?.date, { weekday: false }) || "—"}
-          />
-          <MetaChip
-            icon="people-outline"
-            label={`${seats} seat${seats !== 1 ? "s" : ""}`}
-          />
-          {stopoverCount > 0 ? (
-            <MetaChip
-              icon="git-commit-outline"
-              label={`${stopoverCount} stop${stopoverCount !== 1 ? "s" : ""}`}
-            />
+        {/* Tags */}
+        {(hasPassengerSegment || item?.QuickReserve || item?.CanCarryCourier) ? (
+          <View style={styles.tagRow}>
+            {hasPassengerSegment ? (
+              <View style={styles.segmentTag}>
+                <Icon name="checkmark-circle" size={12} color={colors.successText} />
+                <Text style={styles.segmentTagText}>Your search segment</Text>
+              </View>
+            ) : null}
+            {item?.QuickReserve ? (
+              <View style={[styles.tag, styles.tagSuccess]}>
+                <Icon name="flash" size={11} color={colors.successText} />
+                <Text style={[styles.tagText, { color: colors.successText }]}>Quick</Text>
+              </View>
+            ) : null}
+            {item?.CanCarryCourier ? (
+              <View style={[styles.tag, styles.tagWarning]}>
+                <Icon name="cube-outline" size={11} color={colors.warningText} />
+                <Text style={[styles.tagText, { color: colors.warningText }]}>Courier</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
+        {/* Route */}
+        <View style={styles.routePanel}>
+          <View style={styles.routeBlock}>
+            <View style={styles.routeTimeline}>
+              <View style={[styles.routeDot, styles.routeDotFrom]} />
+              <View style={styles.routeLine} />
+              <View style={[styles.routeDot, styles.routeDotTo]} />
+            </View>
+            <View style={styles.routeTextCol}>
+              <View style={styles.routePoint}>
+                <Text style={styles.routeLabel}>
+                  {hasPassengerSegment ? "Your pickup" : "From"}
+                </Text>
+                <Text style={styles.routeCity} numberOfLines={2}>
+                  {displayFrom}
+                </Text>
+              </View>
+              <View style={[styles.routePoint, styles.routePointLast]}>
+                <Text style={styles.routeLabel}>Drop-off</Text>
+                <Text style={styles.routeCity} numberOfLines={2}>
+                  {displayTo}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {hasPassengerSegment ? (
+            <View style={styles.driverRouteRow}>
+              <Icon name="car-outline" size={12} color={colors.textMuted} />
+              <Text style={styles.driverRouteText} numberOfLines={2}>
+                Driver route: {item.from} → {item.to}
+                {fullRouteKm != null && !fareLoading
+                  ? ` (${fullRouteKm.toFixed(1)} km)`
+                  : ""}
+              </Text>
+            </View>
+          ) : stopoverCount > 0 ? (
+            <View style={styles.driverRouteRow}>
+              <Icon name="git-commit-outline" size={12} color={colors.primary} />
+              <Text style={styles.driverRouteText}>
+                {stopoverCount} stopover{stopoverCount !== 1 ? "s" : ""} on route
+              </Text>
+            </View>
           ) : null}
         </View>
 
-        <View style={styles.ctaRow}>
-          <Text style={styles.ctaText}>Tap to view & request</Text>
-          <Icon name="arrow-forward-circle" size={18} color={colors.primary} />
+        {/* Footer */}
+        <View style={styles.footerRow}>
+          <View style={styles.metaRow}>
+            <MetaChip icon="time-outline" label={timeLabel} />
+            <MetaChip icon="calendar-outline" label={dateLabel} />
+            <MetaChip
+              icon="people-outline"
+              label={`${seats} seat${seats !== 1 ? "s" : ""}`}
+            />
+          </View>
+          <View style={styles.viewLink}>
+            <Text style={styles.viewLinkText}>View</Text>
+            <Icon name="chevron-forward" size={16} color={colors.primary} />
+          </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -155,21 +220,41 @@ const EmptyResults = () => {
   );
 };
 
-const AllridesComponent = ({ rides = [], loading, navigation, currentUserId }) => {
+const AllridesComponent = ({
+  rides = [],
+  loading,
+  navigation,
+  currentUserId,
+  searchFrom = "",
+  searchTo = "",
+}) => {
   const styles = useThemedStyles(createStyles);
   const visibleRides = (rides || []).filter((item) => {
     if (!currentUserId) return true;
     return refId(item?.creator) !== refId(currentUserId);
   });
 
+  const searchSegment = useMemo(() => {
+    const from = String(searchFrom || "").trim();
+    const to = String(searchTo || "").trim();
+    if (!from || !to) return null;
+    return { from, to };
+  }, [searchFrom, searchTo]);
+
   const renderRide = useCallback(
     ({ item }) => (
       <SearchRideCard
         item={item}
-        onPress={() => navigation.navigate("RideDetails", { ride: item })}
+        searchSegment={searchSegment}
+        onPress={() =>
+          navigation.navigate("RideDetails", {
+            ride: item,
+            ...(searchSegment ? { searchSegment } : {}),
+          })
+        }
       />
     ),
-    [navigation]
+    [navigation, searchSegment]
   );
 
   if (!loading && visibleRides.length === 0) {
@@ -245,38 +330,143 @@ const createStyles = (c) =>
     flex: 1,
   },
 
-  card: {
-    backgroundColor: c.surface,
+  cardOuter: {
     marginBottom: LAYOUT.spacing.md,
     borderRadius: LAYOUT.radius.lg,
     borderWidth: 1,
     borderColor: c.border,
+    backgroundColor: c.surface,
     overflow: "hidden",
     shadowColor: c.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowRadius: 10,
+    elevation: 3,
   },
   cardAccent: {
     height: 4,
     width: "100%",
   },
+  cardAccentFull: {
+    backgroundColor: c.primary,
+  },
+  cardAccentSegment: {
+    backgroundColor: "#10B981",
+  },
   cardBody: {
     padding: LAYOUT.spacing.md,
   },
 
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 10,
+  },
+  topCenter: {
+    flex: 1,
+    minWidth: 0,
+  },
+  driverName: {
+    fontSize: LAYOUT.font.body,
+    fontWeight: "800",
+    color: c.text,
+  },
+  vehicleText: {
+    fontSize: LAYOUT.font.small,
+    color: c.textMuted,
+    marginTop: 2,
+  },
+  fareBox: {
+    alignItems: "flex-end",
+    backgroundColor: c.primaryMuted,
+    borderRadius: LAYOUT.radius.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: c.border,
+    minWidth: 68,
+  },
+  fareLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: c.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  fareValue: {
+    fontSize: LAYOUT.font.title,
+    fontWeight: "900",
+    color: c.primary,
+    marginTop: 1,
+  },
+  fareKmRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    marginTop: 3,
+  },
+  fareKm: {
+    fontSize: LAYOUT.font.tiny,
+    fontWeight: "700",
+    color: c.primary,
+  },
+
+  tagRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 10,
+  },
+  segmentTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: c.successBg,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  segmentTagText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: c.successText,
+  },
+  tag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  tagSuccess: {
+    backgroundColor: c.successBg,
+  },
+  tagWarning: {
+    backgroundColor: c.warningBg,
+  },
+  tagText: {
+    fontSize: 10,
+    fontWeight: "700",
+  },
+
+  routePanel: {
+    backgroundColor: c.chipBg,
+    borderRadius: LAYOUT.radius.md,
+    borderWidth: 1,
+    borderColor: c.border,
+    padding: 10,
+    marginBottom: 10,
+  },
   routeBlock: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "stretch",
   },
   routeTimeline: {
     alignItems: "center",
-    width: scale(20),
-    paddingTop: scale(4),
+    width: 14,
+    paddingTop: 4,
   },
   routeDot: {
     width: 10,
@@ -294,113 +484,88 @@ const createStyles = (c) =>
   routeLine: {
     width: 2,
     flex: 1,
-    minHeight: scale(28),
+    minHeight: 22,
     backgroundColor: c.border,
-    marginVertical: 4,
+    marginVertical: 3,
   },
   routeTextCol: {
     flex: 1,
-    marginLeft: LAYOUT.spacing.sm,
-    marginRight: LAYOUT.spacing.sm,
+    marginLeft: 10,
   },
   routePoint: {
-    marginBottom: scale(10),
+    marginBottom: 10,
   },
-  routePointTo: {
+  routePointLast: {
     marginBottom: 0,
   },
   routeLabel: {
-    fontSize: LAYOUT.font.tiny,
-    fontWeight: "600",
+    fontSize: 9,
+    fontWeight: "700",
     color: c.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
     marginBottom: 2,
   },
   routeCity: {
     fontSize: LAYOUT.font.section,
-    fontWeight: "700",
-    color: c.text,
-  },
-  priceBlock: {
-    alignItems: "flex-end",
-    minWidth: scale(64),
-  },
-  priceLabel: {
-    fontSize: LAYOUT.font.tiny,
-    color: c.textMuted,
-    marginBottom: 2,
-  },
-  priceValue: {
-    fontSize: LAYOUT.font.title,
     fontWeight: "800",
-    color: c.primary,
+    color: c.text,
+    lineHeight: 20,
   },
 
-  divider: {
-    height: 1,
-    backgroundColor: c.border,
-    marginVertical: LAYOUT.spacing.md,
+  driverRouteRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: c.border,
+  },
+  driverRouteText: {
+    flex: 1,
+    fontSize: LAYOUT.font.small,
+    fontWeight: "600",
+    color: c.textMuted,
+    lineHeight: 17,
   },
 
-  driverRow: {
+  footerRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
   },
-  driverCol: {
-    flex: 1,
-    marginLeft: LAYOUT.spacing.md,
-  },
-  driverName: {
-    fontSize: LAYOUT.font.body,
-    fontWeight: "700",
-    color: c.text,
-  },
-  vehicleText: {
-    fontSize: LAYOUT.font.small,
-    color: c.textMuted,
-    marginTop: 3,
-  },
-  chevronWrap: {
-    padding: 4,
-  },
-
   metaRow: {
+    flex: 1,
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: scale(8),
-    marginTop: LAYOUT.spacing.md,
+    gap: 6,
   },
   metaChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    backgroundColor: c.surfaceAlt,
-    paddingHorizontal: scale(10),
-    paddingVertical: scale(6),
-    borderRadius: scale(20),
+    gap: 4,
+    backgroundColor: c.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: c.border,
   },
   metaChipText: {
-    fontSize: LAYOUT.font.small,
-    fontWeight: "600",
+    fontSize: LAYOUT.font.tiny,
+    fontWeight: "700",
     color: c.textMuted,
   },
-
-  ctaRow: {
+  viewLink: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    marginTop: LAYOUT.spacing.md,
-    paddingTop: LAYOUT.spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: c.border,
+    gap: 2,
+    marginLeft: 8,
   },
-  ctaText: {
+  viewLinkText: {
     fontSize: LAYOUT.font.small,
-    fontWeight: "600",
+    fontWeight: "800",
     color: c.primary,
   },
 

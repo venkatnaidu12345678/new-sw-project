@@ -15,7 +15,6 @@ import {
 
 export const NOTIFICATIONS_REFRESH_EVENT = "notifications:refresh";
 import { syncFcmTokenWithBackend } from "../Notifications/registerToken";
-import { registerTokenRefreshHandler } from "../Notifications/FCMService";
 import {
   connectAppSocket,
   getAppSocket,
@@ -92,7 +91,6 @@ export const NotificationsProvider = ({ children, isAuthenticated }) => {
 
     let active = true;
     let unsubSocket = () => {};
-    let unsubTokenRefresh = () => {};
     let pollId;
     let reconnectHandler;
     let appStateSub;
@@ -108,12 +106,6 @@ export const NotificationsProvider = ({ children, isAuthenticated }) => {
       if (!active) return;
 
       refresh();
-
-      unsubTokenRefresh = registerTokenRefreshHandler(() => {
-        syncFcmTokenWithBackend({ force: true }).then(() => {
-          if (active) refresh();
-        });
-      });
 
       const s = await connectAppSocket();
       if (!active || !s) return;
@@ -157,7 +149,6 @@ export const NotificationsProvider = ({ children, isAuthenticated }) => {
       active = false;
       clearInterval(pollId);
       try {
-        unsubTokenRefresh?.();
         unsubSocket?.();
       } catch {
         /* ignore */

@@ -8,7 +8,7 @@ const {
   passengerOverlapsRideDay,
   courierOverlapsRideDay,
 } = require("./rideDateQueryUtils");
-const { matchesForwardCorridor } = require("./enrouteCorridorUtils");
+const { buildOrderedCorridor, matchesForwardCorridor } = require("./enrouteCorridorUtils");
 const { emitEnrouteRequestRemoved } = require("./socketEmit");
 
 const refUserId = (ref) =>
@@ -183,10 +183,24 @@ const linkStandaloneCouriersForRideRequest = async (
     ],
   }).lean();
 
+  let corridor = null;
+  if ((ride.stopovers || []).length > 0) {
+    corridor = await buildOrderedCorridor({
+      from: ride.from,
+      to: ride.to,
+      stopovers: ride.stopovers || [],
+      routePolyline: ride.routePolyline || "",
+    });
+  }
+
+  const matchesRide = (row) => {
+    if (routesRoughlyMatch(row.from, row.to, ride.from, ride.to)) return true;
+    if (!corridor) return false;
+    return matchesForwardCorridor(row.from, row.to, corridor);
+  };
+
   const toLink = appendExplicitDoc(
-    open.filter((row) =>
-      routesRoughlyMatch(row.from, row.to, ride.from, ride.to)
-    ),
+    open.filter((row) => matchesRide(row)),
     open,
     explicitCourierId
   );

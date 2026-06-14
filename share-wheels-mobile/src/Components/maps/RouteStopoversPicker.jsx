@@ -15,16 +15,180 @@ import {
   getAlternativeRoutes,
   getDirectionsPolyline,
   getStopoverCandidates,
+  resolvePlaceCoords,
 } from "../../ApiService/placesApiService";
-import { decodePolyline } from "../../Utils/polyline";
+import { decodePolyline, thinPolylineCoords, validMapCoords, polylinePathLengthMeters } from "../../Utils/polyline";
 import { regionForCoordinates } from "./rideMapMarkers";
 import RouteMapPin from "./RouteMapPin";
-import { MAP_LINE_THEME, ROUTE_LINE_BLUE } from "./mapTheme";
+import { ROUTE_LINE_BLUE, ROUTE_LINE_BLUE_OUTLINE } from "./mapTheme";
 import { useTheme } from "../../context/ThemeContext";
 import { DS } from "../../theme/designSystem";
 
 const SELECTED_ROUTE_COLOR = ROUTE_LINE_BLUE;
-const INACTIVE_ROUTE_COLOR = MAP_LINE_THEME.routeInactive;
+const SELECTED_ROUTE_OUTLINE = ROUTE_LINE_BLUE_OUTLINE;
+/** Neutral gray — must not read as blue so the selected route stands out. */
+const INACTIVE_ROUTE_COLOR = "#64748B";
+const INACTIVE_ROUTE_DASH = [12, 8];
+const ROUTE_HIT_STROKE_WIDTH = 18;
+const ROUTE_FETCH_DEBOUNCE_MS = 450;
+const MAP_PATH_MAX_POINTS = 140;
+const MAP_FIT_DEBOUNCE_MS = 120;
+
+const RoutePickerMapLayers = React.memo(function RoutePickerMapLayers({
+  MapView,
+  Marker,
+  Polyline,
+  PROVIDER_GOOGLE,
+  endpointSignature,
+  mapRegion,
+  mapRef,
+  inactiveRoutes,
+  activePath,
+  selectedIndex,
+  endpointMarkers,
+  onMapReady,
+  onSelectRoute,
+}) {
+  return (
+    <MapView
+      key={endpointSignature}
+      ref={mapRef}
+      style={{ flex: 1 }}
+      provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
+      initialRegion={mapRegion}
+      onMapReady={onMapReady}
+      scrollEnabled
+      zoomEnabled
+      zoomTapEnabled
+      scrollDuringRotateOrZoom
+      pitchEnabled={false}
+      rotateEnabled={false}
+      moveOnMarkerPress={false}
+      loadingEnabled={false}
+      cacheEnabled={Platform.OS === "ios"}
+      toolbarEnabled={false}
+    >
+      {inactiveRoutes.map((route) => (
+        <React.Fragment key={`route-inactive-${selectedIndex}-${route.arrayIndex}`}>
+          <Polyline
+            coordinates={route.mapPath}
+            strokeColor={INACTIVE_ROUTE_COLOR}
+            strokeWidth={4}
+            geodesic
+            lineCap="round"
+            lineJoin="round"
+            lineDashPattern={INACTIVE_ROUTE_DASH}
+            zIndex={1}
+          />
+          <Polyline
+            coordinates={route.mapPath}
+            strokeColor="rgba(0,0,0,0)"
+            strokeWidth={ROUTE_HIT_STROKE_WIDTH}
+            geodesic
+            lineCap="round"
+            lineJoin="round"
+            tappable
+            onPress={() => onSelectRoute(route.arrayIndex)}
+            zIndex={6}
+          />
+        </React.Fragment>
+      ))}
+      {activePath.length > 1 ? (
+        <React.Fragment key={`route-selected-${selectedIndex}`}>
+          <Polyline
+            coordinates={activePath}
+            strokeColor={SELECTED_ROUTE_OUTLINE}
+            strokeWidth={11}
+            geodesic
+            lineCap="round"
+            lineJoin="round"
+            zIndex={2}
+          />
+          <Polyline
+            coordinates={activePath}
+            strokeColor={SELECTED_ROUTE_COLOR}
+            strokeWidth={7}
+            geodesic
+            lineCap="round"
+            lineJoin="round"
+            zIndex={4}
+          />
+          <Polyline
+            coordinates={activePath}
+            strokeColor="rgba(0,0,0,0)"
+            strokeWidth={ROUTE_HIT_STROKE_WIDTH}
+            geodesic
+            lineCap="round"
+            lineJoin="round"
+            tappable
+            onPress={() => onSelectRoute(selectedIndex)}
+            zIndex={5}
+          />
+        </React.Fragment>
+      ) : null}
+      {endpointMarkers.map((pin) => (
+        <Marker
+          key={`pin-${pin.id}`}
+          coordinate={{ latitude: pin.latitude, longitude: pin.longitude }}
+          anchor={{ x: 0.5, y: 1 }}
+          tracksViewChanges={false}
+        >
+          <RouteMapPin role={pin.role} small={pin.role === "stopover"} />
+        </Marker>
+      ))}
+    </MapView>
+  );
+});
+
+/** Prefer Google/API road distance; polyline length is only a fallback. */
+const distanceFromPolyline = (polyline, fallback) => {
+  const fb = Number(fallback);
+  if (Number.isFinite(fb) && fb > 0) return Math.round(fb);
+  const computed = polylinePathLengthMeters(String(polyline || ""));
+  if (computed > 0) return Math.round(computed);
+  return null;
+};
+
+/** Stable 0..n-1 indices; ensure distance from polyline when API omits it. */
+const normalizeRouteList = (list) =>
+  (Array.isArray(list) ? list : []).map((route, idx) => {
+    const polyline = route?.polyline || "";
+    const distanceMeters = distanceFromPolyline(polyline, route?.distanceMeters);
+    return {
+      ...route,
+      index: idx,
+      polyline,
+      distanceMeters,
+    };
+  });
+
+const buildRoutePlan = (row, overrides = {}) => {
+  const polyline = String(overrides.routePolyline ?? row?.polyline ?? "").trim();
+  const distanceMeters = distanceFromPolyline(
+    polyline,
+    overrides.distanceMeters ?? row?.distanceMeters
+  );
+  return {
+    selectedRouteIndex: overrides.selectedRouteIndex ?? row?.index ?? 0,
+    routePolyline: polyline,
+    stopovers: overrides.stopovers ?? [],
+    distanceMeters,
+    distanceKm:
+      distanceMeters != null ? Math.round((distanceMeters / 1000) * 100) / 100 : null,
+    durationSeconds: overrides.durationSeconds ?? row?.durationSeconds ?? null,
+  };
+};
+
+const resolveEndpoint = async (coords, label, originCoords = null) => {
+  const lat = Number(coords?.lat ?? coords?.latitude);
+  const lng = Number(coords?.lng ?? coords?.longitude);
+  const placeLabel = String(label || coords?.label || "").trim();
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    return { lat, lng, label: placeLabel || undefined };
+  }
+  if (!placeLabel) return null;
+  return resolvePlaceCoords(placeLabel, originCoords);
+};
 
 const formatDistance = (meters) => {
   const m = Number(meters);
@@ -68,6 +232,7 @@ export default function RouteStopoversPicker({
   const [selectedStopIds, setSelectedStopIds] = useState([]);
   const [loadingRoutes, setLoadingRoutes] = useState(false);
   const [loadingStops, setLoadingStops] = useState(false);
+  const [updatingRoute, setUpdatingRoute] = useState(false);
   const [stopoverSearch, setStopoverSearch] = useState("");
   const [error, setError] = useState("");
   const [internalFullscreen, setInternalFullscreen] = useState(false);
@@ -116,6 +281,26 @@ export default function RouteStopoversPicker({
     (toCoords?.lat != null && toCoords?.lng != null) ||
     String(toLabel || "").trim().length >= 2;
 
+  const endpointSignature = useMemo(
+    () =>
+      [
+        fromCoords?.lat ?? "",
+        fromCoords?.lng ?? "",
+        toCoords?.lat ?? "",
+        toCoords?.lng ?? "",
+        String(fromLabel || "").trim(),
+        String(toLabel || "").trim(),
+      ].join("|"),
+    [
+      fromCoords?.lat,
+      fromCoords?.lng,
+      toCoords?.lat,
+      toCoords?.lng,
+      fromLabel,
+      toLabel,
+    ]
+  );
+
   const emitChange = useCallback(
     (payload) => {
       onChangeRef.current?.(payload);
@@ -134,57 +319,78 @@ export default function RouteStopoversPicker({
     }
 
     let cancelled = false;
-    setLoadingRoutes(true);
-    setError("");
+    const timer = setTimeout(() => {
+      setLoadingRoutes(true);
+      setError("");
 
-    (async () => {
-      try {
-        const list = await getAlternativeRoutes(fromCoords, toCoords, {
-          from: fromLabel,
-          to: toLabel,
-        });
-        if (cancelled) return;
-        setRoutes(list);
-        const first = list[0];
-        setSelectedIndex(0);
-        setRoutePolyline(first?.polyline || "");
-        setSelectedStopIds([]);
-        setStopoverSearch("");
-        emitChange(
-          first
-            ? {
-                selectedRouteIndex: 0,
-                routePolyline: first.polyline,
-                stopovers: [],
-                distanceMeters: first.distanceMeters,
-                durationSeconds: first.durationSeconds,
-              }
-            : null
-        );
-      } catch (e) {
-        if (!cancelled) {
-          setError(e?.message || "Could not load routes");
-          setRoutes([]);
+      (async () => {
+        try {
+          const origin = await resolveEndpoint(fromCoords, fromLabel);
+          const destination = await resolveEndpoint(toCoords, toLabel, origin);
+          if (cancelled) return;
+
+          let list = await getAlternativeRoutes(origin, destination, {
+            from: fromLabel,
+            to: toLabel,
+          });
+          if (cancelled) return;
+
+          if (!list.length) {
+            const encoded = await getDirectionsPolyline(origin, destination, [], {
+              from: fromLabel,
+              to: toLabel,
+            });
+            if (cancelled) return;
+            if (encoded) {
+              list = [
+                {
+                  index: 0,
+                  polyline: encoded,
+                  label: "Recommended",
+                  isRecommended: true,
+                  distanceMeters: null,
+                  durationSeconds: null,
+                },
+              ];
+            }
+          }
+
+          if (!list.length) {
+            throw new Error("No routes found for this trip. Try different From/To places.");
+          }
+
+          if (!origin || !destination) {
+            throw new Error("Could not resolve From and To for routing.");
+          }
+
+          if (__DEV__) {
+            console.log("[RouteStopoversPicker] routes loaded:", list.length);
+          }
+
+          setRoutes(normalizeRouteList(list));
+          const normalized = normalizeRouteList(list);
+          const first = normalized[0];
+          setSelectedIndex(0);
+          setRoutePolyline(first?.polyline || "");
+          setSelectedStopIds([]);
+          setStopoverSearch("");
+          emitChange(first ? buildRoutePlan(first) : null);
+        } catch (e) {
+          if (!cancelled) {
+            setError(e?.message || "Could not load routes");
+            setRoutes([]);
+          }
+        } finally {
+          if (!cancelled) setLoadingRoutes(false);
         }
-      } finally {
-        if (!cancelled) setLoadingRoutes(false);
-      }
-    })();
+      })();
+    }, ROUTE_FETCH_DEBOUNCE_MS);
 
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
-  }, [
-    endpointsReady,
-    destinationsReady,
-    fromCoords?.lat,
-    fromCoords?.lng,
-    toCoords?.lat,
-    toCoords?.lng,
-    fromLabel,
-    toLabel,
-    emitChange,
-  ]);
+  }, [endpointsReady, destinationsReady, endpointSignature, emitChange]);
 
   useEffect(() => {
     if (!routePolyline) {
@@ -213,22 +419,45 @@ export default function RouteStopoversPicker({
 
   const decodedRoutes = useMemo(
     () =>
-      routes.map((route) => ({
-        ...route,
-        path: route.polyline ? decodePolyline(route.polyline) : [],
-      })),
+      routes.map((route) => {
+        const path = validMapCoords(
+          route.polyline ? decodePolyline(route.polyline) : []
+        );
+        return {
+          ...route,
+          path,
+          mapPath: thinPolylineCoords(path, MAP_PATH_MAX_POINTS),
+        };
+      }),
     [routes]
   );
 
+  const selectedRoute = decodedRoutes[selectedIndex] || null;
+
   const basePath = useMemo(() => {
-    const row = decodedRoutes.find((r) => r.index === selectedIndex);
-    return row?.path?.length > 1 ? row.path : [];
-  }, [decodedRoutes, selectedIndex]);
+    return selectedRoute?.path?.length > 1 ? selectedRoute.path : [];
+  }, [selectedRoute]);
 
   const activePath = useMemo(() => {
-    const adjusted = routePolyline ? decodePolyline(routePolyline) : [];
-    return adjusted.length > 1 ? adjusted : basePath;
+    const adjusted = validMapCoords(
+      routePolyline ? decodePolyline(routePolyline) : []
+    );
+    const base = adjusted.length > 1 ? adjusted : basePath;
+    return thinPolylineCoords(base, MAP_PATH_MAX_POINTS);
   }, [routePolyline, basePath]);
+
+  const inactiveRoutes = useMemo(
+    () =>
+      decodedRoutes
+        .map((route, arrayIndex) => ({
+          arrayIndex,
+          mapPath: route.mapPath,
+        }))
+        .filter(
+          (route) => route.arrayIndex !== selectedIndex && route.mapPath.length > 1
+        ),
+    [decodedRoutes, selectedIndex]
+  );
 
   const endpointFocusCoords = useMemo(() => {
     const pts = [];
@@ -265,7 +494,7 @@ export default function RouteStopoversPicker({
   useEffect(() => {
     initialRegionRef.current = null;
     setMapReady(false);
-  }, [fromCoords?.lat, fromCoords?.lng, toCoords?.lat, toCoords?.lng]);
+  }, [endpointSignature]);
 
   const selectedStopovers = useMemo(
     () =>
@@ -305,19 +534,14 @@ export default function RouteStopoversPicker({
       .filter((c) => nextIds.includes(c.id))
       .map((c) => ({ label: c.label, lat: c.lat, lng: c.lng }));
 
-    const row = routes.find((r) => r.index === selectedIndex);
+    const row = routes[selectedIndex];
     if (!stops.length) {
       setRoutePolyline(row?.polyline || "");
-      emitChange({
-        selectedRouteIndex: selectedIndex,
-        routePolyline: row?.polyline || "",
-        stopovers: [],
-        distanceMeters: row?.distanceMeters,
-        durationSeconds: row?.durationSeconds,
-      });
+      emitChange(buildRoutePlan(row, { stopovers: [] }));
       return;
     }
 
+    setUpdatingRoute(true);
     try {
       const encoded = await getDirectionsPolyline(fromCoords, toCoords, stops, {
         from: fromLabel,
@@ -325,40 +549,63 @@ export default function RouteStopoversPicker({
       });
       if (encoded) {
         setRoutePolyline(encoded);
-        emitChange({
-          selectedRouteIndex: selectedIndex,
-          routePolyline: encoded,
-          stopovers: stops,
-          distanceMeters: row?.distanceMeters,
-          durationSeconds: row?.durationSeconds,
-        });
+        emitChange(
+          buildRoutePlan(row, {
+            selectedRouteIndex: selectedIndex,
+            routePolyline: encoded,
+            stopovers: stops,
+          })
+        );
       }
     } catch {
-      emitChange({
-        selectedRouteIndex: selectedIndex,
-        routePolyline: row?.polyline || "",
-        stopovers: stops,
-        distanceMeters: row?.distanceMeters,
-        durationSeconds: row?.durationSeconds,
-      });
+      emitChange(
+        buildRoutePlan(row, {
+          selectedRouteIndex: selectedIndex,
+          stopovers: stops,
+        })
+      );
+    } finally {
+      setUpdatingRoute(false);
     }
   };
 
-  const selectRoute = (index) => {
-    const row = routes.find((r) => r.index === index);
-    if (!row) return;
-    setSelectedIndex(index);
-    setRoutePolyline(row.polyline || "");
-    setSelectedStopIds([]);
-    setStopoverSearch("");
-    emitChange({
-      selectedRouteIndex: index,
-      routePolyline: row.polyline,
-      stopovers: [],
-      distanceMeters: row.distanceMeters,
-      durationSeconds: row.durationSeconds,
-    });
-  };
+  const selectRoute = useCallback(
+    (arrayIndex) => {
+      const nextIndex = Number(arrayIndex);
+      if (!Number.isInteger(nextIndex) || nextIndex < 0 || nextIndex >= routes.length) {
+        return;
+      }
+      const row = routes[nextIndex];
+      if (!row) return;
+      if (nextIndex === selectedIndex && !selectedStopIds.length) return;
+
+      setSelectedIndex(nextIndex);
+      setRoutePolyline(row.polyline || "");
+      setSelectedStopIds([]);
+      setStopoverSearch("");
+      emitChange(buildRoutePlan(row, { selectedRouteIndex: nextIndex, stopovers: [] }));
+    },
+    [routes, selectedIndex, selectedStopIds.length, emitChange]
+  );
+
+  const handleMapReady = useCallback(() => {
+    setMapReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mapReady || !mapRef.current || mapFitCoords.length < 2) return undefined;
+    const timer = setTimeout(() => {
+      try {
+        mapRef.current?.fitToCoordinates(mapFitCoords, {
+          edgePadding: { top: 48, right: 48, bottom: 48, left: 48 },
+          animated: true,
+        });
+      } catch {
+        /* ignore */
+      }
+    }, MAP_FIT_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [mapReady, selectedIndex, mapFitCoords]);
 
   const toggleStopover = async (candidate) => {
     const id = candidate.id;
@@ -410,6 +657,16 @@ export default function RouteStopoversPicker({
     return list;
   }, [fromCoords, toCoords, candidates, selectedStopIds]);
 
+  const mapBusy = !maps?.MapView || loadingRoutes || updatingRoute || !mapReady;
+
+  const mapLoaderMessage = useMemo(() => {
+    if (!maps?.MapView) return "Loading map…";
+    if (loadingRoutes) return "Finding route options…";
+    if (updatingRoute) return "Updating route…";
+    if (!mapReady) return "Loading map…";
+    return "";
+  }, [maps?.MapView, loadingRoutes, updatingRoute, mapReady]);
+
   if (!endpointsReady || !destinationsReady) {
     return (
       <Text style={styles.hint}>
@@ -418,8 +675,6 @@ export default function RouteStopoversPicker({
     );
   }
 
-  const { MapView, Marker, Polyline, PROVIDER_GOOGLE } = maps || {};
-
   const mapTitle =
     fullscreenTitle ||
     (fromLabel && toLabel ? `${fromLabel} → ${toLabel}` : "Route map");
@@ -427,7 +682,7 @@ export default function RouteStopoversPicker({
   const renderMap = () => {
     const boxStyle = [styles.mapBox, isFullscreen && styles.mapBoxFullscreen];
 
-    if (!maps?.MapView || loadingRoutes) {
+    if (!maps?.MapView) {
       return (
         <View style={boxStyle} collapsable={false}>
           <View style={styles.mapLoader}>
@@ -435,68 +690,43 @@ export default function RouteStopoversPicker({
               color={theme?.sections?.route?.color || colors.primary}
               size="large"
             />
-            <Text style={styles.loadingText}>
-              {!maps?.MapView ? "Loading map…" : "Loading routes…"}
-            </Text>
+            <Text style={styles.loadingText}>Loading map…</Text>
           </View>
         </View>
       );
     }
 
+    const { MapView, Marker, Polyline, PROVIDER_GOOGLE } = maps;
+
     return (
       <View style={boxStyle} collapsable={false}>
-        <MapView
-          key={`${fromCoords?.lat ?? ""}-${fromCoords?.lng ?? ""}-${toCoords?.lat ?? ""}-${toCoords?.lng ?? ""}`}
-          ref={mapRef}
-          style={styles.map}
-          provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
-          initialRegion={mapRegion}
-          onMapReady={() => {
-            setMapReady(true);
-          }}
-          scrollEnabled
-          zoomEnabled
-          zoomTapEnabled
-          scrollDuringRotateOrZoom
-          pitchEnabled={false}
-          rotateEnabled={false}
-          moveOnMarkerPress={false}
-        >
-          {decodedRoutes.map((route) => {
-            const selected = route.index === selectedIndex;
-            const color = selected ? SELECTED_ROUTE_COLOR : INACTIVE_ROUTE_COLOR;
-            const pathCoords = (
-              selected && activePath.length > 1 ? activePath : route.path
-            ).filter(
-              (c) =>
-                c &&
-                Number.isFinite(Number(c.latitude)) &&
-                Number.isFinite(Number(c.longitude))
-            );
-            return pathCoords.length > 1 ? (
-              <Polyline
-                key={`route-${route.index}`}
-                coordinates={pathCoords}
-                strokeColor={color}
-                strokeWidth={selected ? 6 : 4}
-                geodesic
-                lineCap="round"
-                lineJoin="round"
+        <RoutePickerMapLayers
+          MapView={MapView}
+          Marker={Marker}
+          Polyline={Polyline}
+          PROVIDER_GOOGLE={PROVIDER_GOOGLE}
+          endpointSignature={endpointSignature}
+          mapRegion={mapRegion}
+          mapRef={mapRef}
+          inactiveRoutes={inactiveRoutes}
+          activePath={activePath}
+          selectedIndex={selectedIndex}
+          endpointMarkers={endpointMarkers}
+          onMapReady={handleMapReady}
+          onSelectRoute={selectRoute}
+        />
+        {mapBusy ? (
+          <View style={styles.mapOverlay} pointerEvents="auto">
+            <View style={styles.mapOverlayCard}>
+              <ActivityIndicator
+                color={theme?.sections?.route?.color || colors.primary}
+                size="large"
               />
-            ) : null;
-          })}
-          {endpointMarkers.map((pin) => (
-            <Marker
-              key={`pin-${pin.id}`}
-              coordinate={{ latitude: pin.latitude, longitude: pin.longitude }}
-              anchor={{ x: 0.5, y: 1 }}
-              tracksViewChanges={false}
-            >
-              <RouteMapPin role={pin.role} small={pin.role === "stopover"} />
-            </Marker>
-          ))}
-        </MapView>
-        {!isFullscreen && allowFullscreen ? (
+              <Text style={styles.mapOverlayText}>{mapLoaderMessage}</Text>
+            </View>
+          </View>
+        ) : null}
+        {!isFullscreen && allowFullscreen && !mapBusy ? (
           <Pressable
             style={styles.fullscreenBtn}
             onPress={() => setFullscreen(true)}
@@ -508,6 +738,79 @@ export default function RouteStopoversPicker({
         ) : null}
       </View>
     );
+  };
+
+  const renderRouteTabs = () => {
+    if (loadingRoutes) {
+      return (
+        <View style={styles.routeTabsLoading}>
+          <ActivityIndicator
+            size="small"
+            color={theme?.sections?.route?.color || colors.primary}
+          />
+          <Text style={styles.routeTabsLoadingText}>Loading route options…</Text>
+        </View>
+      );
+    }
+
+    if (!routes.length) return null;
+
+    return (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.routeTabs}
+        contentContainerStyle={styles.routeTabsContent}
+      >
+        {routes.map((route, arrayIndex) => {
+          const active = arrayIndex === selectedIndex;
+          return (
+            <Pressable
+              key={`tab-${arrayIndex}`}
+              style={[
+                styles.routeCard,
+                active ? styles.routeCardActive : styles.routeCardInactive,
+                active && { borderColor: SELECTED_ROUTE_COLOR },
+              ]}
+              onPress={() => selectRoute(arrayIndex)}
+            >
+              <Text
+                style={[
+                  styles.routeCardTitle,
+                  active ? styles.routeCardTitleActive : styles.routeCardTitleInactive,
+                  active && { color: SELECTED_ROUTE_COLOR },
+                ]}
+              >
+                {route.label || `Route ${arrayIndex + 1}`}
+              </Text>
+              <Text style={styles.routeCardMeta}>
+                {formatDistance(route.distanceMeters)} · {formatDuration(route.durationSeconds)}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    );
+  };
+
+  const renderRouteCount = () => {
+    if (loadingRoutes) return null;
+    if (routes.length > 1) {
+      return (
+        <Text style={styles.routeCount}>
+          {routes.length} routes available — tap a line on the map or a card below; solid{" "}
+          <Text style={styles.routeCountBlue}>blue line</Text> is your selection
+        </Text>
+      );
+    }
+    if (routes.length === 1) {
+      return (
+        <Text style={styles.routeCount}>
+          1 route found — select it below to continue
+        </Text>
+      );
+    }
+    return null;
   };
 
   return (
@@ -531,42 +834,35 @@ export default function RouteStopoversPicker({
         <>
           <Text style={styles.title}>Choose your route</Text>
           <Text style={styles.subtitle}>
-            Tap a route, then pick cities, towns, or villages along it.
+            Pick a route option card below the map. Add stopovers after you choose.
           </Text>
         </>
       )}
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-      {renderMap()}
-
-      {routes.length > 0 ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.routeTabs}>
-          {routes.map((route) => {
-            const active = route.index === selectedIndex;
-            return (
-              <Pressable
-                key={`tab-${route.index}`}
-                style={[styles.routeCard, active && styles.routeCardActive]}
-                onPress={() => selectRoute(route.index)}
-              >
-                <Text style={[styles.routeCardTitle, active && styles.routeCardTitleActive]}>
-                  {route.label || `Route ${route.index + 1}`}
-                </Text>
-                <Text style={styles.routeCardMeta}>
-                  {formatDistance(route.distanceMeters)} · {formatDuration(route.durationSeconds)}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      ) : null}
-
-      {isFullscreen && routes.length > 0 ? (
-        <Text style={styles.fullscreenHint}>
-          Tap a route card above · exit fullscreen to add stopovers
-        </Text>
-      ) : null}
+      {isFullscreen ? (
+        <>
+          <View style={styles.routePickerSection}>
+            {renderRouteCount()}
+            {renderRouteTabs()}
+          </View>
+          <View style={styles.mapBody}>{renderMap()}</View>
+          {routes.length > 0 ? (
+            <Text style={styles.fullscreenHint}>
+              Tap a route card below to select · exit fullscreen to add stopovers
+            </Text>
+          ) : null}
+        </>
+      ) : (
+        <>
+          {renderRouteCount()}
+          {renderMap()}
+          <View style={styles.routePickerSection}>
+            {renderRouteTabs()}
+          </View>
+        </>
+      )}
 
       {!isFullscreen && rideDate && routePolyline ? (
         <View style={styles.enrouteBox}>
@@ -615,7 +911,7 @@ export default function RouteStopoversPicker({
       {!isFullscreen && loadingStops ? (
         <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 8 }} />
       ) : !isFullscreen && candidates.length === 0 ? (
-        <Text style={styles.hint}>No cities, towns, or villages found on this route.</Text>
+        <Text style={styles.hint}>No cities or towns found on this route.</Text>
       ) : !isFullscreen && filteredCandidates.length === 0 ? (
         <Text style={styles.hint}>No stopovers match your search.</Text>
       ) : !isFullscreen ? (
@@ -644,6 +940,14 @@ const makeStyles = (theme, colors) =>
     wrapFullscreen: {
       flex: 1,
       marginTop: 0,
+      minHeight: 0,
+    },
+    routePickerSection: {
+      flexShrink: 0,
+    },
+    mapBody: {
+      flex: 1,
+      minHeight: 0,
     },
     fullscreenHeader: {
       flexDirection: "row",
@@ -695,7 +999,7 @@ const makeStyles = (theme, colors) =>
     loadingText: { fontSize: DS.font.small, color: theme?.textMuted || colors.textMuted },
     errorText: { color: colors.error || "#EF4444", fontSize: DS.font.small, marginBottom: 8 },
     mapBox: {
-      height: 220,
+      height: 280,
       borderRadius: DS.radius.lg,
       overflow: "hidden",
       borderWidth: 1,
@@ -705,7 +1009,7 @@ const makeStyles = (theme, colors) =>
     mapBoxFullscreen: {
       flex: 1,
       height: undefined,
-      minHeight: 280,
+      minHeight: 0,
       borderRadius: 0,
       marginBottom: DS.spacing.sm,
     },
@@ -716,6 +1020,35 @@ const makeStyles = (theme, colors) =>
       justifyContent: "center",
       gap: 10,
       backgroundColor: theme?.surfaceAlt || colors.surfaceAlt,
+    },
+    mapOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: "rgba(15, 23, 42, 0.28)",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 20,
+    },
+    mapOverlayCard: {
+      minWidth: 168,
+      paddingHorizontal: 20,
+      paddingVertical: 16,
+      borderRadius: DS.radius.lg,
+      backgroundColor: theme?.surface || colors.surface,
+      alignItems: "center",
+      gap: 10,
+      borderWidth: 1,
+      borderColor: theme?.cardBorder || colors.border,
+      elevation: 6,
+      shadowColor: "#000",
+      shadowOpacity: 0.12,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 2 },
+    },
+    mapOverlayText: {
+      fontSize: DS.font.small,
+      fontWeight: "600",
+      color: theme?.text || colors.text,
+      textAlign: "center",
     },
     fullscreenBtn: {
       position: "absolute",
@@ -732,7 +1065,29 @@ const makeStyles = (theme, colors) =>
       borderColor: theme?.cardBorder || colors.border,
       elevation: 4,
     },
-    routeTabs: { marginBottom: DS.spacing.md },
+    routeTabs: { marginBottom: DS.spacing.sm, marginTop: DS.spacing.sm },
+    routeTabsContent: { paddingVertical: 2 },
+    routeTabsLoading: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingVertical: DS.spacing.sm,
+      marginTop: DS.spacing.sm,
+    },
+    routeTabsLoadingText: {
+      fontSize: DS.font.small,
+      color: theme?.textMuted || colors.textMuted,
+    },
+    routeCount: {
+      fontSize: DS.font.small,
+      color: theme?.textMuted || colors.textMuted,
+      marginBottom: DS.spacing.sm,
+      fontWeight: "600",
+    },
+    routeCountBlue: {
+      color: SELECTED_ROUTE_COLOR,
+      fontWeight: "800",
+    },
     fullscreenHint: {
       fontSize: DS.font.small,
       color: theme?.textMuted || colors.textMuted,
@@ -754,6 +1109,10 @@ const makeStyles = (theme, colors) =>
       borderColor: theme?.sections?.route?.color || colors.primary,
       backgroundColor: theme?.surface || colors.surface,
     },
+    routeCardInactive: {
+      borderColor: theme?.cardBorder || colors.border,
+      backgroundColor: theme?.surfaceAlt || colors.surfaceAlt,
+    },
     routeCardTitle: {
       fontSize: DS.font.small,
       fontWeight: "700",
@@ -761,6 +1120,9 @@ const makeStyles = (theme, colors) =>
     },
     routeCardTitleActive: {
       color: theme?.sections?.route?.color || colors.primary,
+    },
+    routeCardTitleInactive: {
+      color: theme?.text || colors.text,
     },
     routeCardMeta: {
       fontSize: 11,

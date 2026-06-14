@@ -46,7 +46,9 @@ const trackingFingerprint = (tracking) => {
   const histTail = lastHist
     ? `${coordKey(lastHist.lat ?? lastHist.latitude)},${coordKey(lastHist.lng ?? lastHist.longitude)}`
     : "";
-  return `${parts.sort().join("|")}|h:${hist}|t:${histTail}`;
+  const routeKey = String(tracking?.routePolyline || "").length;
+  const stopKey = (tracking?.stopovers || []).length;
+  return `${parts.sort().join("|")}|h:${hist}|t:${histTail}|rp:${routeKey}|st:${stopKey}|f:${tracking?.from || ""}|t:${tracking?.to || ""}`;
 };
 
 /**

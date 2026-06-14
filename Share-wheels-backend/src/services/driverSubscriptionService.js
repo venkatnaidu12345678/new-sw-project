@@ -300,7 +300,7 @@ const recordEnroutePick = async (userId, rideId) => {
   });
 };
 
-/** Driver IDs with a non-expired active subscription (for related-ride discovery). */
+/** Driver IDs with a non-expired active subscription (paid or free). */
 const getActiveSubscribedDriverIds = async (driverIds) => {
   const unique = [
     ...new Set(
@@ -323,9 +323,51 @@ const getActiveSubscribedDriverIds = async (driverIds) => {
   return new Set(activeSubs.map((row) => String(row.userId)));
 };
 
+/**
+ * Drivers eligible for related-ride discovery: active paid/free subscription,
+ * or auto-provisioned active free plan when the platform free plan is on.
+ */
+const getEligibleRelatedRideDriverIds = async (driverIds) => {
+  const eligible = await getActiveSubscribedDriverIds(driverIds);
+  const unique = [
+    ...new Set(
+      (driverIds || [])
+        .map((id) => id?._id?.toString?.() || id?.toString?.() || String(id || ""))
+        .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    ),
+  ];
+  const missing = unique.filter((id) => !eligible.has(id));
+  if (!missing.length) return eligible;
+
+  const freePlan = await getDefaultPlan();
+  if (!freePlan?.isActive) return eligible;
+
+  await Promise.all(
+    missing.map(async (driverId) => {
+      try {
+        const subscription = await ensureDefaultSubscription(driverId);
+        const now = new Date();
+        if (
+          subscription &&
+          subscription.status === "active" &&
+          subscription.expiresAt > now
+        ) {
+          eligible.add(String(driverId));
+        }
+      } catch {
+        /* ignore per-driver provisioning errors */
+      }
+    })
+  );
+
+  return eligible;
+};
+
 const driverHasActiveSubscription = async (driverId) => {
-  const subscribed = await getActiveSubscribedDriverIds([driverId]);
   const key = driverId?._id?.toString?.() || driverId?.toString?.() || String(driverId || "");
+  if (!mongoose.Types.ObjectId.isValid(key)) return false;
+
+  const subscribed = await getEligibleRelatedRideDriverIds([key]);
   return subscribed.has(key);
 };
 
@@ -337,5 +379,6 @@ module.exports = {
   ensureDefaultSubscription,
   formatSubscription,
   getActiveSubscribedDriverIds,
+  getEligibleRelatedRideDriverIds,
   driverHasActiveSubscription,
 };

@@ -429,6 +429,8 @@ const DashboardPage = () => {
               loading={loadingAllRides}
               navigation={navigation}
               currentUserId={myUserId}
+              searchFrom={fromValue}
+              searchTo={toValue}
             />
           </View>
         ) : loadingUpcoming && rides.length === 0 ? (

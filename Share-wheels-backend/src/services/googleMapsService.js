@@ -2,7 +2,14 @@ const {
   decodePolyline,
   parseDurationSeconds,
   samplePolylineInterior,
+  haversineKm,
+  bearingDeg,
+  destinationPoint,
 } = require("../utils/polyline");
+
+const MIN_ROUTE_OPTIONS = 2;
+const TARGET_ROUTE_OPTIONS = 3;
+const MAX_ROUTE_OPTIONS = 5;
 
 const GOOGLE_KEY = (process.env.GOOGLE_MAPS_API_KEY || "").trim();
 
@@ -173,6 +180,58 @@ const normalizeCountry = (country) => {
   return /^[a-z]{2}$/.test(c) ? c : "in";
 };
 
+/** Cities and towns only — excludes village/sub-district administrative levels. */
+const CITY_TOWN_COMPONENT_TYPES = ["locality", "postal_town"];
+const CITY_TOWN_RESULT_TYPES = CITY_TOWN_COMPONENT_TYPES.join("|");
+
+const SKIP_SETTLEMENT_NAMES = new Set([
+  "india",
+  "indian",
+  "unincorporated",
+]);
+
+const isUsableSettlementName = (name) => {
+  const text = String(name || "").trim();
+  if (text.length < 2) return false;
+  const lower = text.toLowerCase();
+  if (SKIP_SETTLEMENT_NAMES.has(lower)) return false;
+  if (/^\d+$/.test(text)) return false;
+  if (/^(national|state) highway/i.test(text)) return false;
+  return true;
+};
+
+const extractCityOrTownName = (row) => {
+  if (!row) return null;
+
+  const components = row.address_components || [];
+  for (const type of CITY_TOWN_COMPONENT_TYPES) {
+    const match = components.find((c) => (c.types || []).includes(type));
+    if (match?.long_name && isUsableSettlementName(match.long_name)) {
+      return match.long_name.trim();
+    }
+  }
+
+  return null;
+};
+
+const isCityOrTownAutocompletePrediction = (prediction) => {
+  const types = Array.isArray(prediction?.types) ? prediction.types : [];
+  if (types.some((t) => CITY_TOWN_COMPONENT_TYPES.includes(t))) return true;
+  if (types.includes("(cities)")) return true;
+  if (types.some((t) => t === "administrative_area_level_4" || t === "administrative_area_level_5")) {
+    return false;
+  }
+  return false;
+};
+
+const filterCityTownAutocompletePredictions = (predictions) =>
+  (predictions || []).filter(isCityOrTownAutocompletePrediction);
+
+const usesCityTownAutocompleteFilter = (mode) => {
+  const value = String(mode || "cities").trim().toLowerCase();
+  return value === "cities" || value === "city_town" || value === "all";
+};
+
 const autocompletePlaces = async (input, sessionToken, opts = {}) => {
   const query = String(input || "").trim();
   if (query.length < 2) {
@@ -183,7 +242,8 @@ const autocompletePlaces = async (input, sessionToken, opts = {}) => {
   const mode = String(opts.mode || "cities").trim().toLowerCase();
   const typeByMode = {
     cities: "(cities)",
-    all: null,
+    city_town: "(cities)",
+    all: "(cities)",
     geocode: "geocode",
     establishments: "establishment",
   };
@@ -201,7 +261,12 @@ const autocompletePlaces = async (input, sessionToken, opts = {}) => {
   const result = await googleLegacyFetch("place/autocomplete/json", params);
   if (result.status !== 200) return result;
 
-  const predictions = (result.body.predictions || []).map((p) => ({
+  let rawPredictions = result.body.predictions || [];
+  if (usesCityTownAutocompleteFilter(mode)) {
+    rawPredictions = filterCityTownAutocompletePredictions(rawPredictions);
+  }
+
+  const predictions = rawPredictions.map((p) => ({
     placeId: p.place_id,
     label: p.structured_formatting?.main_text || p.description,
     description: p.structured_formatting?.secondary_text || "",
@@ -219,7 +284,7 @@ const getPlaceDetails = async (placeId) => {
 
   const result = await googleLegacyFetch("place/details/json", {
     place_id: id,
-    fields: "geometry,formatted_address,name",
+    fields: "geometry,formatted_address,name,address_components",
   });
   if (result.status !== 200) return result;
 
@@ -231,6 +296,14 @@ const getPlaceDetails = async (placeId) => {
     return { status: 404, body: { success: false, message: "Place coordinates not found" } };
   }
 
+  const cityTownLabel = extractCityOrTownName(r);
+  if (!cityTownLabel) {
+    return {
+      status: 400,
+      body: { success: false, message: "Please select a city or town only." },
+    };
+  }
+
   return {
     status: 200,
     body: {
@@ -238,7 +311,7 @@ const getPlaceDetails = async (placeId) => {
       place: {
         lat,
         lng,
-        label: r.name || r.formatted_address || "",
+        label: cityTownLabel,
         formattedAddress: r.formatted_address || "",
       },
     },
@@ -270,19 +343,46 @@ const mapRouteRow = (route, index, labelOverride = "") => {
   };
 };
 
-const polylineKey = (polyline) => String(polyline || "").trim().slice(0, 64);
+/** True when two encoded polylines follow essentially the same corridor. */
+const routesAreSimilar = (polyA, polyB) => {
+  const a = String(polyA || "").trim();
+  const b = String(polyB || "").trim();
+  if (!a || !b) return false;
+  if (a === b) return true;
+
+  const ptsA = decodePolyline(a);
+  const ptsB = decodePolyline(b);
+  if (ptsA.length < 2 || ptsB.length < 2) {
+    return a.slice(0, 96) === b.slice(0, 96);
+  }
+
+  const samples = samplePolylineInterior(ptsA, 10);
+  if (!samples.length) return false;
+
+  let close = 0;
+  samples.forEach((sample) => {
+    let minKm = Infinity;
+    ptsB.forEach((p) => {
+      const d = haversineKm(sample, p);
+      if (d < minKm) minKm = d;
+    });
+    if (minKm < 0.8) close += 1;
+  });
+
+  return close >= Math.ceil(samples.length * 0.7);
+};
 
 const mergeUniqueRouteRows = (rows) => {
-  const seen = new Set();
   const merged = [];
-  rows.forEach((row) => {
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
     const polyline = String(row?.polyline || "").trim();
     if (!polyline) return;
-    const key = polylineKey(polyline);
-    if (seen.has(key)) return;
-    seen.add(key);
+    if (merged.some((existing) => routesAreSimilar(existing.polyline, polyline))) {
+      return;
+    }
     merged.push({ ...row, index: merged.length });
   });
+
   return merged.map((row, index) => ({
     ...row,
     index,
@@ -400,16 +500,30 @@ const supplementAlternativeRoutes = async (coords, routes) => {
   const variants = [
     { label: "Avoid tolls", modifiers: { avoidTolls: true } },
     { label: "Avoid highways", modifiers: { avoidHighways: true } },
-    { label: "Scenic route", modifiers: { avoidHighways: true, avoidTolls: true } },
+    {
+      label: "Scenic route",
+      modifiers: { avoidHighways: true, avoidTolls: true },
+    },
+    {
+      label: "Fastest",
+      modifiers: { avoidTolls: false, avoidHighways: false },
+      routingPreference: "TRAFFIC_AWARE",
+    },
+    {
+      label: "Shortest",
+      modifiers: { avoidTolls: false, avoidHighways: false },
+      routingPreference: "TRAFFIC_UNAWARE",
+    },
   ];
 
   let merged = [...routes];
   for (const variant of variants) {
-    if (merged.length >= 3) break;
+    if (merged.length >= TARGET_ROUTE_OPTIONS) break;
     const result = await computeRouteWithOptions({
       ...coords,
       computeAlternativeRoutes: false,
       routeModifiers: variant.modifiers,
+      routingPreference: variant.routingPreference || "TRAFFIC_AWARE",
     });
     if (result.status !== 200) continue;
     const row = result.body.routes?.[0];
@@ -424,77 +538,109 @@ const supplementAlternativeRoutes = async (coords, routes) => {
   return merged;
 };
 
-/** Settlement types in priority order: city → town → village → sub-district. */
-const SETTLEMENT_COMPONENT_TYPES = [
-  "locality",
-  "postal_town",
-  "administrative_area_level_4",
-  "administrative_area_level_3",
-  "administrative_area_level_2",
-];
+/** Force visually distinct alternates via offset waypoints along the base corridor. */
+const supplementViaWaypointRoutes = async (coords, routes) => {
+  const base = routes.find((r) => r?.polyline) || routes[0];
+  if (!base?.polyline) return routes;
 
-const SETTLEMENT_RESULT_TYPES = SETTLEMENT_COMPONENT_TYPES.join("|");
+  const pts = decodePolyline(base.polyline);
+  if (pts.length < 4) return routes;
 
-const SKIP_SETTLEMENT_NAMES = new Set([
-  "india",
-  "indian",
-  "unincorporated",
-]);
-
-const isUsableSettlementName = (name) => {
-  const text = String(name || "").trim();
-  if (text.length < 2) return false;
-  const lower = text.toLowerCase();
-  if (SKIP_SETTLEMENT_NAMES.has(lower)) return false;
-  if (/^\d+$/.test(text)) return false;
-  if (/^(national|state) highway/i.test(text)) return false;
-  return true;
-};
-
-const extractSettlementName = (row) => {
-  if (!row) return null;
-
-  const components = row.address_components || [];
-  for (const type of SETTLEMENT_COMPONENT_TYPES) {
-    const match = components.find((c) => (c.types || []).includes(type));
-    if (match?.long_name && isUsableSettlementName(match.long_name)) {
-      return match.long_name.trim();
-    }
+  let totalKm = 0;
+  for (let i = 1; i < pts.length; i += 1) {
+    totalKm += haversineKm(pts[i - 1], pts[i]);
   }
 
-  const formatted = String(row.formatted_address || "").trim();
-  if (!formatted) return null;
+  const offsetKm = Math.min(40, Math.max(10, totalKm * 0.07));
+  const corridorBearing = bearingDeg(pts[0], pts[pts.length - 1]);
 
-  const parts = formatted.split(",").map((p) => p.trim()).filter(Boolean);
-  for (const part of parts) {
-    if (isUsableSettlementName(part)) return part;
+  const specs = [
+    { label: "Northern corridor", ratio: 0.42, side: 90 },
+    { label: "Southern corridor", ratio: 0.42, side: -90 },
+    { label: "Eastern detour", ratio: 0.55, side: 45 },
+    { label: "Western detour", ratio: 0.55, side: -45 },
+  ];
+
+  let merged = [...routes];
+  for (const spec of specs) {
+    if (merged.length >= TARGET_ROUTE_OPTIONS) break;
+
+    const idx = Math.max(
+      1,
+      Math.min(pts.length - 2, Math.floor(pts.length * spec.ratio))
+    );
+    const anchor = pts[idx];
+    const wp = destinationPoint(
+      anchor.lat,
+      anchor.lng,
+      (corridorBearing + spec.side + 360) % 360,
+      offsetKm
+    );
+
+    const result = await computeRouteWithOptions({
+      ...coords,
+      waypoints: [wp],
+      computeAlternativeRoutes: false,
+      routingPreference: "TRAFFIC_UNAWARE",
+    });
+    if (result.status !== 200) continue;
+    const row = result.body.routes?.[0];
+    if (!row?.polyline) continue;
+
+    merged.push({
+      ...row,
+      label: spec.label,
+      isRecommended: false,
+    });
+    merged = mergeUniqueRouteRows(merged);
   }
 
-  return null;
+  return merged;
 };
 
-const reverseGeocodeLatLng = async (lat, lng) => {
+const collectPrimaryAlternativeRoutes = async (coords) => {
+  const batches = await Promise.all([
+    computeRouteWithOptions({
+      ...coords,
+      computeAlternativeRoutes: true,
+      routingPreference: "TRAFFIC_AWARE",
+    }),
+    computeRouteWithOptions({
+      ...coords,
+      computeAlternativeRoutes: true,
+      routingPreference: "TRAFFIC_UNAWARE",
+    }),
+  ]);
+
+  const rows = [];
+  batches.forEach((batch) => {
+    if (batch.status !== 200) return;
+    rows.push(...(batch.body.routes || []));
+  });
+
+  return mergeUniqueRouteRows(rows);
+};
+
+const reverseGeocodeCityOrTown = async (lat, lng) => {
   const pLat = Number(lat);
   const pLng = Number(lng);
   if (!Number.isFinite(pLat) || !Number.isFinite(pLng)) return null;
 
   const latlng = `${pLat},${pLng}`;
 
-  let result = await googleLegacyFetch("geocode/json", {
+  const result = await googleLegacyFetch("geocode/json", {
     latlng,
-    result_type: SETTLEMENT_RESULT_TYPES,
+    result_type: CITY_TOWN_RESULT_TYPES,
   });
 
-  let row = result.status === 200 ? result.body.results?.[0] : null;
-  let label = extractSettlementName(row);
+  if (result.status !== 200 || !Array.isArray(result.body.results)) return null;
 
-  if (!label) {
-    result = await googleLegacyFetch("geocode/json", { latlng });
-    row = result.status === 200 ? result.body.results?.[0] : null;
-    label = extractSettlementName(row);
+  for (const row of result.body.results) {
+    const label = extractCityOrTownName(row);
+    if (label) return label;
   }
 
-  return label;
+  return null;
 };
 
 const getStopoverCandidates = async ({ polyline, max = 20 } = {}) => {
@@ -510,7 +656,7 @@ const getStopoverCandidates = async ({ polyline, max = 20 } = {}) => {
   const candidates = [];
 
   for (const point of samples) {
-    const label = await reverseGeocodeLatLng(point.lat, point.lng);
+    const label = await reverseGeocodeCityOrTown(point.lat, point.lng);
     const key = String(label || "").trim().toLowerCase();
     if (!key || seen.has(key)) continue;
     seen.add(key);
@@ -558,13 +704,27 @@ const getAlternativeRoutes = async (params = {}) => {
     waypoints: params.waypoints,
   };
 
-  const routeResult = await computeAlternativeRoutes(coords);
-  if (routeResult.status !== 200) return routeResult;
+  let routes = await collectPrimaryAlternativeRoutes(coords);
 
-  let routes = mergeUniqueRouteRows(routeResult.body.routes || []);
-  if (routes.length < 2) {
+  if (!routes.length) {
+    const fallback = await computeRouteWithOptions({
+      ...coords,
+      computeAlternativeRoutes: false,
+      routingPreference: "TRAFFIC_AWARE",
+    });
+    if (fallback.status !== 200) return fallback;
+    routes = mergeUniqueRouteRows(fallback.body.routes || []);
+  }
+
+  if (routes.length < TARGET_ROUTE_OPTIONS) {
     routes = await supplementAlternativeRoutes(coords, routes);
   }
+
+  if (routes.length < MIN_ROUTE_OPTIONS) {
+    routes = await supplementViaWaypointRoutes(coords, routes);
+  }
+
+  routes = routes.slice(0, MAX_ROUTE_OPTIONS);
 
   return {
     status: 200,

@@ -154,10 +154,9 @@ const resolveCourierBookingSegment = async (
       .select("from to creator")
       .lean();
     if (courier && String(courier.creator) === String(userId)) {
-      return {
-        from: normalizeRouteLabel(courier.from) || rideFrom,
-        to: normalizeRouteLabel(courier.to) || rideTo,
-      };
+      const from = normalizeRouteLabel(courier.from);
+      const to = normalizeRouteLabel(courier.to);
+      if (from && to) return { from, to };
     }
   }
 
@@ -172,10 +171,9 @@ const resolveCourierBookingSegment = async (
     .lean();
 
   if (assigned) {
-    return {
-      from: normalizeRouteLabel(assigned.from) || rideFrom,
-      to: normalizeRouteLabel(assigned.to) || rideTo,
-    };
+    const from = normalizeRouteLabel(assigned.from);
+    const to = normalizeRouteLabel(assigned.to);
+    if (from && to) return { from, to };
   }
 
   const from = normalizeRouteLabel(bodyFrom);
@@ -332,6 +330,25 @@ const requestCourier = async (user, body) => {
   const linkedCourierIds = await linkStandaloneCouriersForRideRequest(user._id, ride, {
     explicitCourierId: standaloneCourierId,
   });
+
+  if (linkedCourierIds.length) {
+    const linkedCourier = await Courier.findById(linkedCourierIds[0])
+      .select("from to")
+      .lean();
+    if (linkedCourier?.from && linkedCourier?.to) {
+      const pendingIdx = ride.users_request_Couriers.length - 1;
+      if (pendingIdx >= 0 && String(ride.users_request_Couriers[pendingIdx].userId) === String(user._id)) {
+        ride.users_request_Couriers[pendingIdx].courierId = linkedCourierIds[0];
+        ride.users_request_Couriers[pendingIdx].from = normalizeRouteLabel(
+          linkedCourier.from
+        );
+        ride.users_request_Couriers[pendingIdx].to = normalizeRouteLabel(
+          linkedCourier.to
+        );
+        await ride.save();
+      }
+    }
+  }
 
   emitMyRequestsUpdated(user._id, {
     action: "courier_request_sent",

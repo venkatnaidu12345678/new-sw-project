@@ -208,8 +208,15 @@ export async function requestRideTrackingSnapshot(rideId) {
   });
 }
 
+import { formatLocalISODate } from "../Utils/dateUtils";
+
+const normalizeEnrouteDateKey = (date) => {
+  const key = formatLocalISODate(date);
+  return key || "any";
+};
+
 const enrouteKey = ({ from, to, date }) =>
-  `${from}|${to}|${date ? new Date(date).toISOString().split("T")[0] : "any"}`;
+  `${from}|${to}|${normalizeEnrouteDateKey(date)}`;
 
 export async function joinEnrouteRoom(payload) {
   const { from, to, date } = payload || {};

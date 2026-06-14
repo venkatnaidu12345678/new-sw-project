@@ -412,8 +412,20 @@ const EnRoutePassengers = ({
         }
 
         if (isPickSuccess(response)) {
-          removeItem?.(item.id);
-          onPickSuccess?.(item, response);
+          const pickPayload =
+            item.type === "courier"
+              ? {
+                  type: "courier",
+                  courierId: String(item.courierId || ""),
+                  userId: String(item.creatorId || ""),
+                }
+              : {
+                  type: "passenger",
+                  passengerRideId: String(item.passengerId || ""),
+                  userId: String(item.creatorId || ""),
+                };
+          removeItem?.(item.passengerId || item.courierId || item.id);
+          onPickSuccess?.(item, response, pickPayload);
           Alert.alert(
             "Success",
             item.type === "courier"

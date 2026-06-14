@@ -21,6 +21,7 @@ const notificationRoutes = require("./routes/notificationRoutes");
 const legalRoutes = require("./routes/legalRoutes");
 const lookupRoutes = require("./routes/lookupRoutes");
 const subscriptionRoutes = require("./routes/subscriptionRoutes");
+const fareRoutes = require("./routes/fareRoutes");
 
 const app = express();
 
@@ -73,6 +74,7 @@ app.use("/notifications", notificationRoutes);
 app.use("/legal", legalRoutes);
 app.use("/lookups", lookupRoutes);
 app.use("/subscriptions", subscriptionRoutes);
+app.use("/fare", fareRoutes);
 
 connectDatabase();
 

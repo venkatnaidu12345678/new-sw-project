@@ -53,6 +53,8 @@ const rideSchema = new mongoose.Schema(
     toCoords: coordsSchema,
     routePolyline: { type: String, default: "" },
     selectedRouteIndex: { type: Number, default: 0 },
+    /** Google road distance for the driver's selected route (meters). */
+    routeDistanceMeters: { type: Number, min: 0, default: null },
     stopovers: {
       type: [
         {

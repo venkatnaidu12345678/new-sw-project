@@ -1,64 +1,85 @@
-import React, { useState } from "react";
-import { View, Text, TextInput, StyleSheet } from "react-native";
+import React, { useEffect } from "react";
+import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import { validatePrice } from "../Utils";
 import { INPUT_COLORS } from "../theme/inputTheme";
 
-const PriceCard = ({ rideData, updateRideData, submitted, compact = false, accent = false }) => {
+const PriceCard = ({
+  rideData,
+  updateRideData,
+  submitted,
+  compact = false,
+  accent = false,
+  hint = "",
+  loading = false,
+  routeKm = null,
+  suggestedPrice = null,
+  onAutoFare,
+  fareResetKey = "",
+  readOnly = false,
+}) => {
+  useEffect(() => {
+    if (readOnly && suggestedPrice != null && onAutoFare) {
+      onAutoFare(suggestedPrice);
+    }
+  }, [readOnly, suggestedPrice, onAutoFare]);
 
-  // ✅ Track interaction
-  const [touched, setTouched] = useState(false);
+  const displayValue =
+    rideData.ride_amount ||
+    (suggestedPrice != null ? String(suggestedPrice) : "");
 
-  // ✅ Allow only numbers
-  const handlePriceChange = (text) => {
-    const numericValue = text.replace(/[^0-9]/g, "");
-    setTouched(true);
-    updateRideData("ride_amount", numericValue);
-  };
-
-  // ✅ Validation
-  const priceError =
-    submitted || touched
-      ? validatePrice(rideData.ride_amount)
-      : "";
-
+  const priceError = submitted ? validatePrice(displayValue) : "";
   const isValid = !priceError;
+  const showLoader = loading && !displayValue;
 
   return (
     <View style={styles.mainContainer}>
-
-      {/* Label + Star */}
       <Text style={[styles.priceLabel, compact && styles.priceLabelCompact]}>
-        Price per seat
-        {(submitted || touched) && !isValid && (
-          <Text style={styles.required}> *</Text>
-        )}
+        Ride fare
+        {submitted && !isValid ? <Text style={styles.required}> *</Text> : null}
       </Text>
 
-      {/* Input Box */}
-      <View style={[
-        styles.priceBox,
-        compact && styles.priceBoxCompact,
-        accent && styles.priceBoxAccent,
-        (submitted || touched) && !isValid && styles.errorBorder
-      ]}>
-        <Text style={[styles.rupee, compact && styles.rupeeCompact, accent && styles.rupeeAccent]}>₹</Text>
+      <View
+        style={[
+          styles.priceBox,
+          compact && styles.priceBoxCompact,
+          accent && styles.priceBoxAccent,
+          readOnly && styles.priceBoxReadOnly,
+          submitted && !isValid && styles.errorBorder,
+        ]}
+      >
+        <Text style={[styles.rupee, compact && styles.rupeeCompact, accent && styles.rupeeAccent]}>
+          ₹
+        </Text>
 
-        <TextInput
-          style={[styles.priceInput, compact && styles.priceInputCompact]}
-          value={rideData.ride_amount}
-          onChangeText={handlePriceChange}
-          keyboardType="numeric"
-          placeholder="Enter price per seat (₹)"
-          placeholderTextColor={INPUT_COLORS.placeholder}
-          maxLength={7}
-        />
+        {showLoader ? (
+          <View style={styles.loaderRow}>
+            <ActivityIndicator size="small" color={INPUT_COLORS.text} />
+            <Text style={styles.loadingText}>Calculating…</Text>
+          </View>
+        ) : (
+          <Text
+            style={[
+              styles.priceDisplay,
+              compact && styles.priceDisplayCompact,
+              !displayValue && styles.pricePlaceholder,
+            ]}
+          >
+            {displayValue || (loading ? "Calculating…" : "—")}
+          </Text>
+        )}
       </View>
 
-      {/* Error */}
-      <Text style={styles.errorText}>
-        {(submitted || touched) ? (priceError || " ") : " "}
-      </Text>
+      {readOnly ? (
+        <Text style={styles.lockedNote}>Auto-calculated from route distance · cannot be edited</Text>
+      ) : null}
 
+      {routeKm != null ? (
+        <Text style={styles.distanceText}>Route: {Number(routeKm).toFixed(1)} km</Text>
+      ) : null}
+
+      {hint ? <Text style={styles.hintText}>{hint}</Text> : null}
+
+      <Text style={styles.errorText}>{submitted ? priceError || " " : " "}</Text>
     </View>
   );
 };
@@ -90,6 +111,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     backgroundColor: INPUT_COLORS.background,
+    minHeight: 48,
   },
 
   priceBoxCompact: {
@@ -100,6 +122,11 @@ const styles = StyleSheet.create({
   priceBoxAccent: {
     backgroundColor: "#FFFBEB",
     borderColor: "#FDE68A",
+  },
+
+  priceBoxReadOnly: {
+    backgroundColor: "#F9FAFB",
+    borderColor: "#E5E7EB",
   },
 
   rupeeAccent: {
@@ -117,16 +144,42 @@ const styles = StyleSheet.create({
     fontSize: 20,
   },
 
-  priceInput: {
+  priceDisplay: {
     fontSize: 24,
     fontWeight: "700",
     flex: 1,
     color: INPUT_COLORS.text,
   },
 
-  priceInputCompact: {
+  priceDisplayCompact: {
     fontSize: 20,
     fontWeight: "600",
+  },
+
+  pricePlaceholder: {
+    color: INPUT_COLORS.placeholder,
+    fontWeight: "600",
+  },
+
+  loaderRow: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 4,
+  },
+
+  loadingText: {
+    fontSize: 15,
+    color: INPUT_COLORS.placeholder,
+    fontWeight: "600",
+  },
+
+  lockedNote: {
+    color: "#6B7280",
+    fontSize: 11,
+    marginTop: 6,
+    fontWeight: "500",
   },
 
   required: {
@@ -143,5 +196,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 6,
     minHeight: 16,
+  },
+
+  hintText: {
+    color: "#059669",
+    fontSize: 12,
+    marginTop: 6,
+    fontWeight: "600",
+  },
+
+  distanceText: {
+    color: "#6B7280",
+    fontSize: 12,
+    marginTop: 6,
+    fontWeight: "500",
   },
 });

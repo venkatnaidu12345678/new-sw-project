@@ -90,7 +90,16 @@ export function useEnrouteRequests({
   }, [enabled, from, to, rideDate, stopoversKey, routePolylineKey, fetchData]);
 
   const removeItem = useCallback((itemId) => {
-    setData((prev) => prev.filter((row) => row.id !== itemId));
+    const key = String(itemId ?? "");
+    if (!key) return;
+    setData((prev) =>
+      prev.filter(
+        (row) =>
+          String(row.id) !== key &&
+          String(row.passengerId || "") !== key &&
+          String(row.courierId || "") !== key
+      )
+    );
   }, []);
 
   const counts = useMemo(() => countEnrouteByType(data), [data]);

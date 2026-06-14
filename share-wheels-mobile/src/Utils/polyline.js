@@ -45,3 +45,53 @@ export const decodePolyline = (encoded) => {
 
   return coordinates;
 };
+
+/** Keep map polylines responsive by capping point count. */
+export const thinPolylineCoords = (coords, maxPoints = 150) => {
+  if (!Array.isArray(coords) || coords.length <= maxPoints) {
+    return Array.isArray(coords) ? coords : [];
+  }
+  const step = Math.ceil(coords.length / maxPoints);
+  const out = [coords[0]];
+  for (let i = step; i < coords.length - 1; i += step) {
+    out.push(coords[i]);
+  }
+  const last = coords[coords.length - 1];
+  if (out[out.length - 1] !== last) out.push(last);
+  return out;
+};
+
+export const validMapCoords = (coords) =>
+  (Array.isArray(coords) ? coords : []).filter(
+    (c) =>
+      c &&
+      Number.isFinite(Number(c.latitude)) &&
+      Number.isFinite(Number(c.longitude))
+  );
+
+const toRad = (deg) => (deg * Math.PI) / 180;
+
+export const haversineMeters = (a, b) => {
+  const R = 6371000;
+  const lat1 = toRad(Number(a.latitude));
+  const lat2 = toRad(Number(b.latitude));
+  const dLat = toRad(Number(b.latitude) - Number(a.latitude));
+  const dLng = toRad(Number(b.longitude) - Number(a.longitude));
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+};
+
+/** Total path length along a decoded or encoded polyline. */
+export const polylinePathLengthMeters = (encodedOrPoints) => {
+  const pts = Array.isArray(encodedOrPoints)
+    ? encodedOrPoints
+    : decodePolyline(encodedOrPoints);
+  if (!pts || pts.length < 2) return 0;
+  let total = 0;
+  for (let i = 1; i < pts.length; i += 1) {
+    total += haversineMeters(pts[i - 1], pts[i]);
+  }
+  return total;
+};

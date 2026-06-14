@@ -68,6 +68,12 @@ const CreateRideComponentOne = forwardRef(
       onRoutePlanChange,
       routeMapFullscreen = false,
       onRouteMapFullscreenChange,
+      fareHint = "",
+      fareLoading = false,
+      routeKm = null,
+      suggestedPrice = null,
+      onAutoFare,
+      fareResetKey = "",
     },
     ref
   ) => {
@@ -233,6 +239,28 @@ const CreateRideComponentOne = forwardRef(
         </FormSection>
 
         <FormSection
+          accent={CR.sections.pricing}
+          title="Pricing"
+          subtitle="Auto-filled from admin fare rules — seats are set in Schedule below"
+          styles={styles}
+        >
+          <PriceCard
+            rideData={rideData}
+            updateRideData={updateRideData}
+            submitted={submitted}
+            compact
+            accent
+            hint={fareHint}
+            loading={fareLoading}
+            routeKm={routeKm}
+            suggestedPrice={suggestedPrice}
+            onAutoFare={onAutoFare}
+            fareResetKey={fareResetKey}
+            readOnly
+          />
+        </FormSection>
+
+        <FormSection
           accent={CR.sections.schedule}
           title="Schedule"
           subtitle="Date, time, and available seats"
@@ -280,21 +308,6 @@ const CreateRideComponentOne = forwardRef(
             rideData={rideData}
             updateRideData={updateRideData}
             submitted={submitted}
-          />
-        </FormSection>
-
-        <FormSection
-          accent={CR.sections.pricing}
-          title="Pricing"
-          subtitle="Amount passengers pay per seat"
-          styles={styles}
-        >
-          <PriceCard
-            rideData={rideData}
-            updateRideData={updateRideData}
-            submitted={submitted}
-            compact
-            accent
           />
         </FormSection>
 
