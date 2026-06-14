@@ -47,6 +47,7 @@ const NAV_GROUPS = [
       { to: "/locations", label: "Locations", icon: IconMap },
       { to: "/lookup-types", label: "Dropdown types", icon: IconList },
       { to: "/subscription-plans", label: "Driver plans", icon: IconList },
+      { to: "/vehicle-fares", label: "Vehicle fares", icon: IconList },
     ],
   },
 ];
@@ -64,6 +65,7 @@ const ROUTE_TITLES = {
   "/feedback": "Feedback",
   "/legal": "Legal",
   "/subscription-plans": "Driver plans",
+  "/vehicle-fares": "Vehicle fares",
 };
 
 function getPageTitle(pathname) {
