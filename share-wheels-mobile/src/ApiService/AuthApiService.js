@@ -73,6 +73,13 @@ export const registerFcmTokenApi = (token, fcmToken) =>
     timeoutMs: 90000,
   });
 
+export const clearFcmTokenApi = (token) =>
+  apiRequest(baseUrl + endPoints.clearFcmTokenurl, {
+    method: "POST",
+    token,
+    timeoutMs: 30000,
+  });
+
 export const getPushStatusApi = (token) =>
   apiRequest(baseUrl + endPoints.pushStatusurl, {
     method: "GET",

@@ -7,6 +7,8 @@ const { parseAmount } = require("../schemas/commonSchemas");
 const { ensureParticipantBoardingOtp } = require("./rideVerificationService");
 const { notifyUser } = require("./notificationService");
 const { getRideDetails } = require("./rideService");
+const { toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
+const { closeStandaloneRequestsAfterJoin } = require("../utils/participantRequestCleanup");
 const {
   emitToUser,
   emitRideParticipantsUpdated,
@@ -140,13 +142,15 @@ const pickPassenger = async (user, { passenger_rideId, rideId }) => {
     from: ride.from,
     to: ride.to,
   });
-  ride.passengers.push(passengerEntry);
-  ride.availableSeats -= passengerRide.seats_needed;
-  await ride.save();
 
   passengerRide.assigned_to = { userId: user._id, rideId: ride._id };
   passengerRide.status = "aisgned_passenger";
   await passengerRide.save();
+
+  ride.passengers.push(passengerEntry);
+  ride.availableSeats -= passengerRide.seats_needed;
+  await ride.save();
+  await closeStandaloneRequestsAfterJoin(passengerRide.creator, ride);
 
   await UserRides.findOneAndUpdate(
     { creator: passengerRide.creator },
@@ -174,10 +178,13 @@ const pickPassenger = async (user, { passenger_rideId, rideId }) => {
     action: "passenger_assigned",
     passengerRideId: passengerRide._id.toString(),
     rideId: ride._id.toString(),
+    from: ride.from,
+    to: ride.to,
   });
-  emitEnrouteRequestRemoved(ride.from, ride.to, ride.date, {
+  emitEnrouteRequestRemoved(ride.from, ride.to, toEnrouteDateKey(ride.date), {
     passengerRideId: passengerRide._id.toString(),
     type: "passenger",
+    userId: passengerRide.creator.toString(),
   });
 
   await driverSubscriptionService.recordEnroutePick(user._id, rideId);

@@ -7,7 +7,7 @@ export const formatEnrouteItems = (list, from, to) => {
     const isCourier = item.request_type?.toLowerCase().includes("courier");
 
     return {
-      id: item._id || index,
+      id: item.passengerId || item.courierId || item._id || `row-${index}`,
       rideId: item.rideId || item.ride_id,
       courierId: item.courierId || item.courier_id,
       passengerId: item.passengerId || item.passenger_id,
@@ -80,23 +80,28 @@ export const buildEnrouteFetchPayload = ({
 };
 
 export const shouldRemoveEnrouteRow = (row, payload) => {
-  if (!payload) return false;
+  if (!payload || !row) return false;
 
+  const passengerRideId = payload.passengerRideId || payload.passenger_rideId;
   if (
-    payload.passengerRideId &&
-    row.passengerId?.toString() === payload.passengerRideId.toString()
+    passengerRideId &&
+    String(row.passengerId || "") === String(passengerRideId)
   ) {
     return true;
   }
 
   if (
     payload.courierId &&
-    row.courierId?.toString() === payload.courierId.toString()
+    String(row.courierId || "") === String(payload.courierId)
   ) {
     return true;
   }
 
-  if (payload.userId && row.creatorId?.toString() === String(payload.userId)) {
+  if (payload.userId && String(row.creatorId || "") === String(payload.userId)) {
+    return true;
+  }
+
+  if (payload.id && String(row.id || "") === String(payload.id)) {
     return true;
   }
 

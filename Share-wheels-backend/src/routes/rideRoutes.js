@@ -12,6 +12,7 @@ router.post("/ride/cancel", authMiddleware, rideController.cancelRide);
 router.post("/passenger/send-request", authMiddleware, rideController.sendPassengerRequest);
 router.get("/upcoming-rides", authMiddleware, rideController.upcomingRides);
 router.get("/history-rides", authMiddleware, rideController.historyRides);
+router.get("/segment-fare/:rideId", authMiddleware, rideController.getSegmentFare);
 router.get("/ride-details/:rideId", authMiddleware, rideController.rideDetails);
 router.get("/my-requests", authMiddleware, rideController.myRequests);
 router.get("/my-passenger-requests", authMiddleware, rideController.myPassengerRequests);

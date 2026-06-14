@@ -145,3 +145,28 @@ dependencies {
 }
 
 apply plugin: "com.google.gms.google-services"
+
+/** Warn when Firebase SHA fingerprints are not linked (causes FIS_AUTH_ERROR / no FCM token). */
+tasks.register("verifyFirebaseShaConfig") {
+    doLast {
+        def gsFile = file("google-services.json")
+        if (!gsFile.exists()) return
+        try {
+            def json = new groovy.json.JsonSlurper().parse(gsFile)
+            def oauth = json?.client?.getAt(0)?.oauth_client ?: []
+            if (oauth.isEmpty()) {
+                logger.warn(
+                    "\n[FCM] google-services.json has empty oauth_client — push notifications will NOT work.\n" +
+                    "Run: npm run android:sha\n" +
+                    "Add SHA-1 + SHA-256 in Firebase (project share-wheels-4afd2, app com.sharewheels.app),\n" +
+                    "download a new google-services.json, replace android/app/google-services.json, rebuild.\n" +
+                    "Verify: npm run fcm:verify\n"
+                )
+            }
+        } catch (Exception ignored) {
+            // non-fatal
+        }
+    }
+}
+
+tasks.named("preBuild").configure { dependsOn("verifyFirebaseShaConfig") }

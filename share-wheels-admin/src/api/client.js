@@ -173,6 +173,17 @@ export const updateSubscriptionPlan = (id, body) =>
 export const deleteSubscriptionPlan = (id) =>
   api(`/admin/subscription-plans/${id}`, { method: "DELETE" });
 
+export const getVehicleFares = (params = {}) => {
+  const q = new URLSearchParams(params).toString();
+  return api(`/admin/vehicle-fares${q ? `?${q}` : ""}`);
+};
+export const createVehicleFare = (body) =>
+  api("/admin/vehicle-fares", { method: "POST", body: JSON.stringify(body) });
+export const updateVehicleFare = (id, body) =>
+  api(`/admin/vehicle-fares/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+export const deleteVehicleFare = (id) =>
+  api(`/admin/vehicle-fares/${id}`, { method: "DELETE" });
+
 export const uploadAdMedia = async (file, mediaType = "image") => {
   const token = getToken();
   const formData = new FormData();

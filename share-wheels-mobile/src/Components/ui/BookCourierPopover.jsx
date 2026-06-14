@@ -20,6 +20,8 @@ import { getCourierTheme } from "../../theme/requestFormTheme";
 import { useTheme } from "../../context/ThemeContext";
 import { useThemedStyles } from "../../theme/useThemedStyles";
 import { useLookupOptions } from "../../hooks/useLookupOptions";
+import RideCorridorSegmentPicker from "./RideCorridorSegmentPicker";
+import { defaultCorridorSegment, corridorHasSegments } from "../../Utils/rideCorridorUtils";
 
 const EMPTY = {
   courier_type: "",
@@ -35,10 +37,11 @@ const EMPTY = {
 const BookCourierPopover = ({
   visible,
   onClose,
-  rideFrom,
-  rideTo,
+  ride,
   blockReason,
   booking,
+  segment: externalSegment,
+  hideSegmentPicker = false,
   onBook,
 }) => {
   const { colors } = useTheme();
@@ -50,10 +53,21 @@ const BookCourierPopover = ({
     "Select type"
   );
   const [form, setForm] = useState({ ...EMPTY });
+  const [internalSegment, setInternalSegment] = useState(() =>
+    defaultCorridorSegment(ride)
+  );
+  const segment = externalSegment ?? internalSegment;
+  const showSegmentPicker =
+    !hideSegmentPicker && corridorHasSegments(ride);
 
   useEffect(() => {
-    if (visible) setForm({ ...EMPTY });
-  }, [visible]);
+    if (visible) {
+      setForm({ ...EMPTY });
+      if (!externalSegment) {
+        setInternalSegment(defaultCorridorSegment(ride));
+      }
+    }
+  }, [visible, ride?._id, ride?.from, ride?.to, ride?.stopovers, externalSegment]);
 
   const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
@@ -70,7 +84,7 @@ const BookCourierPopover = ({
   const canBook = !blockReason && !booking;
 
   const handleSubmit = () => {
-    onBook?.(form);
+    onBook?.(form, hideSegmentPicker ? undefined : segment);
   };
 
   const handleClose = () => {
@@ -96,7 +110,7 @@ const BookCourierPopover = ({
           <View style={styles.headerText}>
             <Text style={styles.title}>Courier delivery</Text>
             <Text style={styles.subtitle} numberOfLines={2}>
-              {rideFrom} → {rideTo}
+              Driver ride: {ride?.from} → {ride?.to}
             </Text>
           </View>
         </View>
@@ -105,6 +119,22 @@ const BookCourierPopover = ({
           <View style={styles.blockBox}>
             <Icon name="information-circle" size={20} color={colors.warningText} />
             <Text style={styles.blockText}>{blockReason}</Text>
+          </View>
+        ) : null}
+
+        {showSegmentPicker ? (
+          <RideCorridorSegmentPicker
+            ride={ride}
+            value={segment}
+            onChange={setInternalSegment}
+            disabled={!!blockReason || booking}
+          />
+        ) : hideSegmentPicker && corridorHasSegments(ride) ? (
+          <View style={styles.segmentSummary}>
+            <Icon name="navigate-outline" size={14} color={colors.warningText} />
+            <Text style={styles.segmentSummaryText} numberOfLines={2}>
+              Delivery route: {segment.from} → {segment.to}
+            </Text>
           </View>
         ) : null}
 
@@ -237,6 +267,24 @@ const createStyles = (c) =>
       fontWeight: "600",
       fontSize: 13,
       lineHeight: 18,
+    },
+    segmentSummary: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      backgroundColor: c.tintOrange,
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 12,
+      marginHorizontal: 4,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    segmentSummaryText: {
+      flex: 1,
+      fontSize: 12,
+      fontWeight: "700",
+      color: c.text,
     },
     uploadBtn: {
       flexDirection: "row",

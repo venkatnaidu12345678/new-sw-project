@@ -21,7 +21,7 @@ export const autocompletePlaces = async (input, sessionToken) => {
   const q = String(input || "").trim();
   if (q.length < 2) return [];
 
-  const params = new URLSearchParams({ input: q, mode: "all", country: "in" });
+  const params = new URLSearchParams({ input: q, mode: "cities", country: "in" });
   if (sessionToken) params.set("sessionToken", sessionToken);
 
   const res = await fetch(`${baseUrl}/locations/places/autocomplete?${params}`, {
@@ -95,6 +95,48 @@ export const getDirectionsPolyline = async (
   return data.polyline || null;
 };
 
+/** Driving route with resolved endpoints (for driver → participant navigation). */
+export const getDirectionsRoute = async (
+  fromCoords,
+  toCoords,
+  labels = {}
+) => {
+  const oLat = Number(fromCoords?.lat ?? fromCoords?.latitude);
+  const oLng = Number(fromCoords?.lng ?? fromCoords?.longitude);
+  const dLat = Number(toCoords?.lat ?? toCoords?.latitude);
+  const dLng = Number(toCoords?.lng ?? toCoords?.longitude);
+  const fromLabel = String(labels?.from || "").trim();
+  const toLabel = String(labels?.to || "").trim();
+
+  const hasOrigin = Number.isFinite(oLat) && Number.isFinite(oLng);
+  const hasDest = Number.isFinite(dLat) && Number.isFinite(dLng);
+
+  if (!hasOrigin && !fromLabel) return null;
+  if (!hasDest && !toLabel) return null;
+
+  const params = new URLSearchParams();
+  if (hasOrigin) {
+    params.set("originLat", String(oLat));
+    params.set("originLng", String(oLng));
+  }
+  if (hasDest) {
+    params.set("destLat", String(dLat));
+    params.set("destLng", String(dLng));
+  }
+  if (fromLabel) params.set("from", fromLabel);
+  if (toLabel) params.set("to", toLabel);
+
+  const res = await fetch(`${baseUrl}/locations/directions?${params}`, {
+    headers: await authHeaders(),
+  });
+  const data = await parseJson(res);
+  return {
+    polyline: data.polyline || null,
+    destination: data.destination || null,
+    origin: data.origin || null,
+  };
+};
+
 export const getAlternativeRoutes = async (fromCoords, toCoords, labels = {}) => {
   const params = new URLSearchParams();
   const oLat = Number(fromCoords?.lat ?? fromCoords?.latitude);
@@ -119,7 +161,17 @@ export const getAlternativeRoutes = async (fromCoords, toCoords, labels = {}) =>
     headers: await authHeaders(),
   });
   const data = await parseJson(res);
-  return Array.isArray(data.routes) ? data.routes : [];
+  const raw = Array.isArray(data.routes) ? data.routes : [];
+  return raw
+    .map((route, index) => ({
+      index: Number.isInteger(route?.index) ? route.index : index,
+      polyline: String(route?.polyline || "").trim(),
+      distanceMeters: route?.distanceMeters ?? null,
+      durationSeconds: route?.durationSeconds ?? null,
+      label: route?.label || (index === 0 ? "Recommended" : `Alternative ${index}`),
+      isRecommended: route?.isRecommended ?? index === 0,
+    }))
+    .filter((route) => route.polyline.length > 0);
 };
 
 /** Resolve a place label to coordinates (uses backend geocoding via directions). */

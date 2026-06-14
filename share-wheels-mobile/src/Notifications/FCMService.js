@@ -88,14 +88,33 @@ export async function getDeviceToken() {
     if (!tokenFailureLogged) {
       tokenFailureLogged = true;
       const code = error?.code || error?.nativeErrorCode || "";
+      const message = String(error?.message || error || "");
+      const isFisAuth =
+        /FIS_AUTH_ERROR/i.test(message) || /fis_auth/i.test(String(code));
+
       console.warn(
         "[FCM] getToken failed:",
-        error.message,
-        code ? `(code: ${code})` : "",
-        Platform.OS === "android"
-          ? "— add debug + release SHA-1/SHA-256 in Firebase → Project settings → Your apps → com.sharewheels.app, then download a new google-services.json (npm run android:sha)"
-          : ""
+        message,
+        code ? `(code: ${code})` : ""
       );
+
+      if (Platform.OS === "android") {
+        if (isFisAuth) {
+          console.warn(
+            "[FCM] FIS_AUTH_ERROR — Firebase does not trust this APK signing key.\n" +
+              "  1) Run: npm run android:sha\n" +
+              "  2) Firebase Console → Project share-wheels-4afd2 → Android app com.sharewheels.app\n" +
+              "  3) Add Debug SHA-1 + SHA-256 (and Release SHAs for release APK)\n" +
+              "  4) Download NEW google-services.json → android/app/google-services.json\n" +
+              "  5) Rebuild app (uninstall old APK first)\n" +
+              "  6) Run: npm run fcm:verify"
+          );
+        } else {
+          console.warn(
+            "[FCM] Allow Notifications in Android settings; ensure google-services.json matches Firebase (npm run fcm:verify)"
+          );
+        }
+      }
     }
     return null;
   }

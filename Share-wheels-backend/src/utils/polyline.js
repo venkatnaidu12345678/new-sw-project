@@ -59,8 +59,41 @@ const haversineKm = (a, b) => {
   return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 };
 
+const toRad = (deg) => (deg * Math.PI) / 180;
+const toDeg = (rad) => (rad * 180) / Math.PI;
+
+const bearingDeg = (from, to) => {
+  const lat1 = toRad(from.lat);
+  const lat2 = toRad(to.lat);
+  const dLng = toRad(to.lng - from.lng);
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x =
+    Math.cos(lat1) * Math.sin(lat2) -
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+};
+
+/** Point reached by moving distanceKm along bearing from lat/lng. */
+const destinationPoint = (lat, lng, bearing, distanceKm) => {
+  const R = 6371;
+  const brng = toRad(bearing);
+  const lat1 = toRad(lat);
+  const lng1 = toRad(lng);
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(distanceKm / R) +
+      Math.cos(lat1) * Math.sin(distanceKm / R) * Math.cos(brng)
+  );
+  const lng2 =
+    lng1 +
+    Math.atan2(
+      Math.sin(brng) * Math.sin(distanceKm / R) * Math.cos(lat1),
+      Math.cos(distanceKm / R) - Math.sin(lat1) * Math.sin(lat2)
+    );
+  return { lat: toDeg(lat2), lng: toDeg(lng2) };
+};
+
 /**
- * Sample points along the route interior so nearby cities, towns, and villages
+ * Sample points along the route interior so nearby cities and towns
  * are not skipped on long highways (distance-aware + count cap).
  */
 const samplePolylineInterior = (points, maxSamples = 20) => {
@@ -75,7 +108,6 @@ const samplePolylineInterior = (points, maxSamples = 20) => {
     totalKm += haversineKm(points[i - 1], points[i]);
   }
 
-  // ~1 sample every 12 km, bounded by cap (more settlements on longer routes).
   const byDistance = Math.max(8, Math.min(cap, Math.ceil(totalKm / 12)));
   const target = Math.min(cap, byDistance);
   const step = Math.max(1, Math.floor(interior.length / target));
@@ -93,4 +125,6 @@ module.exports = {
   parseDurationSeconds,
   samplePolylineInterior,
   haversineKm,
+  bearingDeg,
+  destinationPoint,
 };

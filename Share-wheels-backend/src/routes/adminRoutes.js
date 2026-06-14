@@ -6,6 +6,7 @@ const adminFeedbackController = require("../controllers/adminFeedbackController"
 const adminLegalController = require("../controllers/adminLegalController");
 const adminLookupController = require("../controllers/adminLookupController");
 const adminSubscriptionController = require("../controllers/adminSubscriptionController");
+const adminVehicleFareController = require("../controllers/adminVehicleFareController");
 const adminAuthMiddleware = require("../middlewares/adminAuthMiddleware");
 const adUploadMiddleware = require("../middlewares/adUploadMiddleware");
 
@@ -63,5 +64,10 @@ router.get("/subscription-plans", adminSubscriptionController.listPlans);
 router.post("/subscription-plans", adminSubscriptionController.createPlan);
 router.patch("/subscription-plans/:id", adminSubscriptionController.updatePlan);
 router.delete("/subscription-plans/:id", adminSubscriptionController.deletePlan);
+
+router.get("/vehicle-fares", adminVehicleFareController.listFares);
+router.post("/vehicle-fares", adminVehicleFareController.createFare);
+router.patch("/vehicle-fares/:id", adminVehicleFareController.updateFare);
+router.delete("/vehicle-fares/:id", adminVehicleFareController.deleteFare);
 
 module.exports = router;

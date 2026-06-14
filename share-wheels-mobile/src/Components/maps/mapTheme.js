@@ -50,7 +50,7 @@ export const MAP_LINE_THEME = {
     width: 7,
     outlineWidth: 10,
   },
-  routeOptions: [ROUTE_LINE_BLUE],
-  routeInactive: ROUTE_LINE_BLUE_LIGHT,
+  routeOptions: [ROUTE_LINE_BLUE, "#64748B", "#7C3AED", "#0D9488"],
+  routeInactive: "#94A3B8",
 };
 

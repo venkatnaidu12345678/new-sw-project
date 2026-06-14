@@ -5,11 +5,17 @@ import Icon from "react-native-vector-icons/Ionicons";
 
 import { getRideDisplayFare } from "../Utils/fareUtils";
 import { formatDisplayDate, formatDisplayTime } from "../Utils/dateUtils";
+import {
+  getUpcomingRideRoutes,
+  stopoverCount,
+} from "../Utils/upcomingRideRouteUtils";
+import UpcomingRouteLines from "./ui/UpcomingRouteLines";
 import UserAvatar from "./ui/UserAvatar";
 import { LAYOUT } from "../theme/layout";
 import { useTheme } from "../context/ThemeContext";
 import { useThemedStyles } from "../theme/useThemedStyles";
 import { getRoleCardThemes } from "../theme/appTheme";
+import { profileData } from "../Navigation/AuthNavigator";
 
 const getRoleTheme = (c) => {
   const cards = getRoleCardThemes(c);
@@ -63,12 +69,16 @@ const MetaChip = ({ icon, label }) => {
 const UpcomingRide = ({ data, onPress }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const { ProfileDetails } = profileData() || {};
   const ROLE_THEME = getRoleTheme(colors);
   const role = data?.myRole || "passenger";
   const theme = ROLE_THEME[role] || ROLE_THEME.passenger;
-
-  const routeFrom = data?.from || "—";
-  const routeTo = data?.to || "—";
+  const myUserId =
+    ProfileDetails?._id ||
+    ProfileDetails?.id ||
+    ProfileDetails?.data?.personalInfo?._id;
+  const { rideRoute, bookedRoute } = getUpcomingRideRoutes(data, { myUserId });
+  const stops = stopoverCount(data?.stopovers);
   const seats =
     data?.requires_seats ||
     data?.activeData?.requires_seats ||
@@ -176,26 +186,21 @@ const UpcomingRide = ({ data, onPress }) => {
             </View>
           </View>
 
-          <View style={styles.routeRow}>
-            <View style={styles.routeTimeline}>
-              <View style={styles.routeDotFrom} />
-              <View style={styles.routeLine} />
-              <View style={styles.routeDotTo} />
-            </View>
-            <View style={styles.routeText}>
-              <Text style={styles.routeCity} numberOfLines={1}>
-                {routeFrom}
-              </Text>
-              <Icon name="arrow-forward" size={12} color={colors.textMuted} style={styles.routeArrow} />
-              <Text style={styles.routeCity} numberOfLines={1}>
-                {routeTo}
-              </Text>
-            </View>
-          </View>
+          <UpcomingRouteLines
+            rideRoute={rideRoute}
+            bookedRoute={bookedRoute}
+            role={role}
+          />
 
           <View style={styles.metaRow}>
             {dateLabel ? <MetaChip icon="calendar-outline" label={dateLabel} /> : null}
             {timeLabel ? <MetaChip icon="time-outline" label={timeLabel} /> : null}
+            {stops > 0 && role === "driver" ? (
+              <MetaChip
+                icon="git-commit-outline"
+                label={`${stops} stop${stops !== 1 ? "s" : ""}`}
+              />
+            ) : null}
             {seats > 0 ? (
               <MetaChip
                 icon="people-outline"

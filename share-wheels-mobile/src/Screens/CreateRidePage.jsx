@@ -23,6 +23,7 @@ import {
   alertValidation,
   showAppAlert,
 } from "../Utils/appAlert";
+import { useSuggestedRideFare } from "../hooks/useSuggestedRideFare";
 
 const hasCompleteVehicle = (info) =>
   !!(info?.vehicleCompany?.trim() && info?.vehicleModel?.trim());
@@ -43,6 +44,7 @@ const CreateRidePage = () => {
   const [toCoords, setToCoords] = useState(null);
   const [routePlan, setRoutePlan] = useState(null);
   const [routeMapFullscreen, setRouteMapFullscreen] = useState(false);
+  const priceTouchedRef = useRef(false);
 
   const [rideData, setRideData] = useState({
     from: "",
@@ -59,6 +61,28 @@ const CreateRidePage = () => {
 
   const vehicleInfo = ProfileDetails?.data?.vehicleInfo;
   const userName = ProfileDetails?.data?.personalInfo?.name;
+
+  const { fareHint, fareLoading, suggestedPrice, routeKm } = useSuggestedRideFare({
+    vehicleInfo,
+    routePlan,
+  });
+
+  const fareResetKey = routePlan
+    ? [
+        routePlan.selectedRouteIndex ?? 0,
+        routePlan.distanceMeters ?? "",
+        routePlan.distanceKm ?? "",
+        String(routePlan.routePolyline || "").slice(0, 24),
+      ].join("|")
+    : "";
+
+  const applyAutoFare = useCallback((value) => {
+    if (priceTouchedRef.current || value == null) return;
+    const next = String(value);
+    setRideData((prev) =>
+      prev.ride_amount === next ? prev : { ...prev, ride_amount: next }
+    );
+  }, []);
 
   const refreshProfile = useCallback(async () => {
     try {
@@ -78,10 +102,19 @@ const CreateRidePage = () => {
   );
 
   const updateRideData = (field, value) => {
+    if (field === "ride_amount") return;
     setRideData((prev) => ({ ...prev, [field]: value }));
   };
 
   const openVehicleForm = () => setShowVehicleForm(true);
+
+  const handleRoutePlanChange = useCallback((plan) => {
+    setRoutePlan(plan);
+    priceTouchedRef.current = false;
+    if (!plan) {
+      setRideData((prev) => ({ ...prev, ride_amount: "" }));
+    }
+  }, []);
 
   const validateSchedule = () => {
     if (!rideData.date) {
@@ -154,6 +187,7 @@ const CreateRidePage = () => {
         routePolyline: routePlan?.routePolyline || undefined,
         selectedRouteIndex: routePlan?.selectedRouteIndex ?? 0,
         stopovers: routePlan?.stopovers || [],
+        routeDistanceMeters: routePlan?.distanceMeters || undefined,
       };
 
       const response = await createRideApi(token, payload);
@@ -190,6 +224,7 @@ const CreateRidePage = () => {
   };
 
   const handleVehicleAdded = async () => {
+    priceTouchedRef.current = false;
     await refreshProfile();
     alertSuccess("Vehicle saved. You can create your ride now.");
   };
@@ -246,19 +281,27 @@ const CreateRidePage = () => {
           onPressAddVehicle={openVehicleForm}
           fromCoords={fromCoords}
           toCoords={toCoords}
-          onRoutePlanChange={setRoutePlan}
+          onRoutePlanChange={handleRoutePlanChange}
           routeMapFullscreen={routeMapFullscreen}
           onRouteMapFullscreenChange={setRouteMapFullscreen}
           onPlaceSelect={(field, place) => {
             if (field === "from") {
               setFromCoords(place);
               setRoutePlan(null);
+              priceTouchedRef.current = false;
             }
             if (field === "to") {
               setToCoords(place);
               setRoutePlan(null);
+              priceTouchedRef.current = false;
             }
           }}
+          fareHint={fareHint}
+          fareLoading={fareLoading}
+          routeKm={routeKm}
+          suggestedPrice={suggestedPrice}
+          onAutoFare={applyAutoFare}
+          fareResetKey={fareResetKey}
         />
       </KeyboardAwareScreen>
 

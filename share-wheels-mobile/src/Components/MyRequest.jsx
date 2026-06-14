@@ -35,6 +35,11 @@ import {
   courierSendRequestApi,
 } from "../ApiService/ridesApiServices";
 import Icon from "react-native-vector-icons/Ionicons";
+import {
+  filterOpenPassengerRequests,
+  filterOpenCourierRequests,
+  shouldRemoveMyRequestRow,
+} from "../Utils/myRequestUtils";
 import { getApiErrorMessage } from "../Utils/apiErrors";
 import { formatRequestDate } from "../Utils";
 import { RideListSkeleton } from "./ui/Skeleton";
@@ -194,7 +199,9 @@ const MyRequest = () => {
       const res = await getMyPassengerRequests(token);
       setPassengerRides(
         sortRequestsByPriority(
-          (res?.passengerRequests || []).map(mapPassengerRequest)
+          filterOpenPassengerRequests(
+            (res?.passengerRequests || []).map(mapPassengerRequest)
+          )
         )
       );
     } catch (err) {
@@ -220,7 +227,11 @@ const MyRequest = () => {
 
       const res = await getMyCourierRequests(token);
       setCourierRides(
-        sortRequestsByPriority((res?.courierRequests || []).map(mapCourierRequest))
+        sortRequestsByPriority(
+          filterOpenCourierRequests(
+            (res?.courierRequests || []).map(mapCourierRequest)
+          )
+        )
       );
     } catch (err) {
       console.log("❌ COURIER REQUESTS ERROR:", err.message);
@@ -261,7 +272,22 @@ const MyRequest = () => {
     }, [route.params?.activeTab, fetchCourierRequests, fetchPassengerRequests])
   );
 
-  useMyRequestsSocket(fetchActiveTabRequests);
+  useMyRequestsSocket(
+    useCallback(
+      (payload) => {
+        if (payload) {
+          setPassengerRides((prev) =>
+            prev.filter((row) => !shouldRemoveMyRequestRow(row, payload))
+          );
+          setCourierRides((prev) =>
+            prev.filter((row) => !shouldRemoveMyRequestRow(row, payload))
+          );
+        }
+        fetchActiveTabRequests();
+      },
+      [fetchActiveTabRequests]
+    )
+  );
 
   const handleTabChange = (index) => {
     const nextTab = tabs[index];
@@ -324,8 +350,13 @@ const MyRequest = () => {
   const handleViewRide = (ride) => {
     setPopoverVisible(false);
     setSheetVisible(false);
+    const segFrom = selectedRide?.from || selectedRide?.raw?.from;
+    const segTo = selectedRide?.to || selectedRide?.raw?.to;
     setSelectedRide(null);
-    navigation.navigate("RideDetails", { ride });
+    navigation.navigate("RideDetails", {
+      ride,
+      ...(segFrom && segTo ? { searchSegment: { from: segFrom, to: segTo } } : {}),
+    });
   };
 
   const handleJoinPassenger = async (ride, requestItem) => {
@@ -340,8 +371,17 @@ const MyRequest = () => {
       const response = await passengerSendRequestApi(token, {
         rideId: ride._id,
         requires_seats: seats,
+        standalonePassengerRideId: requestItem?.id || requestItem?.raw?.requestId,
+        from: requestItem?.from || requestItem?.raw?.from,
+        to: requestItem?.to || requestItem?.raw?.to,
       });
       if (response?.success) {
+        const requestId = requestItem?.id || requestItem?.raw?.requestId;
+        if (requestId) {
+          setPassengerRides((prev) =>
+            prev.filter((row) => String(row.id) !== String(requestId))
+          );
+        }
         Alert.alert(
           response.bookingStatus === "confirmed" ? "Booking confirmed" : "Request sent",
           response.message || "Your seat request was sent to the driver."
@@ -387,8 +427,8 @@ const MyRequest = () => {
     try {
       const response = await courierSendRequestApi(token, {
         rideId: ride._id,
-        from: ride.from,
-        to: ride.to,
+        from: raw.from || ride.from,
+        to: raw.to || ride.to,
         courier_type: raw.courier_type || "parcel",
         what_to_deliver: raw.what_to_deliver || raw.parcel,
         courier_img: raw.courier_img,
@@ -398,8 +438,15 @@ const MyRequest = () => {
         receiver_mobile: recv.mobile,
         receiver_alternate_mobile: recv.alternate_mobile || recv.alternateMobile,
         receiver_address: recv.Address || recv.address,
+        standaloneCourierId: requestItem?.id || raw.requestId,
       });
       if (response?.success) {
+        const requestId = requestItem?.id || raw.requestId;
+        if (requestId) {
+          setCourierRides((prev) =>
+            prev.filter((row) => String(row.id) !== String(requestId))
+          );
+        }
         Alert.alert(
           response.bookingStatus === "confirmed" ? "Booking confirmed" : "Request sent",
           response.message || "Courier request sent to the driver."

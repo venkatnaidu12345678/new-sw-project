@@ -37,4 +37,12 @@ module.exports = {
     handle(res, () =>
       rideService.deleteMyCourierRequest(req.user, req.params.requestId)
     ),
+  getSegmentFare: async (req, res) =>
+    handle(res, () =>
+      rideService.getSegmentFare(req.params.rideId, {
+        from: req.query.from,
+        to: req.query.to,
+        seats: req.query.seats,
+      })
+    ),
 };

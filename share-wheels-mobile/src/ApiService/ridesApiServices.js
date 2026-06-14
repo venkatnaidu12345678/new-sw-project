@@ -917,6 +917,18 @@ export const passengerSendRequestApi = async (token, payload) => {
     };
   }
 };
+
+export const getSegmentFareApi = async (token, rideId, { from, to, seats = 1 } = {}) => {
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  if (seats) params.set("seats", String(seats));
+  const data = await apiRequest(
+    `${baseUrl}${endPoints.segmentFareurl}/${rideId}?${params}`,
+    { token }
+  );
+  return data?.quote || null;
+};
 export const courierSendRequestApi = async (token, payload) => {
   try {
     let courier_img = payload.courier_img;

@@ -8,6 +8,13 @@ const { notifyUser } = require("./notificationService");
 const { notifyRideParticipants } = require("../utils/rideNotificationUtils");
 const { getDriverCompleteRideBlockers } = require("../utils/participantTripStatus");
 const { getRideDetails } = require("./rideService");
+const { toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
+const {
+  collectRideParticipantUserIds,
+  closeStandaloneRequestsAfterJoin,
+  collectAssignedRequestDocIds,
+  collectActiveCorridorParticipantUserIds,
+} = require("../utils/participantRequestCleanup");
 const {
   emitToUser,
   emitRideParticipantsUpdated,
@@ -46,12 +53,9 @@ const {
   buildCorridorRegex,
 } = require("../utils/enrouteCorridorUtils");
 const googleMapsService = require("./googleMapsService");
+const { getActiveBookedSeats } = require("../utils/rideSeatUtils");
 
-const getBookedSeats = (ride) =>
-  (ride.passengers || []).reduce(
-    (sum, p) => sum + (Number(p.requires_seats) || 0),
-    0
-  );
+const getBookedSeats = getActiveBookedSeats;
 
 const acceptPassengerRequest = async (user, { rideId, passenger_userId }) => {
   if (!rideId || !passenger_userId) return { status: 400, body: { message: "rideId & passenger_userId required" } };
@@ -81,24 +85,48 @@ const acceptPassengerRequest = async (user, { rideId, passenger_userId }) => {
       },
     };
   }
+
+  let segFrom = String(reqObj.from || "").trim() || ride.from;
+  let segTo = String(reqObj.to || "").trim() || ride.to;
+  const fullRideSegment =
+    segFrom.toLowerCase() === String(ride.from || "").trim().toLowerCase() &&
+    segTo.toLowerCase() === String(ride.to || "").trim().toLowerCase();
+  if (fullRideSegment) {
+    const linkedPassengerRide = await PassengerRide.findOne({
+      creator: reqObj.userId,
+      $or: [
+        { "assigned_to.rideId": ride._id },
+        { join_requested_By: { $elemMatch: { rideId: ride._id } } },
+      ],
+    })
+      .sort({ updatedAt: -1 })
+      .select("from to")
+      .lean();
+    if (linkedPassengerRide?.from && linkedPassengerRide?.to) {
+      segFrom = linkedPassengerRide.from;
+      segTo = linkedPassengerRide.to;
+    }
+  }
+
   const passengerEntry = {
     userId: reqObj.userId,
     requires_seats: reqObj.requires_seats,
-    from: ride.from,
-    to: ride.to,
+    from: segFrom,
+    to: segTo,
     ride_amount: reqObj.ride_amount,
     status: "accepted",
     joinedAt: new Date(),
   };
   await ensureParticipantBoardingOtp(passengerEntry, reqObj.userId, {
     rideId: ride._id,
-    from: ride.from,
-    to: ride.to,
+    from: segFrom,
+    to: segTo,
   });
   ride.passengers.push(passengerEntry);
   ride.availableSeats -= seatsNeeded;
   ride.passenger_requested_ride = ride.passenger_requested_ride.filter((item) => item.userId.toString() !== passenger_userId.toString());
   await ride.save();
+  await closeStandaloneRequestsAfterJoin(passenger_userId, ride);
   await UserRides.findOneAndUpdate(
     { creator: passenger_userId },
     {
@@ -107,9 +135,19 @@ const acceptPassengerRequest = async (user, { rideId, passenger_userId }) => {
     },
     { upsert: true }
   );
-  emitEnrouteRequestRemoved(ride.from, ride.to, ride.date, {
+  const cancelledStandalone = await PassengerRide.find({
+    creator: passenger_userId,
+    status: "cancelled",
+    "assigned_to.rideId": ride._id,
+  })
+    .select("_id")
+    .lean();
+  emitEnrouteRequestRemoved(ride.from, ride.to, toEnrouteDateKey(ride.date), {
     type: "passenger",
     userId: passenger_userId.toString(),
+    ...(cancelledStandalone[0]
+      ? { passengerRideId: cancelledStandalone[0]._id.toString() }
+      : {}),
   });
   const driver = await User.findById(user._id);
   await notifyUser(passenger_userId, {
@@ -126,6 +164,11 @@ const acceptPassengerRequest = async (user, { rideId, passenger_userId }) => {
   emitMyRequestsUpdated(passenger_userId, {
     action: "ride_request_accepted",
     rideId: ride._id.toString(),
+    from: ride.from,
+    to: ride.to,
+    ...(cancelledStandalone[0]
+      ? { passengerRideId: cancelledStandalone[0]._id.toString() }
+      : {}),
   });
   return {
     status: 200,
@@ -348,26 +391,20 @@ const enrouteRequests = async (user, { from, to, date, rideId, stopovers, routeP
   let stopoverRows = normalizeStopoverRows(stopovers);
   let polyline = String(routePolyline || "").trim();
   let excludeUserIds = new Set();
+  let excludePassengerRideIds = new Set();
+  let excludeCourierIds = new Set();
 
   if (rideId && mongoose.Types.ObjectId.isValid(rideId)) {
     const ride = await Ride.findById(rideId)
       .select(
-        "passenger_requested_ride.userId passengers.userId users_request_Couriers.userId stopovers from to routePolyline"
+        "passenger_requested_ride.userId passengers.userId users_request_Couriers.userId all_deliveries.userId stopovers from to routePolyline date"
       )
       .lean();
     if (ride) {
-      (ride.passenger_requested_ride || []).forEach((p) => {
-        const id = p.userId?._id || p.userId;
-        if (id) excludeUserIds.add(String(id));
-      });
-      (ride.passengers || []).forEach((p) => {
-        const id = p.userId?._id || p.userId;
-        if (id) excludeUserIds.add(String(id));
-      });
-      (ride.users_request_Couriers || []).forEach((c) => {
-        const id = c.userId?._id || c.userId;
-        if (id) excludeUserIds.add(String(id));
-      });
+      collectRideParticipantUserIds(ride).forEach((id) => excludeUserIds.add(id));
+      const assigned = await collectAssignedRequestDocIds(rideId);
+      assigned.passengerRideIds.forEach((id) => excludePassengerRideIds.add(id));
+      assigned.courierIds.forEach((id) => excludeCourierIds.add(id));
       fromTrim = String(ride.from || fromTrim).trim();
       toTrim = String(ride.to || toTrim).trim();
       if (!stopoverRows.length && ride.stopovers?.length) {
@@ -387,13 +424,37 @@ const enrouteRequests = async (user, { from, to, date, rideId, stopovers, routeP
     loadPolylineTowns: loadPolylineTownLabels,
   });
 
+  const corridorParticipantIds = await collectActiveCorridorParticipantUserIds(
+    corridor,
+    startOfDay,
+    endOfDay
+  );
+  corridorParticipantIds.forEach((id) => excludeUserIds.add(id));
+
   const corridorFilter = buildCorridorRegex(corridor);
+  const excludeCreatorIds = Array.from(excludeUserIds).filter((id) =>
+    mongoose.Types.ObjectId.isValid(id)
+  );
+  const excludePassengerIds = Array.from(excludePassengerRideIds).filter((id) =>
+    mongoose.Types.ObjectId.isValid(id)
+  );
+  const excludeCourierDocIds = Array.from(excludeCourierIds).filter((id) =>
+    mongoose.Types.ObjectId.isValid(id)
+  );
+
+  const excludeCreatorObjectIds = [
+    user._id,
+    ...excludeCreatorIds.map((id) => new mongoose.Types.ObjectId(id)),
+  ];
 
   const passengers = await PassengerRide.find({
     from: corridorFilter,
     to: corridorFilter,
     status: "pending",
-    creator: { $ne: user._id },
+    creator: { $nin: excludeCreatorObjectIds },
+    ...(excludePassengerIds.length
+      ? { _id: { $nin: excludePassengerIds.map((id) => new mongoose.Types.ObjectId(id)) } }
+      : {}),
     ...passengerOverlapsRideDay(startOfDay, endOfDay),
     $or: [{ assigned_to: { $exists: false } }, { "assigned_to.rideId": null }],
   }).populate("creator", "name gender profile_img");
@@ -401,12 +462,13 @@ const enrouteRequests = async (user, { from, to, date, rideId, stopovers, routeP
     .filter(
       (p) =>
         !excludeUserIds.has(String(p.creator?._id || p.creator)) &&
+        !excludePassengerRideIds.has(String(p._id)) &&
         matchesForwardCorridor(p.from, p.to, corridor)
     )
     .map((p) => ({
     request_type: "passenger",
     passengerId: p._id,
-    creatorId: p.creator?._id,
+    creatorId: p.creator?._id || p.creator,
     name: p.creator?.name || "",
     gender: p.creator?.gender || "",
     profile: p.creator?.profile_img || "",
@@ -421,8 +483,11 @@ const enrouteRequests = async (user, { from, to, date, rideId, stopovers, routeP
   const couriers = await Courier.find({
     from: corridorFilter,
     to: corridorFilter,
-    creator: { $ne: user._id },
     courier_status: "pending",
+    creator: { $nin: excludeCreatorObjectIds },
+    ...(excludeCourierDocIds.length
+      ? { _id: { $nin: excludeCourierDocIds.map((id) => new mongoose.Types.ObjectId(id)) } }
+      : {}),
     $or: [
       { driver_assigned_courier: { $exists: false } },
       { "driver_assigned_courier.rideId": null },
@@ -433,12 +498,13 @@ const enrouteRequests = async (user, { from, to, date, rideId, stopovers, routeP
     .filter(
       (c) =>
         !excludeUserIds.has(String(c.creator?._id || c.creator)) &&
+        !excludeCourierIds.has(String(c._id)) &&
         matchesForwardCorridor(c.from, c.to, corridor)
     )
     .map((c) => ({
     request_type: "courier",
     courierId: c._id,
-    creatorId: c.creator?._id,
+    creatorId: c.creator?._id || c.creator,
     courierNumber: c.courierNumber,
     name: c.creator?.name || "",
     gender: c.creator?.gender || "",
@@ -499,6 +565,7 @@ const pickCourier = async (user, { rideId, courierId }) => {
   courier.driver_assigned_courier = { userId: user.id, rideId };
   courier.courier_status = "driver_assigned";
   await courier.save();
+  await closeStandaloneRequestsAfterJoin(courier.creator, ride);
   const courierEntry = {
     userId: courier.creator,
     courierId: courier._id,
@@ -515,8 +582,8 @@ const pickCourier = async (user, { rideId, courierId }) => {
   };
   await ensureParticipantBoardingOtp(courierEntry, courier.creator, {
     rideId: ride._id,
-    from: ride.from,
-    to: ride.to,
+    from: courier.from,
+    to: courier.to,
   });
   ride.all_deliveries.push(courierEntry);
   ride.users_request_Couriers = (ride.users_request_Couriers || []).filter(
@@ -548,10 +615,13 @@ const pickCourier = async (user, { rideId, courierId }) => {
     action: "courier_assigned",
     courierId: courier._id.toString(),
     rideId: ride._id.toString(),
+    from: ride.from,
+    to: ride.to,
   });
-  emitEnrouteRequestRemoved(ride.from, ride.to, ride.date, {
+  emitEnrouteRequestRemoved(ride.from, ride.to, toEnrouteDateKey(ride.date), {
     courierId: courier._id.toString(),
     type: "courier",
+    userId: courier.creator.toString(),
   });
   emitToUser(user._id, "rideParticipantsUpdated", {
     rideId: ride._id.toString(),

@@ -14,6 +14,7 @@ const login = async (req, res) => handle(res, () => authService.login(req.body))
 const verifyOtp = async (req, res) => handle(res, () => authService.verifyOtp(req.body));
 const verifyToken = async (req, res) => handle(res, () => authService.verifyToken(req.headers.authorization));
 const registerFcmToken = async (req, res) => handle(res, () => authService.registerFcmToken(req.user, req.body.fcmToken));
+const clearFcmToken = async (req, res) => handle(res, () => authService.clearFcmToken(req.user));
 const getPushStatus = async (req, res) => handle(res, () => authService.getPushStatus(req.user));
 const updateProfileImage = async (req, res) => handle(res, () => authService.updateProfileImage(req.user, req.body.profile_img));
 const sendNotification = async (req, res) => handle(res, () => authService.sendNotification(req.body));
@@ -43,6 +44,7 @@ module.exports = {
   verifyOtp,
   verifyToken,
   registerFcmToken,
+  clearFcmToken,
   getPushStatus,
   updateProfileImage,
   sendNotification,

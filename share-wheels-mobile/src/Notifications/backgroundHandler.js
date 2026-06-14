@@ -1,6 +1,6 @@
 /**
  * Must be imported before AppRegistry (see index.js).
- * Shows tray notifications when FCM arrives in background / quit.
+ * Data-only FCM messages in background; skip when system already shows notification payload.
  */
 import {
   getFCMMessaging,
@@ -9,6 +9,10 @@ import {
 import { displayForegroundNotification } from "./displayLocalNotification";
 
 setBackgroundMessageHandler(getFCMMessaging(), async (remoteMessage) => {
+  if (remoteMessage?.notification?.title) {
+    return;
+  }
+
   try {
     await displayForegroundNotification(remoteMessage);
   } catch (e) {

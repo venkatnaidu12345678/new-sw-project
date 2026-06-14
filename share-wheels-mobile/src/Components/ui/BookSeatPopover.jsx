@@ -9,33 +9,55 @@ import {
 } from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
 import FormPopoverShell from "./FormPopoverShell";
+import RideCorridorSegmentPicker from "./RideCorridorSegmentPicker";
+import { defaultCorridorSegment, corridorHasSegments } from "../../Utils/rideCorridorUtils";
+import { usePassengerSegmentFare } from "../../hooks/usePassengerSegmentFare";
 import { useTheme } from "../../context/ThemeContext";
 import { useThemedStyles } from "../../theme/useThemedStyles";
 
 const BookSeatPopover = ({
   visible,
   onClose,
+  ride,
   maxSeats,
-  seatFare,
   quickReserve,
   blockReason,
   booking,
+  segment: externalSegment,
+  hideSegmentPicker = false,
   onBook,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [seats, setSeats] = useState(1);
+  const [internalSegment, setInternalSegment] = useState(() =>
+    defaultCorridorSegment(ride)
+  );
+  const showSegmentPicker =
+    !hideSegmentPicker && corridorHasSegments(ride);
+
+  const activeSegment = showSegmentPicker
+    ? internalSegment
+    : (externalSegment ?? internalSegment);
+
+  const { perSeatFare, segmentKm, fullRouteKm, fareHint, loading: fareLoading } =
+    usePassengerSegmentFare(ride, activeSegment, seats);
 
   useEffect(() => {
-    if (visible) setSeats(1);
-  }, [visible]);
+    if (visible) {
+      setSeats(1);
+      if (!externalSegment) {
+        setInternalSegment(defaultCorridorSegment(ride));
+      }
+    }
+  }, [visible, ride?._id, ride?.from, ride?.to, ride?.stopovers, externalSegment]);
 
   useEffect(() => {
     if (maxSeats > 0 && seats > maxSeats) setSeats(maxSeats);
   }, [maxSeats, seats]);
 
-  const totalFare = seatFare * seats;
-  const canBook = !blockReason && maxSeats >= 1 && !booking;
+  const totalFare = perSeatFare * seats;
+  const canBook = !blockReason && maxSeats >= 1 && !booking && !fareLoading;
 
   return (
     <FormPopoverShell visible={visible} onClose={onClose} disabledClose={booking}>
@@ -69,6 +91,22 @@ const BookSeatPopover = ({
           </View>
         ) : null}
 
+        {showSegmentPicker ? (
+          <RideCorridorSegmentPicker
+            ride={ride}
+            value={activeSegment}
+            onChange={setInternalSegment}
+            disabled={!!blockReason || booking}
+          />
+        ) : hideSegmentPicker && corridorHasSegments(ride) ? (
+          <View style={styles.segmentSummary}>
+            <Icon name="navigate-outline" size={14} color={colors.successText} />
+            <Text style={styles.segmentSummaryText} numberOfLines={2}>
+              Your trip: {activeSegment.from} → {activeSegment.to}
+            </Text>
+          </View>
+        ) : null}
+
         <View style={styles.seatCard}>
           <Text style={styles.seatLabel}>Seats</Text>
           <View style={styles.seatRow}>
@@ -90,14 +128,40 @@ const BookSeatPopover = ({
               <Icon name="add" size={22} color={colors.primary} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.fareLine}>
-            ₹{seatFare}/seat · Total ₹{totalFare}
-          </Text>
+
+          {fareLoading ? (
+            <View style={styles.fareLoadingRow}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.fareLoadingText}>
+                {segmentKm != null
+                  ? `Calculating fare · ${segmentKm.toFixed(1)} km…`
+                  : "Calculating segment fare…"}
+              </Text>
+            </View>
+          ) : (
+            <>
+              {segmentKm != null ? (
+                <Text style={styles.segmentKmText}>
+                  Your trip: {segmentKm.toFixed(1)} km
+                  {fullRouteKm != null &&
+                  Math.abs(fullRouteKm - segmentKm) > 0.5
+                    ? ` of ${fullRouteKm.toFixed(1)} km route`
+                    : ""}
+                </Text>
+              ) : null}
+              <Text style={styles.fareLine}>
+                ₹{perSeatFare}/seat × {seats} = ₹{totalFare}
+              </Text>
+              {fareHint ? (
+                <Text style={styles.fareHintText}>{fareHint}</Text>
+              ) : null}
+            </>
+          )}
         </View>
 
         <TouchableOpacity
           style={[styles.primaryBtn, !canBook && styles.primaryBtnDisabled]}
-          onPress={() => onBook?.(seats)}
+          onPress={() => onBook?.(seats, hideSegmentPicker ? undefined : activeSegment)}
           disabled={!canBook}
           activeOpacity={0.88}
         >
@@ -160,6 +224,23 @@ const createStyles = (c) =>
       fontSize: 13,
       lineHeight: 18,
     },
+    segmentSummary: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      backgroundColor: c.successBg,
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 14,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    segmentSummaryText: {
+      flex: 1,
+      fontSize: 12,
+      fontWeight: "700",
+      color: c.text,
+    },
     seatCard: {
       backgroundColor: c.chipBg,
       borderRadius: 14,
@@ -200,12 +281,38 @@ const createStyles = (c) =>
       minWidth: 100,
       textAlign: "center",
     },
-    fareLine: {
+    fareLoadingRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      marginTop: 12,
+    },
+    fareLoadingText: {
+      fontSize: 13,
+      color: c.textMuted,
+      fontWeight: "600",
+    },
+    segmentKmText: {
       textAlign: "center",
       marginTop: 12,
+      fontSize: 12,
+      fontWeight: "600",
+      color: c.textMuted,
+    },
+    fareLine: {
+      textAlign: "center",
+      marginTop: 8,
       fontSize: 14,
       fontWeight: "700",
       color: c.primary,
+    },
+    fareHintText: {
+      textAlign: "center",
+      marginTop: 6,
+      fontSize: 11,
+      fontWeight: "600",
+      color: c.textMuted,
     },
     primaryBtn: {
       backgroundColor: c.primary,

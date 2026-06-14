@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const { JWT_EXPIRES_IN } = require("../config/jwt");
 const bcrypt = require("bcryptjs");
 const Admin = require("../models/adminModel");
 
@@ -31,7 +32,9 @@ const login = async ({ email, password }) => {
   }
   const isMatch = await bcrypt.compare(password, admin.password);
   if (!isMatch) return { status: 401, body: { message: "Invalid credentials" } };
-  const token = jwt.sign({ id: admin._id, role: "admin" }, process.env.JWT_SECRET, { expiresIn: "7d" });
+  const token = jwt.sign({ id: admin._id, role: "admin" }, process.env.JWT_SECRET, {
+    expiresIn: JWT_EXPIRES_IN,
+  });
   return {
     status: 200,
     body: {

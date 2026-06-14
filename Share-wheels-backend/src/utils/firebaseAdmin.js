@@ -176,6 +176,22 @@ const INVALID_TOKEN_CODES = new Set([
   "messaging/registration-token-not-registered",
 ]);
 
+const resolveAndroidChannel = (type = "") => {
+  const key = String(type || "").toLowerCase();
+  if (key === "chat_message") return "share_wheels_chat";
+  if (
+    [
+      "ride_start_reminder",
+      "ride_expired",
+      "passenger_request_expired",
+      "courier_request_expired",
+    ].includes(key)
+  ) {
+    return "share_wheels_reminders";
+  }
+  return "share_wheels_default";
+};
+
 /**
  * Send FCM to a single device token.
  * @returns {{ success: boolean, messageId?: string, invalidToken?: boolean }}
@@ -190,14 +206,25 @@ async function sendPushNotification(token, title, body, data = {}) {
   if (title) payload.title = String(title);
   if (body) payload.body = String(body);
 
+  const notifType = payload.type || "general";
+  const channelId = resolveAndroidChannel(notifType);
+  const rideId = payload.rideId ? String(payload.rideId) : "";
+  const tag =
+    payload.notificationId ||
+    payload.passengerRideId ||
+    payload.courierId ||
+    `${notifType}-${rideId || "general"}`;
+
   const message = {
     token,
     notification: { title, body },
     data: payload,
     android: {
       priority: "high",
+      collapseKey: rideId || notifType,
       notification: {
-        channelId: "share_wheels_default",
+        channelId,
+        tag,
         icon: "ic_notification",
         color: "#2563EB",
         sound: "default",
@@ -205,11 +232,13 @@ async function sendPushNotification(token, title, body, data = {}) {
         visibility: "public",
         defaultSound: true,
         defaultVibrateTimings: true,
+        ...(rideId ? { threadId: rideId } : {}),
       },
     },
     apns: {
       headers: {
         "apns-priority": "10",
+        ...(rideId ? { "apns-collapse-id": rideId } : {}),
       },
       payload: {
         aps: {
@@ -217,6 +246,7 @@ async function sendPushNotification(token, title, body, data = {}) {
           sound: "default",
           badge: 1,
           "content-available": 1,
+          ...(rideId ? { "thread-id": rideId } : {}),
         },
       },
     },

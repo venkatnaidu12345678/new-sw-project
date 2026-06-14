@@ -87,6 +87,23 @@ const AuthNavigator = () => {
     }
   };
 
+  const keepSessionWithToken = async (token) => {
+    setIsAuthenticated(true);
+    await getProfileData(token);
+    syncFcmTokenWithBackend({ force: true }).catch(() => {});
+  };
+
+  const isTokenAuthFailure = (res) => {
+    const code = String(res?.code || "").toUpperCase();
+    if (code === "TOKEN_EXPIRED" || code === "TOKEN_INVALID") return true;
+    const msg = String(res?.message || "").toLowerCase();
+    return (
+      msg.includes("invalid token") ||
+      msg.includes("token expired") ||
+      msg.includes("token missing")
+    );
+  };
+
   const checkAuth = async () => {
     const startedAt = Date.now();
     try {
@@ -102,15 +119,21 @@ const AuthNavigator = () => {
         ),
       ]);
       if (res?.success) {
-        setIsAuthenticated(true);
-        await getProfileData(token);
-        syncFcmTokenWithBackend({ force: true }).catch(() => {});
-      } else {
+        await keepSessionWithToken(token);
+      } else if (isTokenAuthFailure(res)) {
         await AsyncStorage.multiRemove(["token", "user", "USER_NAME"]);
         setIsAuthenticated(false);
+      } else {
+        // Server unreachable or transient error — keep local session
+        await keepSessionWithToken(token);
       }
     } catch {
-      setIsAuthenticated(false);
+      const token = await AsyncStorage.getItem("token");
+      if (token) {
+        await keepSessionWithToken(token);
+      } else {
+        setIsAuthenticated(false);
+      }
     } finally {
       const elapsed = Date.now() - startedAt;
       const wait = Math.max(0, MIN_BOOTSTRAP_SPLASH_MS - elapsed);
