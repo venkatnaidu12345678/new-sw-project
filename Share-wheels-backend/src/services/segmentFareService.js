@@ -1,8 +1,16 @@
+const User = require("../models/userModel");
 const { getDirections } = require("./googleMapsService");
+const {
+  quoteFareForVehicle,
+  resolveActiveFareConfig,
+  vehicleTypeCandidates,
+} = require("./vehicleFareService");
 const { buildOrderedCorridor } = require("../utils/enrouteCorridorUtils");
-const { routesRoughlyMatch } = require("../utils/participantRequestCleanup");
 
 const normalizeLabel = (value) => String(value || "").trim();
+
+const normalizeVehicleType = (value) =>
+  String(value || "car").trim().toLowerCase();
 
 const labelsMatch = (a, b) => {
   const x = normalizeLabel(a).toLowerCase();
@@ -11,16 +19,40 @@ const labelsMatch = (a, b) => {
   return x === y || x.includes(y) || y.includes(x);
 };
 
-const isFullRideSegment = (segFrom, segTo, rideFrom, rideTo) => {
+const buildCorridorLabels = (ride) => {
+  const labels = [];
+  const seen = new Set();
+  const add = (label) => {
+    const text = normalizeLabel(label);
+    const key = text.toLowerCase();
+    if (!text || seen.has(key)) return;
+    seen.add(key);
+    labels.push(text);
+  };
+
+  add(ride?.from);
+  (Array.isArray(ride?.stopovers) ? ride.stopovers : []).forEach((stop) => {
+    add(stop?.label || stop?.name);
+  });
+  add(ride?.to);
+  return labels;
+};
+
+/** Full driver route only when segment spans corridor start → end (not a stopover leg). */
+const isFullRideSegment = (segFrom, segTo, ride) => {
   const from = normalizeLabel(segFrom);
   const to = normalizeLabel(segTo);
-  const rf = normalizeLabel(rideFrom);
-  const rt = normalizeLabel(rideTo);
-  if (!from || !to || !rf || !rt) return true;
-  return (
-    (labelsMatch(from, rf) && labelsMatch(to, rt)) ||
-    routesRoughlyMatch(from, to, rf, rt)
-  );
+  const corridor = buildCorridorLabels(ride);
+
+  if (corridor.length < 2) {
+    return labelsMatch(from, ride?.from) && labelsMatch(to, ride?.to);
+  }
+
+  const fromIdx = corridor.findIndex((label) => labelsMatch(from, label));
+  const toIdx = corridor.findIndex((label) => labelsMatch(to, label));
+  if (fromIdx < 0 || toIdx < 0 || toIdx <= fromIdx) return false;
+
+  return fromIdx === 0 && toIdx === corridor.length - 1;
 };
 
 const resolveCoordsForLabel = (ride, label) => {
@@ -86,35 +118,156 @@ const corridorIndexRatio = async (ride, from, to) => {
   return (toIdx - fromIdx) / span;
 };
 
-/**
- * Per-seat fare for a passenger corridor segment (e.g. Narsaraopet → Hyderabad on a longer driver ride).
- */
-const calculatePerSeatFareForSegment = async (ride, segment = {}) => {
-  const baseFare = Number(ride?.ride_amount) || 0;
-  if (baseFare <= 0) return 0;
+const resolveRideVehicleType = (ride) => normalizeVehicleType(ride?.vehicle?.type);
 
-  const from = normalizeLabel(segment.from || ride.from);
-  const to = normalizeLabel(segment.to || ride.to);
-  if (!from || !to) return baseFare;
+const enrichRideVehicle = async (ride) => {
+  if (!ride) return ride;
 
-  if (isFullRideSegment(from, to, ride.from, ride.to)) {
-    return Math.round(baseFare);
+  const creatorId = ride.creator?._id || ride.creator;
+  if (!creatorId) return ride;
+
+  const driver = await User.findById(creatorId).select("vehicle.type vehicle.company").lean();
+  if (!driver?.vehicle?.type) return ride;
+
+  const rideType = normalizeVehicleType(ride?.vehicle?.type);
+  const driverType = normalizeVehicleType(driver.vehicle.type);
+  if (rideType === driverType && ride?.vehicle?.company) return ride;
+
+  return {
+    ...ride,
+    vehicle: {
+      ...(ride.vehicle || {}),
+      type: driver.vehicle.type,
+      company: ride.vehicle?.company || driver.vehicle.company || "",
+    },
+  };
+};
+
+const quoteAdminFareForKm = async (ride, distanceKm) => {
+  const km = Number(distanceKm);
+  if (!Number.isFinite(km) || km <= 0) return null;
+
+  const vehicleType = resolveRideVehicleType(ride);
+  const config = await resolveActiveFareConfig(vehicleType);
+  if (!config) return null;
+
+  const quote = quoteFareForVehicle(config, km);
+  if (!quote) return null;
+
+  return { ...quote, resolvedVehicleType: config.vehicleType };
+};
+
+const buildFareHint = (quote, segmentKm) => {
+  if (!quote || segmentKm == null) return "";
+  const fare = Math.round(quote.pricePerSeat ?? quote.price ?? 0);
+  const kmLabel = Number(segmentKm).toFixed(1);
+
+  if (quote.progressive && quote.segments?.length > 1) {
+    const parts = quote.segments.map((s) => `₹${s.rate}/km × ${s.km} km`).join(" + ");
+    return `${kmLabel} km: ${parts} = ₹${fare}`;
   }
 
+  if (quote.rate) {
+    return `₹${quote.rate}/km × ${kmLabel} km = ₹${fare}`;
+  }
+
+  return `${kmLabel} km segment`;
+};
+
+const resolveSegmentDistances = async (ride, from, to, isFull) => {
   const fullMeters = await resolveFullRideDistanceMeters(ride);
-  const segmentMeters = await fetchRouteDistanceMeters(from, to, ride);
+  let segmentMeters = isFull
+    ? fullMeters
+    : await fetchRouteDistanceMeters(from, to, ride);
 
-  if (fullMeters && segmentMeters) {
-    const ratio = Math.min(1, segmentMeters / fullMeters);
-    return Math.max(1, Math.round(baseFare * ratio));
+  if (!segmentMeters && fullMeters && !isFull) {
+    const ratio = await corridorIndexRatio(ride, from, to);
+    if (ratio != null && ratio > 0) {
+      segmentMeters = Math.round(fullMeters * ratio);
+    }
   }
 
-  const ratio = await corridorIndexRatio(ride, from, to);
-  if (ratio != null && ratio > 0) {
-    return Math.max(1, Math.round(baseFare * ratio));
+  return { fullMeters, segmentMeters };
+};
+
+const noFareRulesResult = (ride, { fullMeters, segmentMeters, isFull, segmentKm }) => {
+  const vehicleType = resolveRideVehicleType(ride);
+  const tried = vehicleTypeCandidates(vehicleType).join(", ") || vehicleType;
+  return {
+    perSeat: 0,
+    fullMeters,
+    segmentMeters,
+    isFull,
+    pricingSource: "no_fare_rules",
+    fareHint: `No admin fare rules for ${tried}`,
+    adminQuote: null,
+    segmentKm,
+  };
+};
+
+/**
+ * Per-seat fare for a passenger corridor segment — always admin ₹/km tiers × segment km.
+ */
+const resolveSegmentFare = async (ride, segment = {}) => {
+  const enrichedRide = await enrichRideVehicle(ride);
+
+  const from = normalizeLabel(segment.from || enrichedRide.from);
+  const to = normalizeLabel(segment.to || enrichedRide.to);
+  const isFull = isFullRideSegment(from, to, enrichedRide);
+
+  if (!from || !to) {
+    return {
+      perSeat: 0,
+      fullMeters: null,
+      segmentMeters: null,
+      isFull: true,
+      pricingSource: "invalid_segment",
+      fareHint: "",
+      adminQuote: null,
+    };
   }
 
-  return Math.round(baseFare);
+  const { fullMeters, segmentMeters } = await resolveSegmentDistances(
+    enrichedRide,
+    from,
+    to,
+    isFull
+  );
+  const segmentKm = segmentMeters > 0 ? segmentMeters / 1000 : null;
+
+  if (!segmentKm) {
+    return noFareRulesResult(enrichedRide, {
+      fullMeters,
+      segmentMeters,
+      isFull,
+      segmentKm: null,
+    });
+  }
+
+  const adminQuote = await quoteAdminFareForKm(enrichedRide, segmentKm);
+  if (adminQuote && Number(adminQuote.pricePerSeat) > 0) {
+    return {
+      perSeat: adminQuote.pricePerSeat,
+      fullMeters,
+      segmentMeters,
+      isFull,
+      pricingSource: "admin_tiers",
+      fareHint: buildFareHint(adminQuote, segmentKm),
+      adminQuote,
+    };
+  }
+
+  return noFareRulesResult(enrichedRide, {
+    fullMeters,
+    segmentMeters,
+    isFull,
+    segmentKm,
+  });
+};
+
+const calculatePerSeatFareForSegment = async (ride, segment = {}) => {
+  const result = await resolveSegmentFare(ride, segment);
+  return result.perSeat;
 };
 
 const quoteSegmentFare = async (ride, { from, to, seats = 1 } = {}) => {
@@ -123,36 +276,33 @@ const quoteSegmentFare = async (ride, { from, to, seats = 1 } = {}) => {
     from: normalizeLabel(from || ride.from),
     to: normalizeLabel(to || ride.to),
   };
-  const perSeat = await calculatePerSeatFareForSegment(ride, segment);
-  const fullMeters = await resolveFullRideDistanceMeters(ride);
-  const isFull = isFullRideSegment(segment.from, segment.to, ride.from, ride.to);
-  let segmentMeters = isFull
-    ? fullMeters
-    : await fetchRouteDistanceMeters(segment.from, segment.to, ride);
 
-  if (!segmentMeters && fullMeters && !isFull) {
-    const ratio = await corridorIndexRatio(ride, segment.from, segment.to);
-    if (ratio != null && ratio > 0) {
-      segmentMeters = Math.round(fullMeters * ratio);
-    }
-  }
+  const fare = await resolveSegmentFare(ride, segment);
 
   return {
     from: segment.from,
     to: segment.to,
-    perSeatFare: perSeat,
-    totalFare: perSeat * seatCount,
+    perSeatFare: fare.perSeat,
+    totalFare: fare.perSeat * seatCount,
     seats: seatCount,
-    fullRouteDistanceMeters: fullMeters,
-    segmentDistanceMeters: segmentMeters,
+    fullRouteDistanceMeters: fare.fullMeters,
+    segmentDistanceMeters: fare.segmentMeters,
     fullRideFare: Math.round(Number(ride.ride_amount) || 0),
-    isFullRide: isFull,
+    isFullRide: fare.isFull,
+    pricingSource: fare.pricingSource,
+    vehicleType: resolveRideVehicleType(ride),
+    rate: fare.adminQuote?.rate ?? null,
+    progressive: fare.adminQuote?.progressive ?? false,
+    fareSegments: fare.adminQuote?.segments ?? null,
+    fareHint: fare.fareHint,
   };
 };
 
 module.exports = {
   calculatePerSeatFareForSegment,
   quoteSegmentFare,
+  resolveSegmentFare,
   isFullRideSegment,
   resolveFullRideDistanceMeters,
+  enrichRideVehicle,
 };

@@ -1,10 +1,21 @@
 const mongoose = require("mongoose");
 const VehicleFare = require("../models/vehicleFareModel");
+const {
+  ALLOWED_VEHICLE_TYPES,
+  isAllowedVehicleType,
+  normalizeAllowedVehicleType,
+  vehicleTypeCandidates,
+} = require("../constants/vehicleTypes");
 
-const normalizeVehicleType = (value) =>
-  String(value || "")
-    .trim()
-    .toLowerCase();
+const normalizeVehicleType = (value) => normalizeAllowedVehicleType(value) || "";
+
+const resolveActiveFareConfig = async (vehicleType) => {
+  for (const type of vehicleTypeCandidates(vehicleType)) {
+    const config = await VehicleFare.findOne({ vehicleType: type, isActive: true }).lean();
+    if (config) return config;
+  }
+  return null;
+};
 
 const parseKm = (value, fallback = null) => {
   if (value === null || value === undefined || value === "") return fallback;
@@ -285,7 +296,13 @@ const listActiveFares = async () => {
 const createFare = async (adminId, body = {}) => {
   const vehicleType = normalizeVehicleType(body.vehicleType);
   if (!vehicleType) {
-    return { status: 400, body: { success: false, message: "vehicleType is required" } };
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message: `vehicleType is required and must be one of: ${ALLOWED_VEHICLE_TYPES.join(", ")}`,
+      },
+    };
   }
 
   const existing = await VehicleFare.findOne({ vehicleType });
@@ -382,7 +399,7 @@ const quoteFare = async ({ vehicleType, distanceKm, distanceMeters } = {}) => {
     return { status: 400, body: { success: false, message: "distanceKm or distanceMeters is required" } };
   }
 
-  const config = await VehicleFare.findOne({ vehicleType: type, isActive: true }).lean();
+  const config = await resolveActiveFareConfig(type);
   if (!config) {
     return {
       status: 404,
@@ -417,7 +434,7 @@ const getFareRulesForVehicle = async (vehicleType) => {
     return { status: 400, body: { success: false, message: "vehicleType is required" } };
   }
 
-  const config = await VehicleFare.findOne({ vehicleType: type, isActive: true }).lean();
+  const config = await resolveActiveFareConfig(type);
   if (!config) {
     return {
       status: 404,
@@ -439,6 +456,8 @@ module.exports = {
   deleteFare,
   quoteFare,
   quoteFareForVehicle,
+  resolveActiveFareConfig,
+  vehicleTypeCandidates,
   getFareRulesForVehicle,
   findTierForDistance,
   normalizeTiers,
