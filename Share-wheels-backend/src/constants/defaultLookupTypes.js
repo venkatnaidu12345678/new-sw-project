@@ -5,11 +5,9 @@ const DEFAULT_LOOKUP_TYPES = {
     { label: "Package", value: "package" },
   ],
   vehicle_type: [
-    { label: "Car", value: "car" },
-    { label: "SUV", value: "suv" },
-    { label: "Hatchback", value: "hatchback" },
     { label: "Bike", value: "bike" },
-    { label: "Van", value: "van" },
+    { label: "Auto", value: "auto" },
+    { label: "Car", value: "car" },
   ],
 };
 

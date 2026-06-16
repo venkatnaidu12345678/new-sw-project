@@ -9,10 +9,25 @@ const {
   requestFirebasePasswordReset,
   signInWithFirebasePassword,
 } = require("../utils/firebaseAuthAdmin");
+const {
+  ALLOWED_VEHICLE_TYPES,
+  normalizeAllowedVehicleType,
+} = require("../constants/vehicleTypes");
 // const sendOtp = require("../utils/sendOtp");
 
 const FORGOT_PASSWORD_MESSAGE =
   "Password reset email sent. If you do not see it in your inbox within a few minutes, check your spam or junk folder and mark it as Not spam.";
+
+const resolveVehicleTypeInput = (type) => {
+  const normalized = normalizeAllowedVehicleType(type);
+  if (!normalized) {
+    return {
+      ok: false,
+      message: `Vehicle type must be one of: ${ALLOWED_VEHICLE_TYPES.join(", ")}`,
+    };
+  }
+  return { ok: true, value: normalized };
+};
 const { notifyUser } = require("./notificationService");
 const { assignUserNoIfMissing } = require("../utils/userNoHelper");
 const { findUserByEmail, findUserByMobile, verifyUserPassword } = require("../utils/authCredentials");
@@ -374,6 +389,12 @@ const addVehicle = async (user, body, files = {}) => {
       },
     };
   }
+
+  const typeCheck = resolveVehicleTypeInput(type);
+  if (!typeCheck.ok) {
+    return { status: 400, body: { success: false, message: typeCheck.message } };
+  }
+
   if (!car_no?.trim()) {
     return {
       status: 400,
@@ -419,7 +440,7 @@ const addVehicle = async (user, body, files = {}) => {
   user.vehicle = {
     company: company.trim(),
     model: model.trim(),
-    type: type.trim(),
+    type: typeCheck.value,
     license_number: license_number.trim(),
     car_no: car_no.trim(),
     car_image: images.car_image || "",
@@ -459,7 +480,13 @@ const editVehicle = async (user, body, files = {}) => {
 
   if (company !== undefined) user.vehicle.company = company;
   if (model !== undefined) user.vehicle.model = model;
-  if (type !== undefined) user.vehicle.type = type;
+  if (type !== undefined) {
+    const typeCheck = resolveVehicleTypeInput(type);
+    if (!typeCheck.ok) {
+      return { status: 400, body: { success: false, message: typeCheck.message } };
+    }
+    user.vehicle.type = typeCheck.value;
+  }
   if (license_number !== undefined) user.vehicle.license_number = license_number;
   if (car_no !== undefined) user.vehicle.car_no = car_no;
   if (issue_date !== undefined) user.vehicle.issue_date = issue_date;

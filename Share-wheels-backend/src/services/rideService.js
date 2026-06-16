@@ -603,6 +603,16 @@ const sendPassengerRequest = async (
   });
 
   const perSeatAmount = await calculatePerSeatFareForSegment(ride, bookingSegment);
+  if (!Number.isFinite(perSeatAmount) || perSeatAmount <= 0) {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message:
+          "Could not calculate fare for this segment. Ask the admin to configure vehicle fare rules.",
+      },
+    };
+  }
   const total_amount = perSeatAmount * seats;
 
   if (ride.QuickReserve) {
@@ -700,7 +710,7 @@ const isFullRideBooking = (bookedFrom, bookedTo, rideFrom, rideTo) =>
   routesMatch(bookedFrom, bookedTo, rideFrom, rideTo) ||
   routesRoughlyMatch(bookedFrom, bookedTo, rideFrom, rideTo);
 
-/** Ride origin paired with a mid-route destination (e.g. Hyderabad → Narsaraopet). */
+/** Backwards segment from ride destination (e.g. Hyderabad → Narsaraopet). */
 const isCorruptHybridSegment = (from, to, rideFrom, rideTo) => {
   const fromNorm = normalizeRouteLabel(from).toLowerCase();
   const toNorm = normalizeRouteLabel(to).toLowerCase();
@@ -708,16 +718,13 @@ const isCorruptHybridSegment = (from, to, rideFrom, rideTo) => {
   const rideToNorm = normalizeRouteLabel(rideTo).toLowerCase();
   if (!fromNorm || !toNorm || !rideFromNorm || !rideToNorm) return false;
 
-  const fromIsRideStart =
-    fromNorm === rideFromNorm ||
-    fromNorm.includes(rideFromNorm) ||
-    rideFromNorm.includes(fromNorm);
-  const toIsRideEnd =
-    toNorm === rideToNorm ||
-    toNorm.includes(rideToNorm) ||
-    rideToNorm.includes(toNorm);
+  const labelsAlign = (a, b) =>
+    a === b || a.includes(b) || b.includes(a);
 
-  return fromIsRideStart && !toIsRideEnd;
+  const fromIsRideEnd = labelsAlign(fromNorm, rideToNorm);
+  const toIsRideStart = labelsAlign(toNorm, rideFromNorm);
+
+  return fromIsRideEnd && !toIsRideStart;
 };
 
 const validateSegmentOnRideCorridor = async (ride, from, to) => {
@@ -1014,7 +1021,8 @@ const resolveBookedSegmentForList = (
     if (
       linked?.from &&
       linked?.to &&
-      !isFullRideBooking(linked.from, linked.to, rideFrom, rideTo)
+      !isFullRideBooking(linked.from, linked.to, rideFrom, rideTo) &&
+      !isCorruptHybridSegment(linked.from, linked.to, rideFrom, rideTo)
     ) {
       return linked;
     }
@@ -1286,7 +1294,7 @@ const getRideDetails = async (rideId, viewerId) => {
   if (!mongoose.Types.ObjectId.isValid(rideId)) return { status: 400, body: { success: false, message: "Invalid Ride ID" } };
   let ride = await Ride.findById(rideId)
     .select(
-      "passengers all_deliveries passenger_requested_ride users_request_Couriers status creator vehicle from to fromCoords toCoords stopovers routePolyline selectedRouteIndex date startTime ride_amount availableSeats CanCarryCourier QuickReserve postponeCount postponeReason postponedAt originalScheduledStart cancel_reason"
+      "passengers all_deliveries passenger_requested_ride users_request_Couriers status creator vehicle from to fromCoords toCoords stopovers routePolyline selectedRouteIndex routeDistanceMeters date startTime ride_amount availableSeats CanCarryCourier QuickReserve postponeCount postponeReason postponedAt originalScheduledStart cancel_reason"
     )
     .populate("creator", USER_FIELDS)
     .populate("passengers.userId", USER_FIELDS)
@@ -1489,6 +1497,9 @@ const serializeMatchingRide = (ride, userId) => {
     CanCarryCourier: !!ride.CanCarryCourier,
     QuickReserve: !!ride.QuickReserve,
     vehicle: ride.vehicle,
+    stopovers: ride.stopovers || [],
+    routePolyline: ride.routePolyline || "",
+    routeDistanceMeters: ride.routeDistanceMeters ?? null,
     creator: ride.creator
       ? {
           _id: ride.creator._id,
@@ -1503,7 +1514,7 @@ const serializeMatchingRide = (ride, userId) => {
 };
 
 const MATCHING_RIDE_SELECT =
-  "from to date startTime availableSeats ride_amount status vehicle creator CanCarryCourier QuickReserve passenger_requested_ride.userId users_request_Couriers.userId stopovers routePolyline";
+  "from to date startTime availableSeats ride_amount status vehicle creator CanCarryCourier QuickReserve passenger_requested_ride.userId users_request_Couriers.userId stopovers routePolyline routeDistanceMeters";
 
 const filterRidesByDriverSubscription = async (rides) => {
   if (!Array.isArray(rides) || !rides.length) return [];
@@ -1819,7 +1830,7 @@ const getSegmentFare = async (rideId, { from, to, seats } = {}) => {
   if (!mongoose.Types.ObjectId.isValid(rideId)) {
     return { status: 400, body: { success: false, message: "Invalid ride ID" } };
   }
-  const ride = await Ride.findById(rideId).lean();
+  const ride = await Ride.findById(rideId).populate("creator", "vehicle.type vehicle.company").lean();
   if (!ride) {
     return { status: 404, body: { success: false, message: "Ride not found" } };
   }
