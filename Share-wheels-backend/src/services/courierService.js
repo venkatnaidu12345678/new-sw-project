@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Courier = require("../models/courierModel");
 const Ride = require("../models/rideModel");
 const User = require("../models/userModel");
+const PassengerRide = require("../models/passengerRideModel");
 const { parseAmount } = require("../schemas/commonSchemas");
 const { ensureParticipantBoardingOtp } = require("./rideVerificationService");
 const { notifyUser } = require("./notificationService");
@@ -10,9 +11,10 @@ const {
   emitRideRequestUpdated,
   emitMyRequestsUpdated,
   emitEnrouteRequestRemoved,
+  emitEnrouteRequestAdded,
 } = require("../utils/socketEmit");
 const { escapeRegex, toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
-const { closeStandaloneRequestsAfterJoin, linkStandaloneCouriersForRideRequest } = require("../utils/participantRequestCleanup");
+const { closeStandaloneRequestsAfterJoin, linkStandaloneCouriersForRideRequest, closeOpenOppositeRoleStandalones } = require("../utils/participantRequestCleanup");
 const { expirePendingRideIfStale } = require("./rideExpiryService");
 const { syncLiveTrackingRoster } = require("./rideTrackingService");
 const {
@@ -25,6 +27,15 @@ const parseCourierCalendarDate = (value) => {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
+};
+
+const buildCreatorFilter = (value) => {
+  const sid = value?.toString?.() || String(value || "");
+  if (!sid) return { $in: [] };
+  if (mongoose.Types.ObjectId.isValid(sid)) {
+    return { $in: [sid, new mongoose.Types.ObjectId(sid)] };
+  }
+  return { $in: [sid] };
 };
 
 const normalizeCourierCreateBody = (body) => {
@@ -111,6 +122,9 @@ const createCourierRequest = async (user, body) => {
   }
 
   const courierNumber = `CR-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+  await closeOpenOppositeRoleStandalones(user._id, "courier");
+
   const newCourier = new Courier({
     creator: user._id,
     courierNumber,
@@ -508,7 +522,7 @@ const rejectCourier = async (user, { rideId, courierId }) => {
 };
 
 const removeDelivery = async (user, { rideId, courierId }) => {
-  const ride = await Ride.findById(rideId).select("creator all_deliveries");
+  const ride = await Ride.findById(rideId).select("creator all_deliveries from to date");
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
   if (ride.creator.toString() !== user._id.toString()) return { status: 403, body: { success: false, message: "Only driver allowed" } };
   const delivery = ride.all_deliveries?.find(
@@ -516,13 +530,55 @@ const removeDelivery = async (user, { rideId, courierId }) => {
   );
   if (!delivery) return { status: 404, body: { success: false, message: "Delivery not found" } };
   const courierUserId = delivery.userId?.toString?.() || String(delivery.userId);
+  const creatorFilter = buildCreatorFilter(courierUserId);
   ride.all_deliveries = ride.all_deliveries.filter(
     (d) => d._id?.toString() !== courierId.toString()
   );
   await ride.save();
+  const reopenedCouriers = await Courier.updateMany(
+    {
+      creator: creatorFilter,
+      "driver_assigned_courier.rideId": ride._id,
+      courier_status: {
+        $in: ["driver_assigned", "request_to_driver", "picked_up", "in_transit", "cancelled"],
+      },
+    },
+    {
+      $set: {
+        courier_status: "pending",
+        driver_assigned_courier: { userId: null, rideId: null },
+      },
+    }
+  );
+  const reopenedPassengers = await PassengerRide.updateMany(
+    {
+      creator: creatorFilter,
+      "assigned_to.rideId": ride._id,
+      status: { $in: ["aisgned_passenger", "in_car", "ride_finished", "cancelled"] },
+    },
+    {
+      $set: {
+        status: "pending",
+        assigned_to: { userId: null, rideId: null },
+      },
+    }
+  );
+  emitMyRequestsUpdated(courierUserId, {
+    action: "participant_reopened",
+    rideId: ride._id.toString(),
+    reopenedPassengers: reopenedPassengers.modifiedCount || 0,
+    reopenedCouriers: reopenedCouriers.modifiedCount || 0,
+  });
+  emitEnrouteRequestAdded(ride.from, ride.to, ride.date, {
+    action: "participant_reopened",
+    rideId: ride._id.toString(),
+    userId: courierUserId.toString(),
+    reopenedPassengers: reopenedPassengers.modifiedCount || 0,
+    reopenedCouriers: reopenedCouriers.modifiedCount || 0,
+  });
   await notifyUser(courierUserId, {
     title: "Removed from ride",
-    body: "You have been removed from the courier delivery by the driver.",
+    body: "You have been removed from the courier delivery. Your open requests are visible again.",
     type: "courier_removed",
     data: { rideId: ride._id.toString(), courierId: courierId.toString() },
   });

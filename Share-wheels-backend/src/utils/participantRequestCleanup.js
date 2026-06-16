@@ -9,7 +9,14 @@ const {
   courierOverlapsRideDay,
 } = require("./rideDateQueryUtils");
 const { buildOrderedCorridor, matchesForwardCorridor } = require("./enrouteCorridorUtils");
-const { emitEnrouteRequestRemoved } = require("./socketEmit");
+const {
+  OPEN_PASSENGER_FILTER,
+  OPEN_COURIER_FILTER,
+} = require("../services/requestExpiryService");
+const {
+  emitEnrouteRequestRemoved,
+  emitMyRequestsUpdated,
+} = require("./socketEmit");
 
 const refUserId = (ref) =>
   ref?.userId?._id?.toString?.() ||
@@ -28,6 +35,18 @@ const collectRideParticipantUserIds = (ride) => {
   (ride?.passenger_requested_ride || []).forEach(add);
   (ride?.passengers || []).forEach(add);
   (ride?.users_request_Couriers || []).forEach(add);
+  (ride?.all_deliveries || []).forEach(add);
+  return ids;
+};
+
+/** Confirmed passengers/couriers only — not pending booking requests on other rides. */
+const collectConfirmedRideParticipantUserIds = (ride) => {
+  const ids = new Set();
+  const add = (row) => {
+    const id = refUserId(row);
+    if (id) ids.add(id);
+  };
+  (ride?.passengers || []).forEach(add);
   (ride?.all_deliveries || []).forEach(add);
   return ids;
 };
@@ -123,14 +142,12 @@ const collectActiveCorridorParticipantUserIds = async (
     status: { $in: ["pending", "started"] },
     date: { $gte: startOfDay, $lte: endOfDay },
   })
-    .select(
-      "from to passenger_requested_ride passengers users_request_Couriers all_deliveries"
-    )
+    .select("from to passengers all_deliveries")
     .lean();
 
   rides.forEach((ride) => {
     if (!matchesForwardCorridor(ride.from, ride.to, corridor)) return;
-    collectRideParticipantUserIds(ride).forEach((id) => ids.add(id));
+    collectConfirmedRideParticipantUserIds(ride).forEach((id) => ids.add(id));
   });
 
   const [assignedPassengerCreators, assignedCourierCreators] = await Promise.all([
@@ -274,19 +291,107 @@ const getUserPassengerParticipatedRides = async (userId) => {
 };
 
 const collectAssignedRequestDocIds = async (rideId) => {
-  const mongoose = require("mongoose");
   if (!rideId || !mongoose.Types.ObjectId.isValid(rideId)) {
     return { passengerRideIds: [], courierIds: [] };
   }
   const oid = new mongoose.Types.ObjectId(rideId);
   const [passengerRideIds, courierIds] = await Promise.all([
-    PassengerRide.find({ "assigned_to.rideId": oid }).distinct("_id"),
-    Courier.find({ "driver_assigned_courier.rideId": oid }).distinct("_id"),
+    PassengerRide.find({
+      "assigned_to.rideId": oid,
+      status: { $nin: ["cancelled", "expired"] },
+    }).distinct("_id"),
+    Courier.find({
+      "driver_assigned_courier.rideId": oid,
+      courier_status: { $nin: ["cancelled", "expired"] },
+    }).distinct("_id"),
   ]);
   return {
     passengerRideIds: passengerRideIds.map((id) => id.toString()),
     courierIds: courierIds.map((id) => id.toString()),
   };
+};
+
+const emitStandaloneRemovals = (rows, type) => {
+  rows.forEach((row) => {
+    const dateKey =
+      type === "passenger"
+        ? toEnrouteDateKey(row.date)
+        : toEnrouteDateKey(row.date?.startDate || row.date);
+    emitEnrouteRequestRemoved(row.from, row.to, dateKey, {
+      type,
+      userId: row.creator?.toString?.() || String(row.creator || ""),
+      ...(type === "passenger"
+        ? { passengerRideId: row._id?.toString?.() || String(row._id || "") }
+        : { courierId: row._id?.toString?.() || String(row._id || "") }),
+    });
+  });
+};
+
+/**
+ * One open standalone per user: creating passenger closes open couriers and vice versa.
+ */
+const closeOpenOppositeRoleStandalones = async (userId, creatingRole) => {
+  const { oid, str } = toParticipantId(userId);
+  if (!oid && !str) return { closedPassengers: 0, closedCouriers: 0 };
+  const creatorFilter = oid || str;
+
+  if (creatingRole === "passenger") {
+    const open = await Courier.find({
+      ...OPEN_COURIER_FILTER,
+      creator: creatorFilter,
+    }).lean();
+    if (!open.length) return { closedPassengers: 0, closedCouriers: 0 };
+    await Courier.updateMany(
+      { _id: { $in: open.map((c) => c._id) } },
+      {
+        $set: {
+          courier_status: "cancelled",
+          driver_assigned_courier: { userId: null, rideId: null },
+        },
+      }
+    );
+    emitStandaloneRemovals(open, "courier");
+    return { closedPassengers: 0, closedCouriers: open.length };
+  }
+
+  if (creatingRole === "courier") {
+    const open = await PassengerRide.find({
+      ...OPEN_PASSENGER_FILTER,
+      creator: creatorFilter,
+    }).lean();
+    if (!open.length) return { closedPassengers: 0, closedCouriers: 0 };
+    await PassengerRide.updateMany(
+      { _id: { $in: open.map((p) => p._id) } },
+      {
+        $set: {
+          status: "cancelled",
+          assigned_to: { userId: null, rideId: null },
+        },
+      }
+    );
+    emitStandaloneRemovals(open, "passenger");
+    return { closedPassengers: open.length, closedCouriers: 0 };
+  }
+
+  return { closedPassengers: 0, closedCouriers: 0 };
+};
+
+/** At most one enroute row per creator — passenger wins over courier if both exist. */
+const dedupeEnrouteRequestsByCreator = (requests = []) => {
+  const byCreator = new Map();
+  for (const req of requests) {
+    const cid = String(req.creatorId || "");
+    if (!cid) continue;
+    const existing = byCreator.get(cid);
+    if (!existing) {
+      byCreator.set(cid, req);
+      continue;
+    }
+    if (req.request_type === "passenger" && existing.request_type === "courier") {
+      byCreator.set(cid, req);
+    }
+  }
+  return Array.from(byCreator.values());
 };
 
 const emitEnrouteRemovals = (ride, rows, type) => {
@@ -383,6 +488,67 @@ const closeStandaloneRequestsAfterJoin = async (userId, ride, options = {}) => {
   await closeStandaloneCourierRequestsAfterJoin(userId, ride, options);
 };
 
+/**
+ * After a driver enroute pick, close every other open standalone request from that user
+ * (passenger + courier) so they cannot be picked twice on the same ride.
+ */
+const closeSiblingStandalonesAfterEnroutePick = async (
+  userId,
+  ride,
+  { pickedPassengerRideId, pickedCourierId } = {}
+) => {
+  const { oid, str } = toParticipantId(userId);
+  if (!oid && !str) return;
+
+  const creatorFilter = oid || str;
+  const keepPassengerId = String(pickedPassengerRideId || "");
+  const keepCourierId = String(pickedCourierId || "");
+
+  const openPassengers = await PassengerRide.find({
+    ...OPEN_PASSENGER_FILTER,
+    creator: creatorFilter,
+  }).lean();
+
+  const passengersToClose = openPassengers.filter(
+    (row) => String(row._id) !== keepPassengerId
+  );
+
+  if (passengersToClose.length) {
+    await PassengerRide.updateMany(
+      { _id: { $in: passengersToClose.map((p) => p._id) } },
+      {
+        $set: {
+          status: "cancelled",
+          assigned_to: { userId: null, rideId: null },
+        },
+      }
+    );
+    emitEnrouteRemovals(ride, passengersToClose, "passenger");
+  }
+
+  const openCouriers = await Courier.find({
+    ...OPEN_COURIER_FILTER,
+    creator: creatorFilter,
+  }).lean();
+
+  const couriersToClose = openCouriers.filter(
+    (row) => String(row._id) !== keepCourierId
+  );
+
+  if (couriersToClose.length) {
+    await Courier.updateMany(
+      { _id: { $in: couriersToClose.map((c) => c._id) } },
+      {
+        $set: {
+          courier_status: "cancelled",
+          driver_assigned_courier: { userId: null, rideId: null },
+        },
+      }
+    );
+    emitEnrouteRemovals(ride, couriersToClose, "courier");
+  }
+};
+
 const shouldHideStandaloneByParticipation = (req, participatedRides = []) =>
   participatedRides.some((ride) =>
     routesRoughlyMatch(req.from, req.to, ride.from, ride.to)
@@ -390,6 +556,7 @@ const shouldHideStandaloneByParticipation = (req, participatedRides = []) =>
 
 module.exports = {
   collectRideParticipantUserIds,
+  collectConfirmedRideParticipantUserIds,
   routesRoughlyMatch,
   getUserActiveParticipatedRides,
   getUserCourierParticipatedRides,
@@ -401,4 +568,7 @@ module.exports = {
   closeStandalonePassengerRequestsAfterJoin,
   closeStandaloneCourierRequestsAfterJoin,
   closeStandaloneRequestsAfterJoin,
+  closeSiblingStandalonesAfterEnroutePick,
+  closeOpenOppositeRoleStandalones,
+  dedupeEnrouteRequestsByCreator,
 };
