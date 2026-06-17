@@ -274,15 +274,8 @@ const MyRequest = () => {
 
   useMyRequestsSocket(
     useCallback(
-      (payload) => {
-        if (payload) {
-          setPassengerRides((prev) =>
-            prev.filter((row) => !shouldRemoveMyRequestRow(row, payload))
-          );
-          setCourierRides((prev) =>
-            prev.filter((row) => !shouldRemoveMyRequestRow(row, payload))
-          );
-        }
+      (_payload) => {
+        // Always trust backend as source-of-truth to avoid removing sibling requests locally.
         fetchActiveTabRequests();
       },
       [fetchActiveTabRequests]
