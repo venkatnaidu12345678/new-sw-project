@@ -27,6 +27,7 @@ const {
   emitRideParticipantsUpdated,
   emitMyRequestsUpdated,
   emitEnrouteRequestRemoved,
+  emitEnrouteRequestAdded,
   emitRideRequestUpdated,
 } = require("../utils/socketEmit");
 const { toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
@@ -1826,6 +1827,183 @@ const deleteMyCourierRequest = async (user, requestId) => {
   };
 };
 
+const parseDateValue = (value) => {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+const updateMyPassengerRequest = async (user, requestId, body = {}) => {
+  if (!mongoose.Types.ObjectId.isValid(requestId)) {
+    return { status: 400, body: { success: false, message: "Invalid request id" } };
+  }
+
+  const userId = new mongoose.Types.ObjectId(user._id);
+  const doc = await PassengerRide.findOne({
+    _id: requestId,
+    creator: userId,
+    status: "pending",
+    $or: [{ assigned_to: { $exists: false } }, { "assigned_to.rideId": null }],
+  });
+  if (!doc) {
+    return {
+      status: 404,
+      body: {
+        success: false,
+        message: "Request not found or cannot be edited (only pending open requests)",
+      },
+    };
+  }
+
+  const from = String(body.from || "").trim();
+  const to = String(body.to || "").trim();
+  const seats = Number(body.seats_needed);
+  const amount = parseAmount(body.amount_will);
+  const startDate = parseDateValue(body.date?.startDate ?? body.date ?? body.ride_need_date);
+  const endDateRaw = body.date?.endDate ?? body.date_end ?? null;
+  const endDate = endDateRaw ? parseDateValue(endDateRaw) : null;
+
+  if (!from || !to || !startDate || !Number.isFinite(seats) || seats < 1) {
+    return { status: 400, body: { success: false, message: "Invalid route, seats, or date" } };
+  }
+  if (amount === null || amount <= 0) {
+    return { status: 400, body: { success: false, message: "Valid amount_will is required" } };
+  }
+
+  const prev = {
+    from: doc.from,
+    to: doc.to,
+    date: doc.date,
+    passengerRideId: doc._id.toString(),
+    userId: doc.creator.toString(),
+    type: "passenger",
+  };
+
+  doc.from = from;
+  doc.to = to;
+  doc.seats_needed = seats;
+  doc.amount_will = amount;
+  doc.ride_need_date = startDate;
+  doc.date = startDate;
+  doc.date_end = endDate || null;
+  if (typeof body.luggage_included === "boolean") {
+    doc.luggage_included = body.luggage_included;
+  }
+  await doc.save();
+
+  emitEnrouteRequestRemoved(prev.from, prev.to, toEnrouteDateKey(prev.date), prev);
+  emitEnrouteRequestAdded(doc.from, doc.to, toEnrouteDateKey(doc.date), {
+    passengerRideId: doc._id.toString(),
+    userId: doc.creator.toString(),
+    type: "passenger",
+  });
+  emitMyRequestsUpdated(doc.creator, {
+    action: "passenger_request_updated",
+    passengerRideId: doc._id.toString(),
+  });
+
+  return {
+    status: 200,
+    body: { success: true, message: "Passenger request updated", request: doc },
+  };
+};
+
+const updateMyCourierRequest = async (user, requestId, body = {}) => {
+  if (!mongoose.Types.ObjectId.isValid(requestId)) {
+    return { status: 400, body: { success: false, message: "Invalid request id" } };
+  }
+
+  const userId = new mongoose.Types.ObjectId(user._id);
+  const doc = await Courier.findOne({
+    _id: requestId,
+    creator: userId,
+    courier_status: { $in: ["pending", "request_to_driver"] },
+    $or: [
+      { driver_assigned_courier: { $exists: false } },
+      { "driver_assigned_courier.rideId": null },
+    ],
+  });
+  if (!doc) {
+    return {
+      status: 404,
+      body: {
+        success: false,
+        message: "Request not found or cannot be edited (only pending open requests)",
+      },
+    };
+  }
+
+  const from = String(body.from || "").trim();
+  const to = String(body.to || "").trim();
+  const courierType = String(body.courier_type || "").trim();
+  const what = String(body.what_to_deliver || "").trim();
+  const image = String(body.courier_img || "").trim();
+  const amount = parseAmount(body.amount_will);
+  const startDate = parseDateValue(body.date?.startDate ?? body.date);
+  const endDate = parseDateValue(body.date?.endDate ?? body.date) || startDate;
+  const receiverName = String(body.receiver_name || "").trim();
+  const receiverMobile = String(body.receiver_mobile || "").trim();
+  const receiverAlt = String(body.receiver_alternate_mobile || "").trim() || receiverMobile;
+  const receiverAddress = String(body.receiver_address || "").trim();
+
+  if (
+    !from ||
+    !to ||
+    !courierType ||
+    !what ||
+    !image ||
+    !startDate ||
+    !receiverName ||
+    !receiverMobile ||
+    !receiverAddress
+  ) {
+    return { status: 400, body: { success: false, message: "Invalid courier request fields" } };
+  }
+  if (amount === null || amount <= 0) {
+    return { status: 400, body: { success: false, message: "Valid amount_will is required" } };
+  }
+
+  const prev = {
+    from: doc.from,
+    to: doc.to,
+    date: doc.date?.startDate || doc.date,
+    courierId: doc._id.toString(),
+    userId: doc.creator.toString(),
+    type: "courier",
+  };
+
+  doc.from = from;
+  doc.to = to;
+  doc.courier_type = courierType;
+  doc.what_to_deliver = what;
+  doc.courier_img = image;
+  doc.amount_will = amount;
+  doc.date = { startDate, endDate };
+  doc.courier_receiver_details = {
+    name: receiverName,
+    mobile: receiverMobile,
+    alternate_mobile: receiverAlt,
+    Address: receiverAddress,
+  };
+  await doc.save();
+
+  emitEnrouteRequestRemoved(prev.from, prev.to, toEnrouteDateKey(prev.date), prev);
+  emitEnrouteRequestAdded(doc.from, doc.to, toEnrouteDateKey(doc.date?.startDate || doc.date), {
+    courierId: doc._id.toString(),
+    userId: doc.creator.toString(),
+    type: "courier",
+  });
+  emitMyRequestsUpdated(doc.creator, {
+    action: "courier_request_updated",
+    courierId: doc._id.toString(),
+  });
+
+  return {
+    status: 200,
+    body: { success: true, message: "Courier request updated", request: doc },
+  };
+};
+
 const getSegmentFare = async (rideId, { from, to, seats } = {}) => {
   if (!mongoose.Types.ObjectId.isValid(rideId)) {
     return { status: 400, body: { success: false, message: "Invalid ride ID" } };
@@ -1853,4 +2031,6 @@ module.exports = {
   getSegmentFare,
   deleteMyPassengerRequest,
   deleteMyCourierRequest,
+  updateMyPassengerRequest,
+  updateMyCourierRequest,
 };

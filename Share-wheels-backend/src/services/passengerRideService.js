@@ -8,14 +8,18 @@ const { ensureParticipantBoardingOtp } = require("./rideVerificationService");
 const { notifyUser } = require("./notificationService");
 const { getRideDetails } = require("./rideService");
 const { toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
-const { closeStandaloneRequestsAfterJoin } = require("../utils/participantRequestCleanup");
+const { closeSiblingStandalonesAfterEnroutePick, closeOpenOppositeRoleStandalones } = require("../utils/participantRequestCleanup");
 const {
   emitToUser,
   emitRideParticipantsUpdated,
   emitMyRequestsUpdated,
   emitEnrouteRequestRemoved,
 } = require("../utils/socketEmit");
-const { rejectIfCourierJoiningAsPassenger } = require("../utils/rideParticipantRules");
+const {
+  rejectIfEnroutePickWouldConflict,
+  participantNotOnRideFilter,
+} = require("../utils/rideParticipantRules");
+const { withRidePickLock } = require("../utils/ridePickLock");
 const { expireStalePassengerRequests } = require("./requestExpiryService");
 
 const createPassengerRequest = async (user, { from, to, ride_need_date, seats_needed, date, luggage_included, amount_will }) => {
@@ -32,6 +36,8 @@ const createPassengerRequest = async (user, { from, to, ride_need_date, seats_ne
   if (!startDateRaw) {
     return { status: 400, body: { error: "Start date is required" } };
   }
+
+  await closeOpenOppositeRoleStandalones(user._id, "passenger");
 
   const passengerRide = await PassengerRide.create({
     creator: user._id,
@@ -93,6 +99,17 @@ const getOpenRequests = async (user) => {
 const driverSubscriptionService = require("./driverSubscriptionService");
 
 const pickPassenger = async (user, { passenger_rideId, rideId }) => {
+  if (!passenger_rideId || !rideId) {
+    return { status: 400, body: { message: "passenger_rideId and rideId are required" } };
+  }
+  if (!mongoose.Types.ObjectId.isValid(passenger_rideId)) {
+    return { status: 400, body: { message: "Invalid passenger_rideId" } };
+  }
+  if (!mongoose.Types.ObjectId.isValid(rideId)) {
+    return { status: 400, body: { message: "Invalid rideId" } };
+  }
+
+  return withRidePickLock(rideId, async () => {
   const entitlement = await driverSubscriptionService.assertCanPickEnroute(
     user._id,
     rideId
@@ -109,9 +126,6 @@ const pickPassenger = async (user, { passenger_rideId, rideId }) => {
     };
   }
 
-  if (!passenger_rideId || !rideId) return { status: 400, body: { message: "passenger_rideId and rideId are required" } };
-  if (!mongoose.Types.ObjectId.isValid(passenger_rideId)) return { status: 400, body: { message: "Invalid passenger_rideId" } };
-  if (!mongoose.Types.ObjectId.isValid(rideId)) return { status: 400, body: { message: "Invalid rideId" } };
   const passengerRide = await PassengerRide.findById(passenger_rideId);
   if (!passengerRide) return { status: 404, body: { message: "Passenger not found" } };
   if (passengerRide.creator.toString() === user._id.toString()) return { status: 400, body: { message: "You cannot pick your own request" } };
@@ -119,46 +133,116 @@ const pickPassenger = async (user, { passenger_rideId, rideId }) => {
     return { status: 400, body: { message: "This passenger request has expired" } };
   }
   if (passengerRide.status !== "pending") return { status: 400, body: { message: "Passenger already picked" } };
-  const ride = await Ride.findById(rideId);
+  let ride = await Ride.findById(rideId);
   if (!ride) return { status: 404, body: { message: "Ride not found" } };
   if (ride.creator.toString() !== user._id.toString()) return { status: 403, body: { message: "Unauthorized" } };
   if (ride.availableSeats < passengerRide.seats_needed) return { status: 400, body: { success: false, message: "Not enough seats" } };
-  const courierConflict = rejectIfCourierJoiningAsPassenger(ride, passengerRide.creator);
-  if (courierConflict.blocked) {
-    return { status: 400, body: { message: courierConflict.message } };
+
+  const participantConflict = rejectIfEnroutePickWouldConflict(
+    ride,
+    passengerRide.creator,
+    "passenger"
+  );
+  if (participantConflict.blocked) {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message: participantConflict.message,
+        code: participantConflict.code || "PARTICIPANT_CONFLICT",
+      },
+    };
+  }
+
+  const claimedPassengerRide = await PassengerRide.findOneAndUpdate(
+    {
+      _id: passenger_rideId,
+      status: "pending",
+      $or: [{ assigned_to: { $exists: false } }, { "assigned_to.rideId": null }],
+    },
+    {
+      $set: {
+        assigned_to: { userId: user._id, rideId: ride._id },
+        status: "aisgned_passenger",
+      },
+    },
+    { new: true }
+  );
+  if (!claimedPassengerRide) {
+    return { status: 400, body: { message: "Passenger already picked" } };
   }
 
   const passengerEntry = {
-    userId: passengerRide.creator,
-    requires_seats: passengerRide.seats_needed,
-    from: passengerRide.from || ride.from,
-    to: passengerRide.to || ride.to,
-    ride_amount: passengerRide.amount_will || 0,
+    userId: claimedPassengerRide.creator,
+    requires_seats: claimedPassengerRide.seats_needed,
+    from: claimedPassengerRide.from || ride.from,
+    to: claimedPassengerRide.to || ride.to,
+    ride_amount: claimedPassengerRide.amount_will || 0,
     status: "accepted",
     joinedAt: new Date(),
   };
-  await ensureParticipantBoardingOtp(passengerEntry, passengerRide.creator, {
+  await ensureParticipantBoardingOtp(passengerEntry, claimedPassengerRide.creator, {
     rideId: ride._id,
     from: ride.from,
     to: ride.to,
   });
 
-  passengerRide.assigned_to = { userId: user._id, rideId: ride._id };
-  passengerRide.status = "aisgned_passenger";
-  await passengerRide.save();
+  const updatedRide = await Ride.findOneAndUpdate(
+    {
+      _id: rideId,
+      creator: user._id,
+      availableSeats: { $gte: claimedPassengerRide.seats_needed },
+      ...participantNotOnRideFilter(claimedPassengerRide.creator),
+    },
+    {
+      $push: { passengers: passengerEntry },
+      $inc: { availableSeats: -claimedPassengerRide.seats_needed },
+    },
+    { new: true }
+  );
 
-  ride.passengers.push(passengerEntry);
-  ride.availableSeats -= passengerRide.seats_needed;
-  await ride.save();
-  await closeStandaloneRequestsAfterJoin(passengerRide.creator, ride);
+  if (!updatedRide) {
+    await PassengerRide.findByIdAndUpdate(claimedPassengerRide._id, {
+      $set: {
+        status: "pending",
+        assigned_to: { userId: null, rideId: null },
+      },
+    });
+    const latestRide = await Ride.findById(rideId);
+    const retryConflict = rejectIfEnroutePickWouldConflict(
+      latestRide,
+      claimedPassengerRide.creator,
+      "passenger"
+    );
+    if (retryConflict.blocked) {
+      return {
+        status: 400,
+        body: {
+          success: false,
+          message: retryConflict.message,
+          code: retryConflict.code || "PARTICIPANT_CONFLICT",
+        },
+      };
+    }
+    return {
+      status: 400,
+      body: { success: false, message: "Not enough seats or ride changed. Try again." },
+    };
+  }
+
+  ride = updatedRide;
+
+  await closeSiblingStandalonesAfterEnroutePick(claimedPassengerRide.creator, ride, {
+    pickedPassengerRideId: claimedPassengerRide._id,
+  });
 
   await UserRides.findOneAndUpdate(
-    { creator: passengerRide.creator },
+    { creator: claimedPassengerRide.creator },
     { $pull: { my_pending_ride_requests: { rideId: ride._id } } }
   );
 
   const driver = await User.findById(user._id);
-  await notifyUser(passengerRide.creator, {
+  await notifyUser(claimedPassengerRide.creator, {
     title: "Ride request accepted",
     body: `${driver?.name || "Driver"} picked you for their ride`,
     type: "ride_accept",
@@ -167,24 +251,24 @@ const pickPassenger = async (user, { passenger_rideId, rideId }) => {
 
   emitRideParticipantsUpdated(ride._id, {
     action: "passenger_picked",
-    passengerRideId: passengerRide._id.toString(),
-    userId: passengerRide.creator.toString(),
+    passengerRideId: claimedPassengerRide._id.toString(),
+    userId: claimedPassengerRide.creator.toString(),
   });
   emitToUser(user._id, "rideParticipantsUpdated", {
     rideId: ride._id.toString(),
     action: "passenger_picked",
   });
-  emitMyRequestsUpdated(passengerRide.creator, {
+  emitMyRequestsUpdated(claimedPassengerRide.creator, {
     action: "passenger_assigned",
-    passengerRideId: passengerRide._id.toString(),
+    passengerRideId: claimedPassengerRide._id.toString(),
     rideId: ride._id.toString(),
     from: ride.from,
     to: ride.to,
   });
   emitEnrouteRequestRemoved(ride.from, ride.to, toEnrouteDateKey(ride.date), {
-    passengerRideId: passengerRide._id.toString(),
+    passengerRideId: claimedPassengerRide._id.toString(),
     type: "passenger",
-    userId: passengerRide.creator.toString(),
+    userId: claimedPassengerRide.creator.toString(),
   });
 
   await driverSubscriptionService.recordEnroutePick(user._id, rideId);
@@ -197,10 +281,11 @@ const pickPassenger = async (user, { passenger_rideId, rideId }) => {
       success: true,
       message: "Passenger picked successfully",
       ride,
-      passengerRide,
+      passengerRide: claimedPassengerRide,
       details: detailsRes.body?.data || null,
     },
   };
+  });
 };
 
 module.exports = { createPassengerRequest, getOpenRequests, pickPassenger };

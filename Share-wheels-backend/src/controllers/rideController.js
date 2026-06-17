@@ -33,9 +33,17 @@ module.exports = {
     handle(res, () =>
       rideService.deleteMyPassengerRequest(req.user, req.params.requestId)
     ),
+  updateMyPassengerRequest: async (req, res) =>
+    handle(res, () =>
+      rideService.updateMyPassengerRequest(req.user, req.params.requestId, req.body)
+    ),
   deleteMyCourierRequest: async (req, res) =>
     handle(res, () =>
       rideService.deleteMyCourierRequest(req.user, req.params.requestId)
+    ),
+  updateMyCourierRequest: async (req, res) =>
+    handle(res, () =>
+      rideService.updateMyCourierRequest(req.user, req.params.requestId, req.body)
     ),
   getSegmentFare: async (req, res) =>
     handle(res, () =>

@@ -32,6 +32,13 @@ const emitEnrouteRequestRemoved = (from, to, date, payload = {}) => {
     .emit("enrouteRequestRemoved", payload);
 };
 
+const emitEnrouteRequestAdded = (from, to, date, payload = {}) => {
+  if (!global.io) return;
+  global.io
+    .to(enrouteRoomKey(from, to, date))
+    .emit("enrouteRequestAdded", payload);
+};
+
 const emitRideRequestUpdated = (rideId, payload = {}) => {
   if (!global.io || !rideId) return;
   global.io
@@ -50,6 +57,7 @@ module.exports = {
   emitRideParticipantsUpdated,
   emitMyRequestsUpdated,
   emitEnrouteRequestRemoved,
+  emitEnrouteRequestAdded,
   emitRideRequestUpdated,
   emitNotificationReceived,
 };

@@ -13,6 +13,7 @@
     "db:seed-ads": "node scripts/seedSampleAds.js",
     "db:backfill-passwords": "node scripts/backfillPasswordPlain.js",
     "db:reset": "npm run db:clear && npm run db:setup",
+    "db:cleanup-requests": "node scripts/cleanupDuplicateRequests.js --yes",
     "test:cloudinary": "node scripts/testCloudinary.js"
   },
   "dependencies": {

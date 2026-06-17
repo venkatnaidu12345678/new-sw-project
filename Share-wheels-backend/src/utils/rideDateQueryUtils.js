@@ -90,10 +90,25 @@ const toEnrouteDateKey = (dateInput) => {
   return `${y}-${m}-${day}`;
 };
 
+/** Merge multiple Mongo query fragments that may each contain `$and`. */
+const mergeMongoAndClauses = (...parts) => {
+  const clauses = [];
+  for (const part of parts) {
+    if (!part || typeof part !== "object") continue;
+    if (Array.isArray(part.$and)) {
+      clauses.push(...part.$and);
+    } else if (Object.keys(part).length) {
+      clauses.push(part);
+    }
+  }
+  return clauses.length ? { $and: clauses } : {};
+};
+
 module.exports = {
   escapeRegex,
   getRideDayBounds,
   passengerOverlapsRideDay,
   courierOverlapsRideDay,
   toEnrouteDateKey,
+  mergeMongoAndClauses,
 };

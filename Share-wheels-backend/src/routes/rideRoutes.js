@@ -22,10 +22,20 @@ router.delete(
   authMiddleware,
   rideController.deleteMyPassengerRequest
 );
+router.put(
+  "/my-passenger-requests/:requestId",
+  authMiddleware,
+  rideController.updateMyPassengerRequest
+);
 router.delete(
   "/my-courier-requests/:requestId",
   authMiddleware,
   rideController.deleteMyCourierRequest
+);
+router.put(
+  "/my-courier-requests/:requestId",
+  authMiddleware,
+  rideController.updateMyCourierRequest
 );
 
 router.use("/:rideId/chat", rideChatRoutes);
