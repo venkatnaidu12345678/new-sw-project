@@ -262,8 +262,6 @@ const pickPassenger = async (user, { passenger_rideId, rideId }) => {
     action: "passenger_assigned",
     passengerRideId: claimedPassengerRide._id.toString(),
     rideId: ride._id.toString(),
-    from: ride.from,
-    to: ride.to,
   });
   emitEnrouteRequestRemoved(ride.from, ride.to, toEnrouteDateKey(ride.date), {
     passengerRideId: claimedPassengerRide._id.toString(),

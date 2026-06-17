@@ -183,8 +183,6 @@ const acceptPassengerRequest = async (user, { rideId, passenger_userId }) => {
   emitMyRequestsUpdated(passenger_userId, {
     action: "ride_request_accepted",
     rideId: ride._id.toString(),
-    from: ride.from,
-    to: ride.to,
     ...(cancelledStandalone[0]
       ? { passengerRideId: cancelledStandalone[0]._id.toString() }
       : {}),
@@ -746,8 +744,6 @@ const pickCourier = async (user, { rideId, courierId }) => {
     action: "courier_assigned",
     courierId: claimedCourier._id.toString(),
     rideId: ride._id.toString(),
-    from: ride.from,
-    to: ride.to,
   });
   emitEnrouteRequestRemoved(ride.from, ride.to, toEnrouteDateKey(ride.date), {
     courierId: claimedCourier._id.toString(),
