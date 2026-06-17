@@ -14,7 +14,7 @@ const {
   emitEnrouteRequestAdded,
 } = require("../utils/socketEmit");
 const { escapeRegex, toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
-const { closeStandaloneRequestsAfterJoin, linkStandaloneCouriersForRideRequest, closeOpenOppositeRoleStandalones } = require("../utils/participantRequestCleanup");
+const { closeStandaloneRequestsAfterJoin, linkStandaloneCouriersForRideRequest } = require("../utils/participantRequestCleanup");
 const { expirePendingRideIfStale } = require("./rideExpiryService");
 const { syncLiveTrackingRoster } = require("./rideTrackingService");
 const {
@@ -122,8 +122,6 @@ const createCourierRequest = async (user, body) => {
   }
 
   const courierNumber = `CR-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-
-  await closeOpenOppositeRoleStandalones(user._id, "courier");
 
   const newCourier = new Courier({
     creator: user._id,

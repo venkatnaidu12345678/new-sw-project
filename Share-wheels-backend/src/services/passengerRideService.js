@@ -8,7 +8,7 @@ const { ensureParticipantBoardingOtp } = require("./rideVerificationService");
 const { notifyUser } = require("./notificationService");
 const { getRideDetails } = require("./rideService");
 const { toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
-const { closeSiblingStandalonesAfterEnroutePick, closeOpenOppositeRoleStandalones } = require("../utils/participantRequestCleanup");
+const { closeSiblingStandalonesAfterEnroutePick } = require("../utils/participantRequestCleanup");
 const {
   emitToUser,
   emitRideParticipantsUpdated,
@@ -36,8 +36,6 @@ const createPassengerRequest = async (user, { from, to, ride_need_date, seats_ne
   if (!startDateRaw) {
     return { status: 400, body: { error: "Start date is required" } };
   }
-
-  await closeOpenOppositeRoleStandalones(user._id, "passenger");
 
   const passengerRide = await PassengerRide.create({
     creator: user._id,

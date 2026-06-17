@@ -328,7 +328,9 @@ const emitStandaloneRemovals = (rows, type) => {
 };
 
 /**
- * One open standalone per user: creating passenger closes open couriers and vice versa.
+ * Legacy cleanup helper for admin scripts only.
+ * Do not call on create-request — users may keep passenger and courier standalones open together.
+ * Same-ride role conflicts are enforced at pick/join time.
  */
 const closeOpenOppositeRoleStandalones = async (userId, creatingRole) => {
   const { oid, str } = toParticipantId(userId);
