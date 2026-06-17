@@ -207,6 +207,10 @@ const rejectPassengerRequest = async (user, { rideId, passenger_userId }) => {
     { creator: passenger_userId },
     { $pull: { my_pending_ride_requests: { rideId: ride._id } } }
   );
+  await PassengerRide.updateMany(
+    { creator: passenger_userId, "join_requested_By.rideId": ride._id },
+    { $pull: { join_requested_By: { rideId: ride._id } } }
+  );
   const driver = await User.findById(user._id);
   await notifyUser(passenger_userId, {
     title: "Ride request declined",

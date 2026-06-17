@@ -185,6 +185,37 @@ const appendExplicitDoc = (rows, openRows, explicitId) => {
   return explicit ? [...rows, explicit] : rows;
 };
 
+/** Record a pending related-ride join without closing the standalone My Request row. */
+const linkStandalonePassengersForRideRequest = async (
+  userId,
+  ride,
+  { explicitPassengerRideId } = {}
+) => {
+  if (!explicitPassengerRideId || !mongoose.Types.ObjectId.isValid(explicitPassengerRideId)) {
+    return [];
+  }
+
+  const passengerRide = await PassengerRide.findOne({
+    _id: explicitPassengerRideId,
+    creator: userId,
+    status: "pending",
+    $or: [{ assigned_to: { $exists: false } }, { "assigned_to.rideId": null }],
+  }).lean();
+
+  if (!passengerRide) return [];
+
+  await PassengerRide.updateOne(
+    { _id: passengerRide._id },
+    {
+      $addToSet: {
+        join_requested_By: { userId, rideId: ride._id },
+      },
+    }
+  );
+
+  return [passengerRide._id.toString()];
+};
+
 /** Link open standalone courier docs when user requests delivery on a driver ride. */
 const linkStandaloneCouriersForRideRequest = async (
   userId,
@@ -436,9 +467,7 @@ const closeStandalonePassengerRequestsAfterJoin = async (
 
   const toClose = explicitPassengerRideId
     ? open.filter((row) => String(row._id) === String(explicitPassengerRideId))
-    : open.filter((row) =>
-        routesRoughlyMatch(row.from, row.to, ride.from, ride.to)
-      );
+    : [];
 
   if (!toClose.length) return;
 
@@ -472,9 +501,7 @@ const closeStandaloneCourierRequestsAfterJoin = async (
 
   const toClose = explicitCourierId
     ? open.filter((row) => String(row._id) === String(explicitCourierId))
-    : open.filter((row) =>
-        routesRoughlyMatch(row.from, row.to, ride.from, ride.to)
-      );
+    : [];
 
   if (!toClose.length) return;
 
@@ -518,6 +545,7 @@ module.exports = {
   collectActiveCorridorParticipantUserIds,
   shouldHideStandaloneByParticipation,
   collectAssignedRequestDocIds,
+  linkStandalonePassengersForRideRequest,
   linkStandaloneCouriersForRideRequest,
   closeStandalonePassengerRequestsAfterJoin,
   closeStandaloneCourierRequestsAfterJoin,

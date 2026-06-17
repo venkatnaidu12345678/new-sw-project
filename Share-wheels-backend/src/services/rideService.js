@@ -33,6 +33,7 @@ const {
 const { toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
 const {
   closeStandaloneRequestsAfterJoin,
+  linkStandalonePassengersForRideRequest,
   routesRoughlyMatch,
 } = require("../utils/participantRequestCleanup");
 const {
@@ -676,7 +677,7 @@ const sendPassengerRequest = async (
     { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
   );
 
-  await closeStandaloneRequestsAfterJoin(userId, ride, {
+  await linkStandalonePassengersForRideRequest(userId, ride, {
     explicitPassengerRideId: standalonePassengerRideId,
   });
   emitMyRequestsUpdated(userId, {
@@ -684,9 +685,6 @@ const sendPassengerRequest = async (
     rideId: ride._id.toString(),
     from: ride.from,
     to: ride.to,
-    ...(standalonePassengerRideId
-      ? { passengerRideId: String(standalonePassengerRideId) }
-      : {}),
   });
   emitRideRequestUpdated(ride._id, {
     action: "passenger_request_sent",

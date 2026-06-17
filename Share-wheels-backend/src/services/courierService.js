@@ -14,7 +14,7 @@ const {
   emitEnrouteRequestAdded,
 } = require("../utils/socketEmit");
 const { escapeRegex, toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
-const { closeStandaloneRequestsAfterJoin, linkStandaloneCouriersForRideRequest } = require("../utils/participantRequestCleanup");
+const { closeStandaloneRequestsAfterJoin } = require("../utils/participantRequestCleanup");
 const { expirePendingRideIfStale } = require("./rideExpiryService");
 const { syncLiveTrackingRoster } = require("./rideTrackingService");
 const {
@@ -339,36 +339,11 @@ const requestCourier = async (user, body) => {
   ride.users_request_Couriers.push(courierData);
   await ride.save();
 
-  const linkedCourierIds = await linkStandaloneCouriersForRideRequest(user._id, ride, {
-    explicitCourierId: standaloneCourierId,
-  });
-
-  if (linkedCourierIds.length) {
-    const linkedCourier = await Courier.findById(linkedCourierIds[0])
-      .select("from to")
-      .lean();
-    if (linkedCourier?.from && linkedCourier?.to) {
-      const pendingIdx = ride.users_request_Couriers.length - 1;
-      if (pendingIdx >= 0 && String(ride.users_request_Couriers[pendingIdx].userId) === String(user._id)) {
-        ride.users_request_Couriers[pendingIdx].courierId = linkedCourierIds[0];
-        ride.users_request_Couriers[pendingIdx].from = normalizeRouteLabel(
-          linkedCourier.from
-        );
-        ride.users_request_Couriers[pendingIdx].to = normalizeRouteLabel(
-          linkedCourier.to
-        );
-        await ride.save();
-      }
-    }
-  }
-
   emitMyRequestsUpdated(user._id, {
     action: "courier_request_sent",
     rideId: ride._id.toString(),
     from: ride.from,
     to: ride.to,
-    ...(linkedCourierIds[0] ? { courierId: linkedCourierIds[0] } : {}),
-    ...(standaloneCourierId ? { courierId: String(standaloneCourierId) } : {}),
   });
   emitRideRequestUpdated(ride._id, {
     action: "courier_request_sent",
@@ -457,7 +432,11 @@ const acceptCourier = async (user, { rideId, courierId }) => {
   const courierUserId = courierData.userId?.toString?.() || courierData.userId;
   const rideForCleanup = await Ride.findById(rideId).select("creator from to date").lean();
   if (rideForCleanup && courierUserId) {
-    await closeStandaloneRequestsAfterJoin(courierUserId, rideForCleanup);
+    const explicitCourierId =
+      courierData.courierId?.toString?.() || courierData.courierId || null;
+    await closeStandaloneRequestsAfterJoin(courierUserId, rideForCleanup, {
+      explicitCourierId,
+    });
   }
   emitEnrouteRequestRemoved(ride.from, ride.to, toEnrouteDateKey(ride.date), {
     type: "courier",

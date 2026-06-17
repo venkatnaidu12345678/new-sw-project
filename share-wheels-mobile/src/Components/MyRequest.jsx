@@ -275,10 +275,11 @@ const MyRequest = () => {
   useMyRequestsSocket(
     useCallback(
       (_payload) => {
-        // Always trust backend as source-of-truth to avoid removing sibling requests locally.
-        fetchActiveTabRequests();
+        // Refresh both tabs — passenger and courier requests are independent.
+        fetchPassengerRequests({ showLoader: false });
+        fetchCourierRequests({ showLoader: false });
       },
-      [fetchActiveTabRequests]
+      [fetchPassengerRequests, fetchCourierRequests]
     )
   );
 
@@ -379,11 +380,13 @@ const MyRequest = () => {
         amount_will: requestItem?.raw?.amount ?? requestItem?.raw?.amount_will,
       });
       if (response?.success) {
-        const requestId = requestItem?.id || requestItem?.raw?.requestId;
-        if (requestId) {
-          setPassengerRides((prev) =>
-            prev.filter((row) => String(row.id) !== String(requestId))
-          );
+        if (response.bookingStatus === "confirmed") {
+          const requestId = requestItem?.id || requestItem?.raw?.requestId;
+          if (requestId) {
+            setPassengerRides((prev) =>
+              prev.filter((row) => String(row.id) !== String(requestId))
+            );
+          }
         }
         Alert.alert(
           response.bookingStatus === "confirmed" ? "Booking confirmed" : "Request sent",
@@ -445,11 +448,13 @@ const MyRequest = () => {
         standaloneCourierId: requestItem?.id || raw.requestId,
       });
       if (response?.success) {
-        const requestId = requestItem?.id || raw.requestId;
-        if (requestId) {
-          setCourierRides((prev) =>
-            prev.filter((row) => String(row.id) !== String(requestId))
-          );
+        if (response.bookingStatus === "confirmed") {
+          const requestId = requestItem?.id || raw.requestId;
+          if (requestId) {
+            setCourierRides((prev) =>
+              prev.filter((row) => String(row.id) !== String(requestId))
+            );
+          }
         }
         Alert.alert(
           response.bookingStatus === "confirmed" ? "Booking confirmed" : "Request sent",
