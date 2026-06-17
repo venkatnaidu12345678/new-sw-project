@@ -46,9 +46,16 @@ export const defaultCorridorSegment = (ride) => ({
 
 export const isFullRideSegment = (ride, from, to) => {
   if (!ride) return false;
-  return (
-    labelMatches(from, ride.from) && labelMatches(to, ride.to)
-  );
+  const corridor = buildCorridorLabels(ride);
+  if (corridor.length < 2) {
+    return labelMatches(from, ride.from) && labelMatches(to, ride.to);
+  }
+
+  const fromIdx = corridor.findIndex((label) => labelMatches(from, label));
+  const toIdx = corridor.findIndex((label) => labelMatches(to, label));
+  if (fromIdx < 0 || toIdx <= fromIdx) return false;
+
+  return fromIdx === 0 && toIdx === corridor.length - 1;
 };
 
 /** Map search/request from→to onto the driver's corridor (canonical stop labels). */

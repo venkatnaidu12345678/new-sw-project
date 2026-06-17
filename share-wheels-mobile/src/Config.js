@@ -100,6 +100,8 @@ export const endPoints = {
   getMyCourierRequestsurl: "/rides/my-courier-requests",
   deleteMyPassengerRequesturl: "/rides/my-passenger-requests",
   deleteMyCourierRequesturl: "/rides/my-courier-requests",
+  updateMyPassengerRequesturl: "/rides/my-passenger-requests",
+  updateMyCourierRequesturl: "/rides/my-courier-requests",
   uploadImageurl: "/auth/upload-image",
   AddVechileurl: "/auth/add-vehicle",
   editVechileurl: "/auth/edit-vehicle",
@@ -124,6 +126,8 @@ export const endPoints = {
   subscriptionPlansurl: "/subscriptions/plans",
   mySubscriptionurl: "/subscriptions/me",
   subscribePlanurl: "/subscriptions/subscribe",
+  subscriptionCreateOrderurl: "/subscriptions/create-order",
+  subscriptionVerifyPaymenturl: "/subscriptions/verify-payment",
   fareQuoteurl: "/fare/quote",
   fareRulesurl: "/fare/rules",
 };

@@ -9,6 +9,14 @@ const slugify = (value) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
+const stripUndefined = (obj) => {
+  const out = {};
+  for (const [key, value] of Object.entries(obj || {})) {
+    if (value !== undefined) out[key] = value;
+  }
+  return out;
+};
+
 const parsePlanBody = (body = {}, { partial = false } = {}) => {
   const errors = [];
   const data = {};
@@ -59,7 +67,11 @@ const parsePlanBody = (body = {}, { partial = false } = {}) => {
     }
   }
 
-  if (body.enroutePickLimit !== undefined) {
+  if (body.unlimitedPicks !== undefined) {
+    data.unlimitedPicks = !!body.unlimitedPicks;
+  }
+
+  if (body.enroutePickLimit !== undefined && body.enroutePickLimit !== null) {
     const limit = Number(body.enroutePickLimit);
     if (!Number.isInteger(limit) || limit < 1) {
       errors.push("enroutePickLimit must be a positive integer");
@@ -68,7 +80,7 @@ const parsePlanBody = (body = {}, { partial = false } = {}) => {
     }
   }
 
-  if (body.rideLimit !== undefined) {
+  if (body.rideLimit !== undefined && body.rideLimit !== null) {
     const limit = Number(body.rideLimit);
     if (!Number.isInteger(limit) || limit < 1) {
       errors.push("rideLimit must be a positive integer");
@@ -89,63 +101,99 @@ const parsePlanBody = (body = {}, { partial = false } = {}) => {
   return { data, errors };
 };
 
-const validatePlanFields = (data, body, { partial = false } = {}) => {
-  const isFree = data.isFree ?? body.isFree;
+const validatePlanFields = (data, source = {}, { partial = false } = {}) => {
+  const isFree = data.isFree ?? source.isFree;
+  const unlimitedPicks = !!(data.unlimitedPicks ?? source.unlimitedPicks);
+
+  const periodValue = Number(data.periodValue ?? source.periodValue);
+  if (!Number.isInteger(periodValue) || periodValue < 1) {
+    return "periodValue is required";
+  }
+  data.periodValue = periodValue;
+
+  const unit = String((data.periodUnit ?? source.periodUnit) || "days").toLowerCase();
+  if (!PERIOD_UNITS.includes(unit)) {
+    return `periodUnit must be one of: ${PERIOD_UNITS.join(", ")}`;
+  }
+  data.periodUnit = unit;
 
   if (isFree) {
     data.isFree = true;
     data.amount = 0;
-    if (!partial || data.rideLimit !== undefined || body.rideLimit !== undefined) {
-      const rideLimit = Number(data.rideLimit ?? body.rideLimit);
-      if (!Number.isInteger(rideLimit) || rideLimit < 1) {
-        return "rideLimit is required for free plans";
+    data.unlimitedPicks = unlimitedPicks;
+    data.rideLimit = undefined;
+
+    if (unlimitedPicks) {
+      data.enroutePickLimit = undefined;
+    } else {
+      const limit = Number(data.enroutePickLimit ?? source.enroutePickLimit);
+      if (!Number.isInteger(limit) || limit < 1) {
+        return "enroutePickLimit is required when unlimited picks is off";
       }
-      data.rideLimit = rideLimit;
+      data.enroutePickLimit = limit;
     }
-    data.enroutePickLimit = undefined;
-    data.periodValue = undefined;
-    data.periodUnit = undefined;
+
     return null;
   }
 
-  if (!partial || data.amount !== undefined || body.amount !== undefined) {
-    const amount = Number(data.amount ?? body.amount);
-    if (Number.isNaN(amount) || amount <= 0) {
-      return "amount is required for paid plans";
-    }
-    data.amount = amount;
+  const amount = Number(data.amount ?? source.amount);
+  if (Number.isNaN(amount) || amount <= 0) {
+    return "amount is required for paid plans";
   }
+  data.amount = amount;
+  data.isFree = false;
+  data.unlimitedPicks = unlimitedPicks;
+  data.rideLimit = undefined;
 
-  if (!partial || data.periodValue !== undefined || body.periodValue !== undefined) {
-    const periodValue = Number(data.periodValue ?? body.periodValue);
-    if (!Number.isInteger(periodValue) || periodValue < 1) {
-      return "periodValue is required for paid plans";
-    }
-    data.periodValue = periodValue;
-  }
-
-  if (!partial || data.periodUnit !== undefined || body.periodUnit !== undefined) {
-    const unit = String((data.periodUnit ?? body.periodUnit) || "days").toLowerCase();
-    if (!PERIOD_UNITS.includes(unit)) {
-      return `periodUnit must be one of: ${PERIOD_UNITS.join(", ")}`;
-    }
-    data.periodUnit = unit;
-  }
-
-  if (
-    !partial ||
-    data.enroutePickLimit !== undefined ||
-    body.enroutePickLimit !== undefined
-  ) {
-    const limit = Number(data.enroutePickLimit ?? body.enroutePickLimit);
+  if (unlimitedPicks) {
+    data.enroutePickLimit = undefined;
+  } else {
+    const limit = Number(data.enroutePickLimit ?? source.enroutePickLimit);
     if (!Number.isInteger(limit) || limit < 1) {
-      return "enroutePickLimit is required for paid plans";
+      return "enroutePickLimit is required when unlimited picks is off";
     }
     data.enroutePickLimit = limit;
   }
 
-  data.rideLimit = undefined;
   return null;
+};
+
+const buildUpdatePayload = (existing, body) => {
+  const { data, errors } = parsePlanBody(body, { partial: true });
+  if (errors.length) {
+    return { error: errors.join("; ") };
+  }
+
+  const source = {
+    isFree: existing.isFree,
+    amount: existing.amount,
+    periodValue: existing.periodValue ?? 30,
+    periodUnit: existing.periodUnit ?? "days",
+    enroutePickLimit:
+      existing.enroutePickLimit ??
+      (existing.rideLimit ? existing.rideLimit * 3 : 5),
+    unlimitedPicks: !!existing.unlimitedPicks,
+    rideLimit: existing.rideLimit,
+    ...data,
+  };
+
+  const updateData = { ...data };
+  const fieldError = validatePlanFields(updateData, source, { partial: false });
+  if (fieldError) {
+    return { error: fieldError };
+  }
+
+  const $set = stripUndefined(updateData);
+  const $unset = {};
+
+  if (updateData.enroutePickLimit === undefined && existing.enroutePickLimit != null) {
+    $unset.enroutePickLimit = "";
+  }
+  if (updateData.rideLimit === undefined && existing.rideLimit != null) {
+    $unset.rideLimit = "";
+  }
+
+  return { $set, $unset: Object.keys($unset).length ? $unset : null };
 };
 
 const listActivePlans = async () => {
@@ -206,7 +254,7 @@ const createPlan = async (adminId, body) => {
         status: 409,
         body: {
           success: false,
-          message: `A free plan already exists (${existingFree.name}). Edit it to change ride count or description.`,
+          message: `A free plan already exists (${existingFree.name}). Edit it to change pick count or duration.`,
           existingPlanId: existingFree._id,
         },
       };
@@ -221,7 +269,7 @@ const createPlan = async (adminId, body) => {
   }
 
   const plan = await SubscriptionPlan.create({
-    ...data,
+    ...stripUndefined(data),
     createdBy: adminId,
   });
 
@@ -241,32 +289,14 @@ const updatePlan = async (id, body) => {
     return { status: 404, body: { success: false, message: "Plan not found" } };
   }
 
-  const { data, errors } = parsePlanBody(body, { partial: true });
-  if (errors.length) {
-    return { status: 400, body: { success: false, message: errors.join("; ") } };
+  const built = buildUpdatePayload(existing, body);
+  if (built.error) {
+    return { status: 400, body: { success: false, message: built.error } };
   }
 
-  const merged = {
-    isFree: data.isFree ?? existing.isFree,
-    amount: data.amount ?? existing.amount,
-    periodValue: data.periodValue ?? existing.periodValue,
-    periodUnit: data.periodUnit ?? existing.periodUnit,
-    enroutePickLimit: data.enroutePickLimit ?? existing.enroutePickLimit,
-    rideLimit: data.rideLimit ?? existing.rideLimit,
-  };
-
-  const fieldError = validatePlanFields(
-    { ...data, ...merged },
-    { ...body, ...merged },
-    { partial: false }
-  );
-  if (fieldError) {
-    return { status: 400, body: { success: false, message: fieldError } };
-  }
-
-  if (data.slug) {
+  if (built.$set.slug) {
     const clash = await SubscriptionPlan.findOne({
-      slug: data.slug,
+      slug: built.$set.slug,
       _id: { $ne: id },
     });
     if (clash) {
@@ -274,22 +304,24 @@ const updatePlan = async (id, body) => {
     }
   }
 
-  const willBeFree = merged.isFree;
+  const willBeFree = built.$set.isFree ?? existing.isFree;
   if (willBeFree) {
-    data.isDefault = true;
+    built.$set.isDefault = true;
     await SubscriptionPlan.updateMany(
       { isDefault: true, _id: { $ne: id } },
       { isDefault: false }
     );
-  } else {
-    data.isDefault = false;
+  } else if (built.$set.isFree === false || existing.isFree) {
+    built.$set.isDefault = false;
   }
 
-  const plan = await SubscriptionPlan.findByIdAndUpdate(
-    id,
-    { $set: data },
-    { new: true, runValidators: true }
-  );
+  const updateQuery = { $set: built.$set };
+  if (built.$unset) updateQuery.$unset = built.$unset;
+
+  const plan = await SubscriptionPlan.findByIdAndUpdate(id, updateQuery, {
+    new: true,
+    runValidators: true,
+  });
 
   return {
     status: 200,
@@ -313,7 +345,7 @@ const deletePlan = async (id) => {
       body: {
         success: false,
         message:
-          "The free plan cannot be deleted. Edit it to change ride count or description.",
+          "The free plan cannot be deleted. Edit it to change pick count or duration.",
       },
     };
   }

@@ -36,6 +36,8 @@ const DriverParticipantPopover = ({
   detail,
   loading = false,
   onClose,
+  onPick,
+  picking = false,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -126,6 +128,20 @@ const DriverParticipantPopover = ({
                   </View>
                 ) : null}
 
+                {detail?.siblingNote ? (
+                  <View style={styles.noticeBlock}>
+                    <Text style={styles.noticeText}>{detail.siblingNote}</Text>
+                  </View>
+                ) : null}
+
+                {detail?.conflictMessage ? (
+                  <View style={[styles.noticeBlock, styles.noticeBlockDanger]}>
+                    <Text style={[styles.noticeText, styles.noticeTextDanger]}>
+                      {detail.conflictMessage}
+                    </Text>
+                  </View>
+                ) : null}
+
                 {detail?.role === "courier" || detail?.role === "Courier" ? (
                   <View style={styles.parcelSection}>
                     <Text style={styles.parcelSectionTitle}>Parcel photo</Text>
@@ -175,6 +191,22 @@ const DriverParticipantPopover = ({
                       {detail.status}
                     </Text>
                   </View>
+                ) : null}
+
+                {onPick && !detail?.pickDisabled ? (
+                  <Pressable
+                    style={[styles.pickBtn, picking && styles.pickBtnDisabled]}
+                    onPress={onPick}
+                    disabled={picking}
+                  >
+                    {picking ? (
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    ) : (
+                      <Text style={styles.pickBtnText}>
+                        {detail?.role === "courier" ? "Pick courier" : "Pick passenger"}
+                      </Text>
+                    )}
+                  </Pressable>
                 ) : null}
               </ScrollView>
             )}
@@ -382,5 +414,41 @@ const createStyles = (c) =>
     fontSize: 12,
     fontWeight: "600",
     textTransform: "capitalize",
+  },
+  noticeBlock: {
+    backgroundColor: c.tintOrange || c.primaryMuted,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  noticeBlockDanger: {
+    backgroundColor: c.dangerBg || "#FEE2E2",
+  },
+  noticeText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: c.text,
+    fontWeight: "600",
+  },
+  noticeTextDanger: {
+    color: c.dangerText || "#B91C1C",
+  },
+  pickBtn: {
+    marginTop: 12,
+    backgroundColor: c.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pickBtnDisabled: {
+    opacity: 0.65,
+  },
+  pickBtnText: {
+    color: c.inverseText,
+    fontSize: 15,
+    fontWeight: "800",
   },
 });

@@ -356,10 +356,19 @@ const MyRequest = () => {
     navigation.navigate("RideDetails", {
       ride,
       ...(segFrom && segTo ? { searchSegment: { from: segFrom, to: segTo } } : {}),
+      requestOfferPerSeat:
+        selectedRide?.raw?.amount ??
+        selectedRide?.raw?.amount_will ??
+        null,
+      standalonePassengerRideId:
+        selectedRide?.raw?.requestId ??
+        selectedRide?.id ??
+        null,
     });
   };
 
   const handleJoinPassenger = async (ride, requestItem) => {
+    if (joiningRideId) return;
     const token = await AsyncStorage.getItem("token");
     if (!token) {
       Alert.alert("Sign in required", "Please log in to request a seat.");
@@ -374,6 +383,7 @@ const MyRequest = () => {
         standalonePassengerRideId: requestItem?.id || requestItem?.raw?.requestId,
         from: requestItem?.from || requestItem?.raw?.from,
         to: requestItem?.to || requestItem?.raw?.to,
+        amount_will: requestItem?.raw?.amount ?? requestItem?.raw?.amount_will,
       });
       if (response?.success) {
         const requestId = requestItem?.id || requestItem?.raw?.requestId;
@@ -402,6 +412,7 @@ const MyRequest = () => {
   };
 
   const handleJoinCourier = async (ride, requestItem) => {
+    if (joiningRideId) return;
     const raw = requestItem?.raw || {};
     const recv = raw.receiver || {};
     if (!raw.courier_img) {
@@ -469,6 +480,32 @@ const MyRequest = () => {
   const canDeleteRequest = (item) =>
     String(item?.status || "").toLowerCase() === "pending";
 
+  const canEditRequest = (item) =>
+    canDeleteRequest(item) && String(item?.requestKind || "") === "standalone";
+
+  const handleEditRequest = (item) => {
+    if (!canEditRequest(item)) {
+      Alert.alert(
+        "Cannot edit",
+        "Only pending standalone requests can be edited."
+      );
+      return;
+    }
+    const editRequest = {
+      requestId: item.id,
+      from: item.from,
+      to: item.to,
+      seats: item.raw?.seats,
+      amount: item.raw?.amount,
+      raw: item.raw || {},
+    };
+    if (item.role === "Courier") {
+      navigation.navigate("CourierRequest", { editRequest });
+      return;
+    }
+    navigation.navigate("PassengerRequest", { editRequest });
+  };
+
   const handleDeleteRequest = (item) => {
     if (!canDeleteRequest(item)) {
       Alert.alert("Cannot delete", "Only pending requests can be removed.");
@@ -513,7 +550,7 @@ const MyRequest = () => {
   };
 
   const handleJoinRide = (ride) => {
-    if (!selectedRide) return;
+    if (!selectedRide || joiningRideId) return;
     if (selectedRide.requestKind === "ride_join" || ride.passengerRequestPending) {
       handleViewRide(ride);
       return;
@@ -567,6 +604,17 @@ const MyRequest = () => {
                 ) : (
                   <Icon name="trash-outline" size={18} color={colors.errorText} />
                 )}
+              </TouchableOpacity>
+            ) : null}
+            {canEditRequest(item) ? (
+              <TouchableOpacity
+                style={styles.editBtn}
+                onPress={() => handleEditRequest(item)}
+                disabled={deletingId === item.id}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                activeOpacity={0.75}
+              >
+                <Icon name="create-outline" size={17} color={colors.infoText} />
               </TouchableOpacity>
             ) : null}
             <View style={[styles.statusChip, { backgroundColor: theme.statusSoft }]}>
@@ -816,6 +864,16 @@ headerTitle: {
     fontSize: 14,
     fontWeight: "700",
     color: c.errorText,
+  },
+  editBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: c.infoBg,
+    borderWidth: 1,
+    borderColor: c.infoBorder,
   },
 
   routeRow: {

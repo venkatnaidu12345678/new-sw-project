@@ -1,7 +1,6 @@
 const SubscriptionPlan = require("../models/subscriptionPlanModel");
 
 const ensureDefaultSubscriptionPlan = async () => {
-  // Only the free plan may be default for new drivers.
   await SubscriptionPlan.updateMany(
     { isFree: { $ne: true } },
     { $set: { isDefault: false } }
@@ -23,14 +22,23 @@ const ensureDefaultSubscriptionPlan = async () => {
       existing.isDefault = true;
       changed = true;
     }
-    if (!existing.rideLimit) {
-      existing.rideLimit = 3;
+    if (!existing.periodValue) {
+      existing.periodValue = 30;
       changed = true;
     }
-    if (existing.enroutePickLimit) {
-      existing.enroutePickLimit = undefined;
+    if (!existing.periodUnit) {
+      existing.periodUnit = "days";
       changed = true;
     }
+    if (!existing.enroutePickLimit && !existing.rideLimit) {
+      existing.enroutePickLimit = 5;
+      changed = true;
+    }
+    if (existing.rideLimit && !existing.enroutePickLimit) {
+      existing.enroutePickLimit = existing.rideLimit * 3;
+      changed = true;
+    }
+    existing.unlimitedPicks = false;
     if (changed) await existing.save();
     return existing;
   }
@@ -41,11 +49,14 @@ const ensureDefaultSubscriptionPlan = async () => {
     name: "Free Plan",
     slug: "free",
     description:
-      "Pick unlimited en route passengers and couriers on a limited number of your rides.",
+      "Try en route picking with a limited number of picks during your trial period.",
     isFree: true,
     amount: 0,
     currency: "INR",
-    rideLimit: 3,
+    periodValue: 30,
+    periodUnit: "days",
+    enroutePickLimit: 5,
+    unlimitedPicks: false,
     isActive: true,
     isDefault: true,
   });

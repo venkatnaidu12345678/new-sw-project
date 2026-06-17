@@ -51,7 +51,8 @@ const RequestMatchingRides = ({
         const pending = isCourier
           ? ride.courierRequestPending
           : ride.passengerRequestPending;
-        const busy = joiningRideId && String(joiningRideId) === String(ride._id);
+        const joinInFlight = !!joiningRideId;
+        const busy = joinInFlight && String(joiningRideId) === String(ride._id);
         const seats = ride.availableSeats ?? 1;
         const driverName = ride.creator?.name || "Driver";
 
@@ -98,16 +99,20 @@ const RequestMatchingRides = ({
                 </View>
               ) : isLinked ? null : (
                 <TouchableOpacity
-                  style={[styles.primaryBtn, busy && styles.primaryBtnDisabled]}
+                  style={[styles.primaryBtn, joinInFlight && styles.primaryBtnDisabled]}
                   onPress={() => onJoinRide?.(ride)}
-                  disabled={busy}
+                  disabled={joinInFlight}
                   activeOpacity={0.85}
                 >
                   {busy ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
                     <Text style={styles.primaryBtnText}>
-                      {isCourier ? "Request courier" : "Request seat"}
+                      {joinInFlight
+                        ? "Please wait…"
+                        : isCourier
+                          ? "Request courier"
+                          : "Request seat"}
                     </Text>
                   )}
                 </TouchableOpacity>

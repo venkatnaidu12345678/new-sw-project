@@ -1,6 +1,6 @@
-import React, { useState, useRef, useMemo } from "react";
+import React, { useState, useRef, useMemo, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 
 import ScreenHeader from "../Components/ui/ScreenHeader";
 import ToggleComponent from "../Components/ToggleComponent";
@@ -15,7 +15,10 @@ import {
   RequestSeatsStepper,
 } from "../Components/ui/RequestFormUI";
 
-import { createpassengerrequest } from "../ApiService/ridesApiServices";
+import {
+  createpassengerrequest,
+  updateMyPassengerRequest,
+} from "../ApiService/ridesApiServices";
 import { validateLocation, validatePrice } from "../Utils";
 import { getPassengerTheme } from "../theme/requestFormTheme";
 import { DS } from "../theme/designSystem";
@@ -46,13 +49,41 @@ const goToMyRequestsTab = (navigation, activeTab) => {
 
 const PassengerRequest = () => {
   const navigation = useNavigation();
+  const route = useRoute();
   const { colors } = useTheme();
   const T = useMemo(() => getPassengerTheme(colors), [colors]);
   const formRef = useRef();
   const [formResetKey, setFormResetKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const editRequest = route?.params?.editRequest || null;
+  const isEditMode = !!editRequest?.requestId;
 
   const [payload, setPayload] = useState({ ...EMPTY_PASSENGER_PAYLOAD });
+
+  useEffect(() => {
+    if (!isEditMode) return;
+    setPayload((prev) => ({
+      ...prev,
+      from: String(editRequest?.from || ""),
+      to: String(editRequest?.to || ""),
+      seats_needed: Number(editRequest?.seats || 1) || 1,
+      dateStart:
+        editRequest?.raw?.date ||
+        editRequest?.raw?.ride_need_date ||
+        "",
+      dateEnd:
+        editRequest?.raw?.date_end ||
+        editRequest?.raw?.date ||
+        editRequest?.raw?.ride_need_date ||
+        "",
+      luggage_included:
+        typeof editRequest?.raw?.luggage_included === "boolean"
+          ? editRequest.raw.luggage_included
+          : true,
+      amount_will: String(editRequest?.raw?.amount || editRequest?.amount || ""),
+    }));
+    setFormResetKey((k) => k + 1);
+  }, [isEditMode, editRequest]);
 
   const updatePayload = (key, value) => {
     setPayload((prev) => ({ ...prev, [key]: value }));
@@ -118,14 +149,17 @@ const PassengerRequest = () => {
         },
       };
 
-      const response = await createpassengerrequest(token, finalPayload);
+      const response = isEditMode
+        ? await updateMyPassengerRequest(token, editRequest.requestId, finalPayload)
+        : await createpassengerrequest(token, finalPayload);
 
-      setPayload({ ...EMPTY_PASSENGER_PAYLOAD });
-      setFormResetKey((k) => k + 1);
       goToMyRequestsTab(navigation, "Passenger");
 
       showAppToast(
-        response?.message || "Passenger request created successfully.",
+        response?.message ||
+          (isEditMode
+            ? "Passenger request updated successfully."
+            : "Passenger request created successfully."),
         "success"
       );
     } catch (error) {
@@ -151,7 +185,7 @@ const PassengerRequest = () => {
         scrollable
         header={
           <ScreenHeader
-            title="Passenger request"
+            title={isEditMode ? "Edit passenger request" : "Passenger request"}
             backgroundColor={T.pageBg}
             onBack={() => {
               if (navigation.canGoBack()) navigation.goBack();
@@ -250,7 +284,7 @@ const PassengerRequest = () => {
       </KeyboardAwareScreen>
 
       <FixedButton
-        title="Post request"
+        title={isEditMode ? "Save changes" : "Post request"}
         onPress={handleCreateRequest}
         loading={submitting}
         disabled={submitting}

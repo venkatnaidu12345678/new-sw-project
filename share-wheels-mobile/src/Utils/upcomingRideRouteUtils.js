@@ -38,6 +38,10 @@ const isFullRideBooking = (bookedFrom, bookedTo, rideFrom, rideTo) =>
   routesMatch(bookedFrom, bookedTo, rideFrom, rideTo) ||
   routesRoughlyMatch(bookedFrom, bookedTo, rideFrom, rideTo);
 
+/**
+ * Backwards segment starting at ride destination (e.g. Hyderabad → Narsaraopet).
+ * Forward segments from ride origin (e.g. Chilakaluripet → Nalgonda) are valid.
+ */
 const isCorruptHybridSegment = (bookedFrom, bookedTo, rideFrom, rideTo) => {
   const fromNorm = norm(bookedFrom).toLowerCase();
   const toNorm = norm(bookedTo).toLowerCase();
@@ -45,16 +49,13 @@ const isCorruptHybridSegment = (bookedFrom, bookedTo, rideFrom, rideTo) => {
   const rideToNorm = norm(rideTo).toLowerCase();
   if (!fromNorm || !toNorm || !rideFromNorm || !rideToNorm) return false;
 
-  const fromIsRideStart =
-    fromNorm === rideFromNorm ||
-    fromNorm.includes(rideFromNorm) ||
-    rideFromNorm.includes(fromNorm);
-  const toIsRideEnd =
-    toNorm === rideToNorm ||
-    toNorm.includes(rideToNorm) ||
-    rideToNorm.includes(toNorm);
+  const labelsAlign = (a, b) =>
+    a === b || a.includes(b) || b.includes(a);
 
-  return fromIsRideStart && !toIsRideEnd;
+  const fromIsRideEnd = labelsAlign(fromNorm, rideToNorm);
+  const toIsRideStart = labelsAlign(toNorm, rideFromNorm);
+
+  return fromIsRideEnd && !toIsRideStart;
 };
 
 const refUserId = (ref) =>
@@ -118,33 +119,11 @@ export const getUpcomingRideRoutes = (data, options = {}) => {
     bookedTo = bookedTo || norm(participant?.to);
   }
 
-  if (isCorruptHybridSegment(bookedFrom, bookedTo, rideRoute.from, rideRoute.to)) {
-    const fromApi = norm(data?.bookedFrom);
-    const toApi = norm(data?.bookedTo);
-    const fromActive = norm(data?.activeData?.from);
-    const toActive = norm(data?.activeData?.to);
-
-    if (
-      fromApi &&
-      toApi &&
-      !isCorruptHybridSegment(fromApi, toApi, rideRoute.from, rideRoute.to)
-    ) {
-      bookedFrom = fromApi;
-      bookedTo = toApi;
-    } else if (
-      fromActive &&
-      toActive &&
-      !isCorruptHybridSegment(fromActive, toActive, rideRoute.from, rideRoute.to)
-    ) {
-      bookedFrom = fromActive;
-      bookedTo = toActive;
-    } else {
-      bookedFrom = "";
-      bookedTo = "";
-    }
+  if (!bookedFrom || !bookedTo) {
+    return { rideRoute, bookedRoute: null };
   }
 
-  if (!bookedFrom || !bookedTo) {
+  if (isCorruptHybridSegment(bookedFrom, bookedTo, rideRoute.from, rideRoute.to)) {
     return { rideRoute, bookedRoute: null };
   }
 

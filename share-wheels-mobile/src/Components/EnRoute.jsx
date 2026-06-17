@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -17,7 +17,12 @@ import { useTheme } from "../context/ThemeContext";
 import { useThemedStyles } from "../theme/useThemedStyles";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { pickCourierApi, pickPassengerApi } from "../ApiService/ridesApiServices";
-import { countEnrouteByType } from "../Utils/enrouteRequestUtils";
+import {
+  countEnrouteByType,
+  filterEnrouteByParticipants,
+  getEnroutePickConflict,
+  getEnrouteSiblingNote,
+} from "../Utils/enrouteRequestUtils";
 import { useEnrouteRequests } from "../hooks/useEnrouteRequests";
 
 const TABS = ["All", "Passengers", "Couriers"];
@@ -48,6 +53,8 @@ const EnrouteRequestCard = ({
   onPick,
   onShowDetails,
   picking,
+  pickDisabled = false,
+  pickDisabledLabel = "Please wait",
   styles,
   colors,
 }) => {
@@ -98,9 +105,12 @@ const EnrouteRequestCard = ({
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.pickBtn, picking && styles.pickBtnDisabled]}
+          style={[
+            styles.pickBtn,
+            (picking || pickDisabled) && styles.pickBtnDisabled,
+          ]}
           onPress={() => onPick(item)}
-          disabled={picking}
+          disabled={picking || pickDisabled}
           activeOpacity={0.85}
         >
           {picking ? (
@@ -108,12 +118,18 @@ const EnrouteRequestCard = ({
           ) : (
             <>
               <Icon
-                name={isCourier ? "cube" : "person-add"}
+                name={pickDisabled ? "lock-closed" : isCourier ? "cube" : "person-add"}
                 size={17}
                 color={colors.inverseText}
               />
               <Text style={styles.pickBtnText}>
-                {isCourier ? "Pick courier" : "Pick passenger"}
+                {pickDisabled
+                  ? picking
+                    ? "Picking…"
+                    : pickDisabledLabel
+                  : isCourier
+                    ? "Pick courier"
+                    : "Pick passenger"}
               </Text>
             </>
           )}
@@ -337,6 +353,7 @@ const EnRoutePassengers = ({
   onTabChange: externalOnTabChange,
   showInlineHeader = false,
   onSubscriptionRequired,
+  participantUserIds,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -358,22 +375,38 @@ const EnRoutePassengers = ({
   const activeTabIndex = externalTabIndex ?? internalTabIndex;
   const onTabChange = externalOnTabChange ?? setInternalTabIndex;
   const resolvedShowInlineHeader = showInlineHeader || !usesExternalData;
+  const pickInFlightRef = useRef(false);
   const [pickingId, setPickingId] = useState(null);
+  const [pickQueueBusy, setPickQueueBusy] = useState(false);
   const [popoverVisible, setPopoverVisible] = useState(false);
   const [popoverLoading, setPopoverLoading] = useState(false);
   const [popoverDetail, setPopoverDetail] = useState(null);
+  const [popoverItem, setPopoverItem] = useState(null);
 
-  const counts = useMemo(() => countEnrouteByType(data), [data]);
+  const visibleData = useMemo(
+    () => filterEnrouteByParticipants(data, participantUserIds),
+    [data, participantUserIds]
+  );
+
+  const counts = useMemo(() => countEnrouteByType(visibleData), [visibleData]);
   const activeTab = TABS[activeTabIndex] ?? TABS[0];
   const filterKey = TAB_KEY[activeTab] || "all";
 
   const filteredData = useMemo(() => {
-    if (filterKey === "all") return data;
-    return data.filter((item) => item.type === filterKey);
-  }, [data, filterKey]);
+    if (filterKey === "all") return visibleData;
+    return visibleData.filter((item) => item.type === filterKey);
+  }, [visibleData, filterKey]);
 
   const openDetails = (item) => {
-    setPopoverDetail(buildEnrouteDetail(item, from, to, date));
+    const siblingNote = getEnrouteSiblingNote(item, visibleData);
+    const conflict = getEnroutePickConflict(item, participantUserIds);
+    setPopoverItem(item);
+    setPopoverDetail({
+      ...buildEnrouteDetail(item, from, to, date),
+      conflictMessage: conflict?.message || "",
+      siblingNote,
+      pickDisabled: !!conflict,
+    });
     setPopoverVisible(true);
     setPopoverLoading(true);
     requestAnimationFrame(() => {
@@ -381,14 +414,32 @@ const EnRoutePassengers = ({
     });
   };
 
-  const closePopover = () => {
+  const closePopover = useCallback(() => {
     setPopoverVisible(false);
     setPopoverLoading(false);
     setPopoverDetail(null);
-  };
+    setPopoverItem(null);
+  }, []);
 
   const handlePick = useCallback(
     async (item) => {
+      if (pickInFlightRef.current) {
+        Alert.alert(
+          "Please wait",
+          "Finish the current pick before starting another."
+        );
+        return;
+      }
+
+      const conflict = getEnroutePickConflict(item, participantUserIds);
+      if (conflict) {
+        Alert.alert("Cannot pick", conflict.message);
+        return;
+      }
+
+      pickInFlightRef.current = true;
+      setPickQueueBusy(true);
+
       try {
         const token = await AsyncStorage.getItem("token");
         if (!token) {
@@ -424,8 +475,9 @@ const EnRoutePassengers = ({
                   passengerRideId: String(item.passengerId || ""),
                   userId: String(item.creatorId || ""),
                 };
-          removeItem?.(item.passengerId || item.courierId || item.id);
-          onPickSuccess?.(item, response, pickPayload);
+
+          await onPickSuccess?.(item, response, pickPayload);
+          closePopover();
           Alert.alert(
             "Success",
             item.type === "courier"
@@ -433,9 +485,15 @@ const EnRoutePassengers = ({
               : "Passenger picked successfully"
           );
         } else if (
-          response?.code &&
-          onSubscriptionRequired
+          response?.code === "PARTICIPANT_CONFLICT" ||
+          response?.code === "ALREADY_PASSENGER" ||
+          response?.code === "ALREADY_COURIER"
         ) {
+          Alert.alert(
+            "Cannot pick",
+            response?.message || "This user is already on your ride."
+          );
+        } else if (response?.code && onSubscriptionRequired) {
           onSubscriptionRequired(response);
         } else {
           Alert.alert("Error", response?.message || "Failed");
@@ -444,24 +502,49 @@ const EnRoutePassengers = ({
         console.log("Pick enroute error:", error);
         Alert.alert("Error", "Something went wrong");
       } finally {
+        pickInFlightRef.current = false;
+        setPickQueueBusy(false);
         setPickingId(null);
       }
     },
-    [rideId, removeItem, onPickSuccess, onSubscriptionRequired]
+    [
+      rideId,
+      onPickSuccess,
+      onSubscriptionRequired,
+      participantUserIds,
+      closePopover,
+    ]
   );
 
   const renderItem = useCallback(
-    ({ item }) => (
+    ({ item }) => {
+      const conflict = getEnroutePickConflict(item, participantUserIds);
+      const pickDisabled = pickQueueBusy || !!conflict;
+      const pickDisabledLabel = conflict
+        ? "Already on ride"
+        : "Please wait";
+      return (
       <EnrouteRequestCard
         item={item}
         onPick={handlePick}
         onShowDetails={openDetails}
         picking={pickingId === item.id}
+        pickDisabled={pickDisabled}
+        pickDisabledLabel={pickDisabledLabel}
         styles={styles}
         colors={colors}
       />
-    ),
-    [handlePick, pickingId, styles, colors]
+      );
+    },
+    [
+      handlePick,
+      pickingId,
+      styles,
+      colors,
+      participantUserIds,
+      openDetails,
+      pickQueueBusy,
+    ]
   );
 
   const emptyCopy = useMemo(() => {
@@ -519,6 +602,15 @@ const EnRoutePassengers = ({
         />
       ) : null}
 
+      {pickQueueBusy ? (
+        <View style={styles.pickQueueBanner}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={styles.pickQueueBannerText}>
+            Processing pick… wait before picking another request.
+          </Text>
+        </View>
+      ) : null}
+
       <FlatList
         data={filteredData}
         key={activeTab}
@@ -533,6 +625,7 @@ const EnRoutePassengers = ({
         ListEmptyComponent={listEmpty}
         refreshing={loading}
         onRefresh={onRefresh}
+        scrollEnabled={!pickQueueBusy}
       />
 
       <DriverParticipantPopover
@@ -540,6 +633,12 @@ const EnRoutePassengers = ({
         detail={popoverDetail}
         loading={popoverLoading}
         onClose={closePopover}
+        picking={pickQueueBusy}
+        onPick={
+          popoverItem && !popoverDetail?.pickDisabled && !pickQueueBusy
+            ? () => handlePick(popoverItem)
+            : undefined
+        }
       />
     </View>
   );
@@ -635,6 +734,26 @@ const createStyles = (c) =>
       paddingTop: 8,
       paddingBottom: 24,
       flexGrow: 1,
+    },
+    pickQueueBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      marginHorizontal: 16,
+      marginBottom: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 12,
+      backgroundColor: c.primaryMuted,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    pickQueueBannerText: {
+      flex: 1,
+      fontSize: 13,
+      fontWeight: "600",
+      color: c.text,
+      lineHeight: 18,
     },
     card: {
       flexDirection: "row",

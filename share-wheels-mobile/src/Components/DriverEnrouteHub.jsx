@@ -12,6 +12,7 @@ const DriverEnrouteHub = ({
   picksRemaining,
   ridesRemaining,
   isFreePlan,
+  unlimitedPicks,
   planName,
   onOpen,
 }) => {
@@ -39,13 +40,17 @@ const DriverEnrouteHub = ({
                   ? `${ridesRemaining} free ride${ridesRemaining === 1 ? "" : "s"} left · unlimited picks per ride${
                       total > 0 ? ` · ${total} nearby` : ""
                     }`
-                  : picksRemaining != null
-                    ? `${picksRemaining} pick${picksRemaining === 1 ? "" : "s"} left${
+                  : unlimitedPicks
+                    ? `Unlimited picks${
                         planName ? ` on ${planName}` : ""
-                      } · ${total > 0 ? `${total} nearby` : "tap to refresh"}`
-                    : total > 0
-                      ? `${total} nearby · tap to pick up`
-                      : "No nearby requests · tap to refresh"}
+                      }${total > 0 ? ` · ${total} nearby` : " · tap to refresh"}`
+                    : picksRemaining != null
+                      ? `${picksRemaining} pick${picksRemaining === 1 ? "" : "s"} left${
+                          planName ? ` on ${planName}` : ""
+                        } · ${total > 0 ? `${total} nearby` : "tap to refresh"}`
+                      : total > 0
+                        ? `${total} nearby · tap to pick up`
+                        : "No nearby requests · tap to refresh"}
             </Text>
           </View>
           <View style={styles.chevronWrap}>

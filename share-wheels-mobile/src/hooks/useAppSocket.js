@@ -98,12 +98,17 @@ export function useRideSocket(rideId, { onParticipantsUpdated, onRequestUpdated 
 /**
  * En-route picker: remove rows when another driver picks the same request.
  */
-export function useEnrouteSocket({ from, to, date, onRequestRemoved }) {
+export function useEnrouteSocket({ from, to, date, onRequestRemoved, onRequestAdded }) {
   const onRemovedRef = useRef(onRequestRemoved);
+  const onAddedRef = useRef(onRequestAdded);
 
   useEffect(() => {
     onRemovedRef.current = onRequestRemoved;
   }, [onRequestRemoved]);
+
+  useEffect(() => {
+    onAddedRef.current = onRequestAdded;
+  }, [onRequestAdded]);
 
   useEffect(() => {
     if (!from || !to) return undefined;
@@ -123,6 +128,15 @@ export function useEnrouteSocket({ from, to, date, onRequestRemoved }) {
         return;
       }
       cleanups.push(unsub);
+
+      const unsubAdded = await subscribeSocketEvent("enrouteRequestAdded", (payload) => {
+        onAddedRef.current?.(payload);
+      });
+      if (!active) {
+        unsubAdded();
+        return;
+      }
+      cleanups.push(unsubAdded);
     })();
 
     return () => {

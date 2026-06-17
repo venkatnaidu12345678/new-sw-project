@@ -37,13 +37,6 @@ export function useEnrouteRequests({
     setData((prev) => prev.filter((row) => !shouldRemoveEnrouteRow(row, payload)));
   }, []);
 
-  useEnrouteSocket({
-    from: enabled ? from : null,
-    to: enabled ? to : null,
-    date: rideDate,
-    onRequestRemoved: removePickedFromList,
-  });
-
   const fetchData = useCallback(async () => {
     const payload = buildEnrouteFetchPayload({
       from,
@@ -64,7 +57,7 @@ export function useEnrouteRequests({
       const response = await enrouteRequest(token, payload);
       const list = response?.requests ?? [];
 
-      if (response?.success && list.length > 0) {
+      if (response?.success) {
         const formatted = formatEnrouteItems(list, from, to);
         setData(formatted);
         return formatted;
@@ -80,6 +73,16 @@ export function useEnrouteRequests({
       setLoading(false);
     }
   }, [from, to, date, rideId, stopoversKey, stopovers, routePolylineKey]);
+
+  useEnrouteSocket({
+    from: enabled ? from : null,
+    to: enabled ? to : null,
+    date: rideDate,
+    onRequestRemoved: removePickedFromList,
+    onRequestAdded: () => {
+      fetchData();
+    },
+  });
 
   useEffect(() => {
     if (enabled && from && to && rideDate) {

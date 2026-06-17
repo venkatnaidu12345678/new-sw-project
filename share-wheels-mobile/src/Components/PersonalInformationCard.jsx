@@ -14,6 +14,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { editVechileApi } from "../ApiService/AuthApiService";
+import { useLookupOptions } from "../hooks/useLookupOptions";
 import { useTheme } from "../context/ThemeContext";
 import { useThemedStyles } from "../theme/useThemedStyles";
 
@@ -32,6 +33,7 @@ import vehicleInfoIcon from "../assets/caricon2.png";
 const PersonalInformationCard = ({ personal, vehicle }) => {
   const { input } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const { options: vehicleTypeOptions } = useLookupOptions("vehicle_type", "Select type");
   const [editingVehicle, setEditingVehicle] = useState(false);
 
   // Personal
@@ -71,7 +73,6 @@ const PersonalInformationCard = ({ personal, vehicle }) => {
     }
   }, [personal, vehicle]);
 
-  // Format date
   const formatDate = (date) => {
     if (!date) return "";
     return new Date(date).toLocaleDateString("en-IN", {
@@ -134,6 +135,9 @@ const PersonalInformationCard = ({ personal, vehicle }) => {
     }
   };
 
+  const vehicleTypeLabel =
+    vehicleTypeOptions.find((o) => o.value === vehicleType)?.label || vehicleType;
+
   return (
     <View style={styles.container}>
       {/* PERSONAL */}
@@ -178,25 +182,16 @@ const PersonalInformationCard = ({ personal, vehicle }) => {
 
         {/* Fields */}
         {[ 
-          { icon: ride, value: vehicleName, setter: setVehicleName },
-          { icon: vehicleTypeIcon, value: vehicleType, setter: setVehicleType },
-          { icon: licenseIcon, value: license, setter: setLicense },
-          { icon: licensePlaceholderIcon, value: holder, setter: setHolder },
+          { icon: ride, value: vehicleName, setter: setVehicleName, kind: "text", placeholder: "Vehicle company" },
+          { icon: licenseIcon, value: license, setter: setLicense, kind: "text", placeholder: "License number" },
+          { icon: licensePlaceholderIcon, value: holder, setter: setHolder, kind: "text", placeholder: "Registration number" },
         ].map((item, index) => (
           <View style={styles.row} key={index}>
             <Image source={item.icon} style={styles.icon} />
             {editingVehicle ? (
               <TextInput
                 style={styles.input}
-                placeholder={
-                  index === 0
-                    ? "Vehicle company"
-                    : index === 1
-                    ? "Vehicle model"
-                    : index === 2
-                    ? "License number"
-                    : "Plate holder name"
-                }
+                placeholder={item.placeholder}
                 placeholderTextColor={input.placeholder}
                 value={item.value}
                 onChangeText={item.setter}
@@ -206,6 +201,26 @@ const PersonalInformationCard = ({ personal, vehicle }) => {
             )}
           </View>
         ))}
+
+        <View style={styles.row}>
+          <Image source={vehicleTypeIcon} style={styles.icon} />
+          {editingVehicle ? (
+            <View style={styles.pickerWrap}>
+              <Picker
+                selectedValue={vehicleType}
+                onValueChange={setVehicleType}
+                style={styles.picker}
+              >
+                <Picker.Item label="Select vehicle type" value="" />
+                {vehicleTypeOptions.map((opt) => (
+                  <Picker.Item key={opt.value} label={opt.label} value={opt.value} />
+                ))}
+              </Picker>
+            </View>
+          ) : (
+            <Text style={styles.value}>{vehicleTypeLabel || "—"}</Text>
+          )}
+        </View>
 
         {/* Dates */}
         <View style={styles.row}>
@@ -302,10 +317,21 @@ const createStyles = (c) =>
   input: {
     borderBottomWidth: 1,
     borderColor: c.border,
-    fontSize: 16,
-    padding: 4,
-    color: c.text,
     flex: 1,
+    fontSize: 16,
+    color: c.text,
+    paddingVertical: 4,
+  },
+
+  pickerWrap: {
+    flex: 1,
+    borderBottomWidth: 1,
+    borderColor: c.border,
+  },
+
+  picker: {
+    color: c.text,
+    marginLeft: -8,
   },
 
   saveButton: {

@@ -31,6 +31,7 @@ const emptyPaidForm = {
   periodValue: 30,
   periodUnit: "days",
   enroutePickLimit: 10,
+  unlimitedPicks: false,
   isActive: true,
 };
 
@@ -39,7 +40,10 @@ const emptyFreeForm = {
   slug: "free",
   description: "",
   isFree: true,
-  rideLimit: 3,
+  periodValue: 30,
+  periodUnit: "days",
+  enroutePickLimit: 5,
+  unlimitedPicks: false,
   isActive: true,
 };
 
@@ -48,6 +52,49 @@ const formatPeriod = (plan) => {
   const unit = plan.periodUnit === "months" ? "month(s)" : "day(s)";
   return `${plan.periodValue} ${unit}`;
 };
+
+const formatPickLimit = (plan) => {
+  if (plan?.unlimitedPicks) return "Unlimited picks";
+  if (plan?.enroutePickLimit) return `${plan.enroutePickLimit} en route picks`;
+  if (plan?.rideLimit) return `${plan.rideLimit} ride(s) (legacy)`;
+  return "—";
+};
+
+const PickLimitFields = ({ form, setField, inputClassName }) => (
+  <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
+    <span className="mb-2 block text-sm font-medium text-slate-800">En route pick limit</span>
+
+    <label className="mb-3 flex items-center gap-2 text-sm">
+      <input
+        type="checkbox"
+        checked={!!form.unlimitedPicks}
+        onChange={(e) => setField("unlimitedPicks", e.target.checked)}
+      />
+      Unlimited picks during plan period
+    </label>
+
+    {!form.unlimitedPicks ? (
+      <label className="block text-sm">
+        <span className="mb-1 block font-medium">Number of picks</span>
+        <input
+          type="number"
+          min="1"
+          className={inputClassName}
+          value={form.enroutePickLimit}
+          onChange={(e) => setField("enroutePickLimit", e.target.value)}
+          required
+        />
+        <span className="mt-1 block text-xs text-slate-500">
+          Total en route passengers and couriers a driver can pick during this plan period.
+        </span>
+      </label>
+    ) : (
+      <p className="text-xs text-slate-500">
+        Driver can pick unlimited en route passengers and couriers until the plan expires.
+      </p>
+    )}
+  </div>
+);
 
 export default function SubscriptionPlans() {
   const [plans, setPlans] = useState([]);
@@ -80,7 +127,7 @@ export default function SubscriptionPlans() {
     if (free && existingFreePlan) {
       openEdit(existingFreePlan);
       setError(
-        "A free plan already exists — edit it below to change ride count or description."
+        "A free plan already exists — edit it below to change pick count or duration."
       );
       return;
     }
@@ -92,14 +139,21 @@ export default function SubscriptionPlans() {
 
   const openEdit = (plan) => {
     setEditingId(plan._id);
+    const shared = {
+      periodValue: plan.periodValue ?? 30,
+      periodUnit: plan.periodUnit || "days",
+      enroutePickLimit: plan.enroutePickLimit ?? plan.rideLimit ?? 5,
+      unlimitedPicks: !!plan.unlimitedPicks,
+      isActive: plan.isActive !== false,
+    };
+
     if (plan.isFree) {
       setForm({
         name: plan.name || "Free Plan",
         slug: plan.slug || "free",
         description: plan.description || "",
         isFree: true,
-        rideLimit: plan.rideLimit ?? 3,
-        isActive: plan.isActive !== false,
+        ...shared,
       });
     } else {
       setForm({
@@ -109,14 +163,44 @@ export default function SubscriptionPlans() {
         isFree: false,
         amount: plan.amount ?? 0,
         currency: plan.currency || "INR",
-        periodValue: plan.periodValue ?? 30,
-        periodUnit: plan.periodUnit || "days",
-        enroutePickLimit: plan.enroutePickLimit ?? 10,
-        isActive: plan.isActive !== false,
+        ...shared,
       });
     }
     setError("");
     setModalOpen(true);
+  };
+
+  const buildPayload = () => {
+    const shared = {
+      periodValue: Number(form.periodValue) || 1,
+      periodUnit: form.periodUnit || "days",
+      unlimitedPicks: !!form.unlimitedPicks,
+      isActive: !!form.isActive,
+    };
+
+    if (!form.unlimitedPicks) {
+      shared.enroutePickLimit = Number(form.enroutePickLimit) || 1;
+    }
+
+    if (form.isFree) {
+      return {
+        name: form.name || "Free Plan",
+        slug: form.slug || "free",
+        description: form.description || "",
+        isFree: true,
+        ...shared,
+      };
+    }
+
+    return {
+      name: form.name,
+      slug: form.slug,
+      description: form.description || "",
+      isFree: false,
+      amount: Number(form.amount) || 0,
+      currency: form.currency || "INR",
+      ...shared,
+    };
   };
 
   const handleSubmit = async (e) => {
@@ -124,22 +208,7 @@ export default function SubscriptionPlans() {
     setSaving(true);
     setError("");
     try {
-      const payload = form.isFree
-        ? {
-            name: form.name || "Free Plan",
-            slug: form.slug || "free",
-            description: form.description || "",
-            isFree: true,
-            rideLimit: Number(form.rideLimit) || 1,
-            isActive: !!form.isActive,
-          }
-        : {
-            ...form,
-            isFree: false,
-            amount: Number(form.amount) || 0,
-            periodValue: Number(form.periodValue) || 1,
-            enroutePickLimit: Number(form.enroutePickLimit) || 1,
-          };
+      const payload = buildPayload();
 
       if (editingId) {
         await updateSubscriptionPlan(editingId, payload);
@@ -186,12 +255,42 @@ export default function SubscriptionPlans() {
     }
   };
 
+  const periodFields = (
+    <div className="grid grid-cols-2 gap-3">
+      <label className="block text-sm">
+        <span className="mb-1 block font-medium">Plan duration</span>
+        <input
+          type="number"
+          min="1"
+          className={inputClass}
+          value={form.periodValue}
+          onChange={(e) => setField("periodValue", e.target.value)}
+          required
+        />
+      </label>
+      <label className="block text-sm">
+        <span className="mb-1 block font-medium">Duration unit</span>
+        <select
+          className={inputClass}
+          value={form.periodUnit}
+          onChange={(e) => setField("periodUnit", e.target.value)}
+        >
+          {(meta.periodUnits || ["days", "months"]).map((unit) => (
+            <option key={unit} value={unit}>
+              {unit}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+
   return (
     <AdminPageShell>
       <PageHeader
         compact
         title="Driver subscription plans"
-        subtitle="New drivers always start on the free plan. Paid plans are optional upgrades with amount, period, and pick limits."
+        subtitle="New drivers get the free plan once. Set duration and pick limits (or unlimited) for each plan."
       >
         <button type="button" className={btnClass("primary", "sm")} onClick={() => openCreate(false)}>
           Add paid plan
@@ -221,8 +320,8 @@ export default function SubscriptionPlans() {
               <tr>
                 <Th>Plan</Th>
                 <Th>Price</Th>
-                <Th>Period / rides</Th>
-                <Th>Limits</Th>
+                <Th>Duration</Th>
+                <Th>Pick limit</Th>
                 <Th>Status</Th>
                 <Th className="text-right">Actions</Th>
               </tr>
@@ -240,7 +339,7 @@ export default function SubscriptionPlans() {
                       <div className="text-xs text-slate-500">{plan.slug}</div>
                       {plan.isFree ? (
                         <span className="mt-1 inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700">
-                          Default for new drivers
+                          Default · one-time for new drivers
                         </span>
                       ) : null}
                       {plan.description ? (
@@ -252,14 +351,8 @@ export default function SubscriptionPlans() {
                         ? "Free"
                         : `₹${plan.amount} ${plan.currency || "INR"}`}
                     </Td>
-                    <Td>
-                      {plan.isFree ? `${plan.rideLimit ?? "—"} ride(s)` : formatPeriod(plan)}
-                    </Td>
-                    <Td>
-                      {plan.isFree
-                        ? "Unlimited picks per ride"
-                        : `${plan.enroutePickLimit ?? "—"} en route picks`}
-                    </Td>
+                    <Td>{formatPeriod(plan)}</Td>
+                    <Td>{formatPickLimit(plan)}</Td>
                     <Td>
                       <span
                         className={
@@ -313,27 +406,15 @@ export default function SubscriptionPlans() {
             </h2>
             <p className="mt-1 text-sm text-slate-500">
               {form.isFree
-                ? "This plan is always assigned to new drivers. Set ride count and description."
-                : "Set price, billing period, en route pick limit, and description."}
+                ? "Assigned once to new drivers. Set duration and pick limits below."
+                : "Set price, duration, pick limits, and description. Payments via Razorpay."}
             </p>
 
             <div className="mt-4 grid gap-3">
               {form.isFree ? (
                 <>
-                  <label className="block text-sm">
-                    <span className="mb-1 block font-medium">Number of rides</span>
-                    <input
-                      type="number"
-                      min="1"
-                      className={inputClass}
-                      value={form.rideLimit}
-                      onChange={(e) => setField("rideLimit", e.target.value)}
-                      required
-                    />
-                    <span className="mt-1 block text-xs text-slate-500">
-                      Unlimited en route passengers & couriers on each of these rides.
-                    </span>
-                  </label>
+                  {periodFields}
+                  <PickLimitFields form={form} setField={setField} inputClassName={inputClass} />
 
                   <label className="block text-sm">
                     <span className="mb-1 block font-medium">Description</span>
@@ -390,51 +471,15 @@ export default function SubscriptionPlans() {
                     />
                   </label>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="block text-sm">
-                      <span className="mb-1 block font-medium">Period value</span>
-                      <input
-                        type="number"
-                        min="1"
-                        className={inputClass}
-                        value={form.periodValue}
-                        onChange={(e) => setField("periodValue", e.target.value)}
-                        required
-                      />
-                    </label>
-                    <label className="block text-sm">
-                      <span className="mb-1 block font-medium">Period unit</span>
-                      <select
-                        className={inputClass}
-                        value={form.periodUnit}
-                        onChange={(e) => setField("periodUnit", e.target.value)}
-                      >
-                        {(meta.periodUnits || ["days", "months"]).map((unit) => (
-                          <option key={unit} value={unit}>
-                            {unit}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-
-                  <label className="block text-sm">
-                    <span className="mb-1 block font-medium">En route pick limit</span>
-                    <input
-                      type="number"
-                      min="1"
-                      className={inputClass}
-                      value={form.enroutePickLimit}
-                      onChange={(e) => setField("enroutePickLimit", e.target.value)}
-                      required
-                    />
-                  </label>
+                  {periodFields}
+                  <PickLimitFields form={form} setField={setField} inputClassName={inputClass} />
                 </>
               )}
 
               {form.isFree ? (
                 <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-                  The free plan is always the default for new drivers. Paid plans cannot be set as default.
+                  The free plan is assigned automatically to new drivers once. After it expires or picks
+                  are used up, drivers must upgrade to a paid plan — free plan cannot be renewed.
                 </p>
               ) : null}
 

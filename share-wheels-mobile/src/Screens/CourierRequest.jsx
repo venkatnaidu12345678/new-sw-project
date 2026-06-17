@@ -1,6 +1,6 @@
-import React, { useState, useRef, useMemo } from "react";
+import React, { useState, useRef, useMemo, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 
 import FromToInput from "../Components/FromToInput";
 import CalenderRange from "../Components/CalenderRange";
@@ -17,7 +17,10 @@ import {
   StyledField,
 } from "../Components/ui/RequestFormUI";
 
-import { courierRequest } from "../ApiService/ridesApiServices";
+import {
+  courierRequest,
+  updateMyCourierRequest,
+} from "../ApiService/ridesApiServices";
 import { getApiErrorMessage } from "../Utils/apiErrors";
 import { validateLocation, validatePrice } from "../Utils";
 import { getCourierTheme } from "../theme/requestFormTheme";
@@ -54,6 +57,7 @@ const goToMyRequestsTab = (navigation, activeTab) => {
 
 const CourierRequest = () => {
   const navigation = useNavigation();
+  const route = useRoute();
   const { colors } = useTheme();
   const T = useMemo(() => getCourierTheme(colors), [colors]);
   const { pickerItems: courierTypeItems } = useLookupOptions(
@@ -63,8 +67,34 @@ const CourierRequest = () => {
   const fromToRef = useRef();
   const [formResetKey, setFormResetKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const editRequest = route?.params?.editRequest || null;
+  const isEditMode = !!editRequest?.requestId;
 
   const [payload, setPayload] = useState({ ...EMPTY_COURIER_PAYLOAD });
+
+  useEffect(() => {
+    if (!isEditMode) return;
+    const raw = editRequest?.raw || {};
+    const receiver = raw.receiver || {};
+    setPayload((prev) => ({
+      ...prev,
+      from: String(editRequest?.from || ""),
+      to: String(editRequest?.to || ""),
+      courier_type: String(raw.courier_type || ""),
+      what_to_deliver: String(raw.what_to_deliver || raw.parcel || ""),
+      courier_img: raw.courier_img || null,
+      amount_will: String(raw.amount_will || raw.amount || ""),
+      dateStart: raw.date?.startDate || raw.date || "",
+      dateEnd: raw.date?.endDate || raw.date?.startDate || raw.date || "",
+      receiver_name: String(receiver.name || ""),
+      receiver_mobile: String(receiver.mobile || ""),
+      receiver_alternate_mobile: String(
+        receiver.alternate_mobile || receiver.alternateMobile || ""
+      ),
+      receiver_address: String(receiver.Address || receiver.address || ""),
+    }));
+    setFormResetKey((k) => k + 1);
+  }, [isEditMode, editRequest]);
 
   const updatePayload = (key, value) => {
     setPayload((prev) => ({ ...prev, [key]: value }));
@@ -159,14 +189,17 @@ const CourierRequest = () => {
         receiver_address: payload.receiver_address.trim(),
       };
 
-      const response = await courierRequest(token, finalPayload);
+      const response = isEditMode
+        ? await updateMyCourierRequest(token, editRequest.requestId, finalPayload)
+        : await courierRequest(token, finalPayload);
 
-      setPayload({ ...EMPTY_COURIER_PAYLOAD });
-      setFormResetKey((k) => k + 1);
       goToMyRequestsTab(navigation, "Courier");
 
       showAppToast(
-        response?.message || "Courier request created successfully.",
+        response?.message ||
+          (isEditMode
+            ? "Courier request updated successfully."
+            : "Courier request created successfully."),
         "success"
       );
     } catch (error) {
@@ -200,7 +233,7 @@ const CourierRequest = () => {
         scrollable
         header={
           <ScreenHeader
-            title="Courier request"
+            title={isEditMode ? "Edit courier request" : "Courier request"}
             backgroundColor={T.pageBg}
             onBack={() => {
               if (navigation.canGoBack()) navigation.goBack();
@@ -367,7 +400,7 @@ const CourierRequest = () => {
       </KeyboardAwareScreen>
 
       <FixedButton
-        title="Post request"
+        title={isEditMode ? "Save changes" : "Post request"}
         onPress={handleCreateRequest}
         loading={submitting}
         disabled={submitting}

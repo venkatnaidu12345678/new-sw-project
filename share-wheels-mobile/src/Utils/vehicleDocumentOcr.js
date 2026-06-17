@@ -353,11 +353,9 @@ export const isDateExpired = (isoDate) => {
 const inferVehicleType = (text, vehicleTypeOptions = []) => {
   const upper = compactText(text);
   const rules = [
+    { re: /\b(AUTO|AUTO\s*RICKSHAW|THREE\s*WHEELER|3W)\b/, value: "auto" },
     { re: /\b(M\/CYCLE|MOTOR\s*CYCLE|MOTORCYCLE|2W|SCOOTER|BIKE)\b/, value: "bike" },
-    { re: /\b(SUV|MUV|JEEP)\b/, value: "suv" },
-    { re: /\b(HATCHBACK|HB)\b/, value: "hatchback" },
-    { re: /\b(VAN|LGV|GOODS\s*CARRIER)\b/, value: "van" },
-    { re: /\b(LMV|CAR|MOTOR\s*CAR|LMV-NT)\b/, value: "car" },
+    { re: /\b(LMV|CAR|MOTOR\s*CAR|LMV-NT|SUV|MUV|JEEP|HATCHBACK|HB|VAN)\b/, value: "car" },
   ];
 
   for (const rule of rules) {

@@ -17,6 +17,7 @@ import EnRoute, {
 } from "../Components/EnRoute";
 import DriverEnrouteHub from "../Components/DriverEnrouteHub";
 import { useEnrouteRequests } from "../hooks/useEnrouteRequests";
+import { collectRideParticipantUserIds } from "../Utils/enrouteRequestUtils";
 import { getMySubscription } from "../ApiService/subscriptionApiService";
 import FixedButton from "../Components/FixedButton";
 import UpcomingRouteLines from "../Components/ui/UpcomingRouteLines";
@@ -300,6 +301,35 @@ const UpcomingDetailsPage = ({ route }) => {
   const enrouteRoutePolyline =
     routeMeta.routePolyline || rideData?.routePolyline || "";
 
+  const rideParticipantUserIds = useMemo(
+    () =>
+      collectRideParticipantUserIds({
+        passengers,
+        couriers,
+        passengerRequests,
+        courierRequests,
+      }),
+    [passengers, couriers, passengerRequests, courierRequests]
+  );
+
+  const [pendingPickUserIds, setPendingPickUserIds] = useState(() => new Set());
+
+  useEffect(() => {
+    setPendingPickUserIds((prev) => {
+      if (!prev.size) return prev;
+      const next = new Set(
+        [...prev].filter((id) => !rideParticipantUserIds.has(id))
+      );
+      return next.size === prev.size ? prev : next;
+    });
+  }, [rideParticipantUserIds]);
+
+  const mergedParticipantUserIds = useMemo(() => {
+    const ids = new Set(rideParticipantUserIds);
+    pendingPickUserIds.forEach((id) => ids.add(id));
+    return ids;
+  }, [rideParticipantUserIds, pendingPickUserIds]);
+
   const upcomingRoutes = useMemo(() => {
     return getUpcomingRideRoutes(
       {
@@ -343,7 +373,20 @@ const UpcomingDetailsPage = ({ route }) => {
   });
 
   useRideSocket(rideIdStr, {
-    onParticipantsUpdated: () => {
+    onParticipantsUpdated: (payload) => {
+      const action = String(payload?.action || "").toLowerCase();
+      const userId = String(payload?.userId || "");
+      if (
+        userId &&
+        (action === "passenger_removed" || action === "courier_removed")
+      ) {
+        setPendingPickUserIds((prev) => {
+          if (!prev.has(userId)) return prev;
+          const next = new Set(prev);
+          next.delete(userId);
+          return next;
+        });
+      }
       refreshRideDetailsQuiet();
       enrouteRequests.refresh();
     },
@@ -368,15 +411,17 @@ const UpcomingDetailsPage = ({ route }) => {
   }, [isDriver]);
 
   const handleEnroutePickSuccess = useCallback(
-    (_item, response, pickPayload) => {
-      if (pickPayload) {
+    async (_item, response, pickPayload) => {
+      if (pickPayload?.userId) {
+        const userId = String(pickPayload.userId);
+        setPendingPickUserIds((prev) => new Set([...prev, userId]));
         enrouteRequests.removePickedFromList(pickPayload);
       }
       if (response?.details) {
         applyRideDetails(response.details);
       }
-      fetchRideDetails();
-      enrouteRequests.refresh();
+      await fetchRideDetails({ showLoading: false });
+      await enrouteRequests.refresh();
       loadDriverSubscription();
       refreshUpcomingList();
     },
@@ -1445,6 +1490,7 @@ const UpcomingDetailsPage = ({ route }) => {
               picksRemaining={driverSubscription?.picksRemaining}
               ridesRemaining={driverSubscription?.ridesRemaining}
               isFreePlan={driverSubscription?.isFree}
+              unlimitedPicks={driverSubscription?.unlimitedPicks}
               planName={driverSubscription?.plan?.name}
               onOpen={() => {
                 enrouteRequests.refresh();
@@ -1680,6 +1726,7 @@ const UpcomingDetailsPage = ({ route }) => {
               routePolyline={enrouteRoutePolyline}
               onPickSuccess={handleEnroutePickSuccess}
               onSubscriptionRequired={handleSubscriptionRequired}
+              participantUserIds={mergedParticipantUserIds}
               data={enrouteRequests.data}
               loading={enrouteRequests.loading}
               onRefresh={enrouteRequests.refresh}

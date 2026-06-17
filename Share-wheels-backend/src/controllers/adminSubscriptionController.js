@@ -21,6 +21,6 @@ module.exports = {
   getMeta: async (_req, res) =>
     res.status(200).json({
       success: true,
-      periodUnits: subscriptionPlanService.PERIOD_UNITS,
+      periodUnits: subscriptionPlanService.PERIOD_UNITS || ["days", "months"],
     }),
 };

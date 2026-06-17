@@ -35,12 +35,8 @@ const emptyForm = {
 
 const VEHICLE_ICONS = {
   bike: "🏍️",
-  scooter: "🛵",
-  car: "🚗",
-  suv: "🚙",
-  van: "🚐",
-  bus: "🚌",
   auto: "🛺",
+  car: "🚗",
 };
 
 const vehicleIcon = (type) => VEHICLE_ICONS[String(type || "").toLowerCase()] || "🚘";

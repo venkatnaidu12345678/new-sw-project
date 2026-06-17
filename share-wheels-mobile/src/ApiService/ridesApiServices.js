@@ -772,6 +772,44 @@ export const deleteMyCourierRequest = async (token, requestId) => {
   return result;
 };
 
+export const updateMyPassengerRequest = async (token, requestId, payload) => {
+  const response = await fetch(
+    `${baseUrl}${endPoints.updateMyPassengerRequesturl}/${requestId}`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload || {}),
+    }
+  );
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || result?.success === false) {
+    throw new Error(result?.message || "Failed to update passenger request");
+  }
+  return result;
+};
+
+export const updateMyCourierRequest = async (token, requestId, payload) => {
+  const response = await fetch(
+    `${baseUrl}${endPoints.updateMyCourierRequesturl}/${requestId}`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload || {}),
+    }
+  );
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || result?.success === false) {
+    throw new Error(result?.message || "Failed to update courier request");
+  }
+  return result;
+};
+
 export const AddVehicle = async (token, vehicleData, imageFiles = {}) => {
   try {
     const formData = new FormData();

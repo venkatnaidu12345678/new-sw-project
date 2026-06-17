@@ -79,6 +79,70 @@ export const buildEnrouteFetchPayload = ({
   };
 };
 
+const normalizeUserId = (value) => {
+  const id = value?._id || value?.userId?._id || value?.userId || value;
+  return id != null && id !== "" ? String(id) : "";
+};
+
+export const collectRideParticipantUserIds = ({
+  passengers = [],
+  couriers = [],
+  passengerRequests = [],
+  courierRequests = [],
+} = {}) => {
+  const ids = new Set();
+  const add = (row) => {
+    const id = normalizeUserId(row?.creatorId || row?.creator || row);
+    if (id) ids.add(id);
+  };
+
+  passengers.forEach(add);
+  couriers.forEach(add);
+  passengerRequests.forEach(add);
+  courierRequests.forEach(add);
+  return ids;
+};
+
+export const filterEnrouteByParticipants = (data = [], participantUserIds) => {
+  if (!participantUserIds?.size) return data;
+  return data.filter((item) => {
+    const creatorId = normalizeUserId(item?.creatorId);
+    return !creatorId || !participantUserIds.has(creatorId);
+  });
+};
+
+export const getEnroutePickConflict = (item, participantUserIds) => {
+  if (!item) return null;
+
+  const creatorId = normalizeUserId(item.creatorId);
+  if (!creatorId) return null;
+
+  if (participantUserIds?.has?.(creatorId)) {
+    return {
+      code: "PARTICIPANT_CONFLICT",
+      message: `${item.name || "This user"} is already on your ride. Someone cannot be both passenger and courier on the same trip.`,
+    };
+  }
+
+  return null;
+};
+
+export const getEnrouteSiblingNote = (item, enrouteData = []) => {
+  if (!item) return "";
+  const creatorId = normalizeUserId(item.creatorId);
+  if (!creatorId) return "";
+
+  const oppositeType = item.type === "courier" ? "passenger" : "courier";
+  const hasSibling = (enrouteData || []).some(
+    (row) =>
+      normalizeUserId(row.creatorId) === creatorId &&
+      row.type === oppositeType
+  );
+
+  if (!hasSibling) return "";
+  return `${item.name || "This user"} also has an open ${oppositeType} request. Only one role can be added to your ride.`;
+};
+
 export const shouldRemoveEnrouteRow = (row, payload) => {
   if (!payload || !row) return false;
 

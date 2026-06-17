@@ -21,4 +21,12 @@ module.exports = {
     handle(res, () =>
       driverSubscriptionService.subscribeToPlan(req.user._id, req.body.planId)
     ),
+  createOrder: async (req, res) =>
+    handle(res, () =>
+      driverSubscriptionService.createPaymentOrder(req.user._id, req.body.planId)
+    ),
+  verifyPayment: async (req, res) =>
+    handle(res, () =>
+      driverSubscriptionService.verifyPaymentAndSubscribe(req.user._id, req.body)
+    ),
 };

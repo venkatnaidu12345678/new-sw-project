@@ -530,7 +530,14 @@ const addPassengerDirectly = async (
 
 const sendPassengerRequest = async (
   user,
-  { rideId, requires_seats, standalonePassengerRideId, from: requestedFrom, to: requestedTo }
+  {
+    rideId,
+    requires_seats,
+    standalonePassengerRideId,
+    from: requestedFrom,
+    to: requestedTo,
+    amount_will,
+  }
 ) => {
   const userId = user._id;
   const seats = Number(requires_seats);
@@ -603,14 +610,25 @@ const sendPassengerRequest = async (
     requestedTo,
   });
 
-  const perSeatAmount = await calculatePerSeatFareForSegment(ride, bookingSegment);
+  const requestPerSeat = await resolvePassengerRequestPerSeatAmount(userId, {
+    standalonePassengerRideId,
+    requestedFrom,
+    requestedTo,
+    amount_will,
+  });
+
+  const perSeatAmount =
+    requestPerSeat != null
+      ? requestPerSeat
+      : await calculatePerSeatFareForSegment(ride, bookingSegment);
   if (!Number.isFinite(perSeatAmount) || perSeatAmount <= 0) {
     return {
       status: 400,
       body: {
         success: false,
-        message:
-          "Could not calculate fare for this segment. Ask the admin to configure vehicle fare rules.",
+        message: requestPerSeat != null
+          ? "Invalid offer amount on your passenger request."
+          : "Could not calculate fare for this segment. Ask the admin to configure vehicle fare rules.",
       },
     };
   }
@@ -744,6 +762,57 @@ const validateSegmentOnRideCorridor = async (ride, from, to) => {
   if (!matchesForwardCorridor(fromLabel, toLabel, corridor)) return null;
   if (isFullRideBooking(fromLabel, toLabel, ride.from, ride.to)) return null;
   return { from: fromLabel, to: toLabel };
+};
+
+/** Use passenger/courier request offer — never admin tier math when a standalone request exists. */
+const resolvePassengerRequestPerSeatAmount = async (
+  userId,
+  { standalonePassengerRideId, requestedFrom, requestedTo, amount_will } = {}
+) => {
+  const fromBody = parseAmount(amount_will);
+  if (fromBody != null && fromBody > 0) return fromBody;
+
+  const amountFromDoc = (doc) => {
+    if (!doc || String(doc.creator) !== String(userId)) return null;
+    const parsed = parseAmount(doc.amount_will);
+    return parsed != null && parsed > 0 ? parsed : null;
+  };
+
+  if (standalonePassengerRideId && mongoose.Types.ObjectId.isValid(standalonePassengerRideId)) {
+    const passengerRide = await PassengerRide.findById(standalonePassengerRideId)
+      .select("amount_will creator")
+      .lean();
+    const amount = amountFromDoc(passengerRide);
+    if (amount) return amount;
+  }
+
+  const from = normalizeRouteLabel(requestedFrom);
+  const to = normalizeRouteLabel(requestedTo);
+  if (from && to) {
+    const passengerRide = await PassengerRide.findOne({
+      creator: userId,
+      status: "pending",
+      from,
+      to,
+      $or: [{ assigned_to: { $exists: false } }, { "assigned_to.rideId": null }],
+    })
+      .sort({ updatedAt: -1 })
+      .select("amount_will creator")
+      .lean();
+    const amount = amountFromDoc(passengerRide);
+    if (amount) return amount;
+  }
+
+  const openRequest = await PassengerRide.findOne({
+    creator: userId,
+    status: "pending",
+    $or: [{ assigned_to: { $exists: false } }, { "assigned_to.rideId": null }],
+  })
+    .sort({ updatedAt: -1 })
+    .select("amount_will creator")
+    .lean();
+
+  return amountFromDoc(openRequest);
 };
 
 const findLinkedPassengerRideSegment = async (userId, rideId) => {

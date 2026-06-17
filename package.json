@@ -1,0 +1,13 @@
+{
+  "name": "share-wheels-monorepo",
+  "private": true,
+  "description": "Share Wheels — run scripts from each app folder or use the shortcuts below",
+  "scripts": {
+    "dev": "npm run dev --prefix share-wheels-admin",
+    "dev:admin": "npm run dev --prefix share-wheels-admin",
+    "dev:backend": "npm run dev --prefix Share-wheels-backend",
+    "start:backend": "npm run start --prefix Share-wheels-backend",
+    "dev:mobile": "npm run start --prefix share-wheels-mobile",
+    "android": "npm run android --prefix share-wheels-mobile"
+  }
+}

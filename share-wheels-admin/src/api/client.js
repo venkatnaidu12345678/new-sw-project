@@ -33,7 +33,11 @@ export const api = async (path, options = {}) => {
   }
 
   if (!res.ok) {
-    throw new Error(data.message || data.error || `Request failed (${res.status})`);
+    const fallback =
+      res.status === 500 && !data.message
+        ? "Server error — ensure Share Wheels backend is running on port 3001 (npm run dev in Share-wheels-backend)."
+        : `Request failed (${res.status})`;
+    throw new Error(data.message || data.error || fallback);
   }
 
   return data;

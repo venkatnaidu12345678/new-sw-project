@@ -74,11 +74,9 @@ const EMPTY_EXTRACTED = {
 };
 
 const TYPE_ICONS = {
-  car: "car-outline",
-  suv: "car-sport-outline",
-  hatchback: "car-outline",
   bike: "bicycle-outline",
-  van: "bus-outline",
+  auto: "car-outline",
+  car: "car-sport-outline",
 };
 
 const mapProfileToForm = (info) => {

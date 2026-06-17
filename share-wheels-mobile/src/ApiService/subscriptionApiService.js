@@ -13,3 +13,17 @@ export const subscribeToPlan = async (token, planId) =>
     method: "POST",
     body: { planId },
   });
+
+export const createSubscriptionOrder = async (token, planId) =>
+  apiRequest(`${baseUrl}${endPoints.subscriptionCreateOrderurl}`, {
+    token,
+    method: "POST",
+    body: { planId },
+  });
+
+export const verifySubscriptionPayment = async (token, payload) =>
+  apiRequest(`${baseUrl}${endPoints.subscriptionVerifyPaymenturl}`, {
+    token,
+    method: "POST",
+    body: payload,
+  });

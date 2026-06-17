@@ -21,8 +21,17 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   getMySubscription,
   subscribeToPlan,
+  createSubscriptionOrder,
+  verifySubscriptionPayment,
 } from "../ApiService/subscriptionApiService";
 import { getApiErrorMessage } from "../Utils/apiErrors";
+
+let RazorpayCheckout = null;
+try {
+  RazorpayCheckout = require("react-native-razorpay").default;
+} catch {
+  RazorpayCheckout = null;
+}
 
 const formatPeriod = (plan) => {
   if (!plan?.periodValue) return "";
@@ -41,11 +50,13 @@ const PlanCard = ({
   plan,
   active,
   subscribing,
+  canSubscribeToFree,
   onSubscribe,
   styles,
   colors,
 }) => {
   const isFree = plan.isFree || plan.amount === 0;
+  const freeBlocked = isFree && !canSubscribeToFree && !active;
 
   return (
     <View style={[styles.planCard, active && styles.planCardActive]}>
@@ -55,6 +66,11 @@ const PlanCard = ({
           {active ? (
             <View style={styles.activePill}>
               <Text style={styles.activePillText}>Current</Text>
+            </View>
+          ) : null}
+          {isFree && !active ? (
+            <View style={styles.trialPill}>
+              <Text style={styles.trialPillText}>One-time trial</Text>
             </View>
           ) : null}
         </View>
@@ -71,36 +87,32 @@ const PlanCard = ({
       ) : null}
 
       <View style={styles.planMetaRow}>
-        {isFree ? (
-          <>
-            <View style={styles.metaPill}>
-              <Icon name="car-outline" size={14} color={colors.primary} />
-              <Text style={styles.metaPillText}>
-                {plan.rideLimit} ride{plan.rideLimit === 1 ? "" : "s"}
-              </Text>
-            </View>
-            <View style={styles.metaPill}>
-              <Icon name="repeat" size={14} color={colors.successText} />
-              <Text style={styles.metaPillText}>Unlimited picks per ride</Text>
-            </View>
-          </>
+        <View style={styles.metaPill}>
+          <Icon name="time-outline" size={14} color={colors.textMuted} />
+          <Text style={styles.metaPillText}>{formatPeriod(plan)}</Text>
+        </View>
+        {plan.unlimitedPicks ? (
+          <View style={styles.metaPill}>
+            <Icon name="infinite" size={14} color={colors.successText} />
+            <Text style={styles.metaPillText}>Unlimited picks</Text>
+          </View>
         ) : (
-          <>
-            <View style={styles.metaPill}>
-              <Icon name="navigate" size={14} color={colors.primary} />
-              <Text style={styles.metaPillText}>
-                {plan.enroutePickLimit} en route picks
-              </Text>
-            </View>
-            <View style={styles.metaPill}>
-              <Icon name="time-outline" size={14} color={colors.textMuted} />
-              <Text style={styles.metaPillText}>{formatPeriod(plan)}</Text>
-            </View>
-          </>
+          <View style={styles.metaPill}>
+            <Icon name="navigate" size={14} color={colors.primary} />
+            <Text style={styles.metaPillText}>
+              {plan.enroutePickLimit ?? plan.rideLimit ?? "—"} en route picks
+            </Text>
+          </View>
         )}
       </View>
 
-      {!active ? (
+      {freeBlocked ? (
+        <Text style={styles.blockedNote}>
+          Free plan already used. Choose a paid plan to continue.
+        </Text>
+      ) : null}
+
+      {!active && !freeBlocked ? (
         <TouchableOpacity
           style={[styles.subscribeBtn, subscribing && styles.subscribeBtnDisabled]}
           onPress={() => onSubscribe(plan)}
@@ -111,7 +123,7 @@ const PlanCard = ({
             <ActivityIndicator size="small" color={colors.inverseText} />
           ) : (
             <Text style={styles.subscribeBtnText}>
-              {isFree ? "Activate free plan" : "Subscribe"}
+              {isFree ? "Activate free plan" : `Pay ₹${plan.amount} & subscribe`}
             </Text>
           )}
         </TouchableOpacity>
@@ -131,6 +143,8 @@ const DriverSubscriptionScreen = () => {
   const [subscribingId, setSubscribingId] = useState(null);
   const [subscription, setSubscription] = useState(null);
   const [plans, setPlans] = useState([]);
+  const [canSubscribeToFree, setCanSubscribeToFree] = useState(true);
+  const [razorpayKeyId, setRazorpayKeyId] = useState("");
 
   const load = useCallback(async ({ showSpinner = true } = {}) => {
     try {
@@ -140,6 +154,8 @@ const DriverSubscriptionScreen = () => {
       const res = await getMySubscription(token);
       setSubscription(res?.subscription || null);
       setPlans(res?.plans || []);
+      setCanSubscribeToFree(res?.canSubscribeToFree !== false);
+      setRazorpayKeyId(res?.razorpayKeyId || "");
     } catch (err) {
       Alert.alert("Could not load plans", getApiErrorMessage(err, "Try again."));
     } finally {
@@ -154,14 +170,73 @@ const DriverSubscriptionScreen = () => {
     }, [load])
   );
 
+  const handlePaidSubscribe = async (token, plan) => {
+    if (!RazorpayCheckout) {
+      Alert.alert(
+        "Payment unavailable",
+        "Rebuild the app after installing react-native-razorpay to enable payments."
+      );
+      return;
+    }
+
+    const orderRes = await createSubscriptionOrder(token, plan._id);
+    const keyId = orderRes?.keyId || razorpayKeyId;
+    if (!keyId || !orderRes?.order?.id) {
+      throw new Error("Could not start payment. Try again.");
+    }
+
+    const options = {
+      key: keyId,
+      amount: orderRes.order.amount,
+      currency: orderRes.order.currency || "INR",
+      name: "Share Wheels",
+      description: plan.name,
+      order_id: orderRes.order.id,
+      prefill: orderRes.prefill || {},
+      theme: { color: colors.primary || "#2563EB" },
+    };
+
+    const paymentData = await RazorpayCheckout.open(options);
+
+    const verifyRes = await verifySubscriptionPayment(token, {
+      planId: plan._id,
+      razorpay_order_id: paymentData.razorpay_order_id,
+      razorpay_payment_id: paymentData.razorpay_payment_id,
+      razorpay_signature: paymentData.razorpay_signature,
+    });
+
+    Alert.alert("Success", verifyRes?.message || "Subscription activated");
+    await load({ showSpinner: false });
+  };
+
   const handleSubscribe = async (plan) => {
+    const isFree = plan.isFree || plan.amount === 0;
+
+    if (isFree && !canSubscribeToFree) {
+      Alert.alert(
+        "Free plan unavailable",
+        "The free plan can only be used once. Please choose a paid plan."
+      );
+      return;
+    }
+
     try {
       setSubscribingId(plan._id);
       const token = await AsyncStorage.getItem("token");
-      const res = await subscribeToPlan(token, plan._id);
-      Alert.alert("Success", res?.message || "Subscription updated");
-      await load({ showSpinner: false });
+
+      if (isFree) {
+        const res = await subscribeToPlan(token, plan._id);
+        Alert.alert("Success", res?.message || "Free plan activated");
+        await load({ showSpinner: false });
+        return;
+      }
+
+      await handlePaidSubscribe(token, plan);
     } catch (err) {
+      const code = err?.code;
+      if (code === 0 || /cancel/i.test(String(err?.description || err?.message || ""))) {
+        return;
+      }
       Alert.alert("Subscribe failed", getApiErrorMessage(err, "Try again."));
     } finally {
       setSubscribingId(null);
@@ -169,6 +244,8 @@ const DriverSubscriptionScreen = () => {
   };
 
   const activePlanId = subscription?.planId?.toString?.() || subscription?.planId;
+  const isLegacyFree = subscription?.isLegacyFreeRidePlan;
+  const showPickStats = subscription && !isLegacyFree;
 
   return (
     <ScreenContainer style={{ paddingHorizontal: LAYOUT.spacing.screen }}>
@@ -206,7 +283,7 @@ const DriverSubscriptionScreen = () => {
             {subscription ? (
               <>
                 <View style={styles.usageStats}>
-                  {subscription.isFree ? (
+                  {isLegacyFree ? (
                     <>
                       <View style={styles.usageStat}>
                         <Text style={styles.usageStatNum}>
@@ -227,7 +304,26 @@ const DriverSubscriptionScreen = () => {
                         <Text style={styles.usageStatLabel}>Rides used</Text>
                       </View>
                     </>
-                  ) : (
+                  ) : subscription.unlimitedPicks ? (
+                    <>
+                      <View style={styles.usageStat}>
+                        <Text style={styles.usageStatNum}>∞</Text>
+                        <Text style={styles.usageStatLabel}>Unlimited</Text>
+                      </View>
+                      <View style={styles.usageStat}>
+                        <Text style={styles.usageStatNum}>
+                          {subscription.picksUsed ?? 0}
+                        </Text>
+                        <Text style={styles.usageStatLabel}>Picks used</Text>
+                      </View>
+                      <View style={styles.usageStat}>
+                        <Text style={styles.usageStatNum}>
+                          {formatExpiry(subscription.expiresAt)}
+                        </Text>
+                        <Text style={styles.usageStatLabel}>Expires</Text>
+                      </View>
+                    </>
+                  ) : showPickStats ? (
                     <>
                       <View style={styles.usageStat}>
                         <Text style={styles.usageStatNum}>
@@ -248,18 +344,20 @@ const DriverSubscriptionScreen = () => {
                         <Text style={styles.usageStatLabel}>Used</Text>
                       </View>
                     </>
-                  )}
+                  ) : null}
                 </View>
                 <Text style={styles.usageMeta}>
                   Plan: {subscription.plan?.name || "—"}
-                  {subscription.isFree
-                    ? " · Unlimited en route picks on each ride"
-                    : ` · Renews / ends ${formatExpiry(subscription.expiresAt)}`}
+                  {subscription.isExpired
+                    ? " · Expired — upgrade to continue"
+                    : subscription.picksExhausted
+                      ? " · Picks used up — upgrade to continue"
+                      : ` · Valid until ${formatExpiry(subscription.expiresAt)}`}
                 </Text>
               </>
             ) : (
               <Text style={styles.usageMeta}>
-                No active plan yet. Choose a plan below to start picking en route requests.
+                No active plan. Choose a plan below to start picking en route requests.
               </Text>
             )}
           </View>
@@ -280,6 +378,7 @@ const DriverSubscriptionScreen = () => {
                 plan={plan}
                 active={activePlanId && String(activePlanId) === String(plan._id)}
                 subscribing={subscribingId === plan._id}
+                canSubscribeToFree={canSubscribeToFree}
                 onSubscribe={handleSubscribe}
                 styles={styles}
                 colors={colors}
@@ -387,6 +486,7 @@ const createStyles = (c) =>
       flexDirection: "row",
       alignItems: "center",
       gap: 8,
+      flexWrap: "wrap",
     },
     planName: {
       fontSize: 17,
@@ -404,6 +504,18 @@ const createStyles = (c) =>
       fontSize: 10,
       fontWeight: "800",
       color: c.successText,
+      textTransform: "uppercase",
+    },
+    trialPill: {
+      backgroundColor: c.chipBg,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+    },
+    trialPillText: {
+      fontSize: 10,
+      fontWeight: "700",
+      color: c.textMuted,
       textTransform: "uppercase",
     },
     planPrice: {
@@ -442,6 +554,12 @@ const createStyles = (c) =>
       fontSize: 12,
       fontWeight: "600",
       color: c.textSecondary,
+    },
+    blockedNote: {
+      fontSize: 12,
+      color: c.warningText || c.textMuted,
+      marginBottom: 10,
+      lineHeight: 17,
     },
     subscribeBtn: {
       backgroundColor: c.primary,
