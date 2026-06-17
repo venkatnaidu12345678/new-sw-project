@@ -14,7 +14,7 @@ const {
   closeStandaloneRequestsAfterJoin,
   closeSiblingStandalonesAfterEnroutePick,
   collectAssignedRequestDocIds,
-  dedupeEnrouteRequestsByCreator,
+  dedupeEnrouteRequestsByRequestId,
 } = require("../utils/participantRequestCleanup");
 const {
   emitToUser,
@@ -441,18 +441,16 @@ const enrouteRequests = async (user, { from, to, date, rideId, stopovers, routeP
   let stopoverRows = normalizeStopoverRows(stopovers);
   let polyline = String(routePolyline || "").trim();
   let rideDayDate = date;
-  let excludeUserIds = new Set();
   let excludePassengerRideIds = new Set();
   let excludeCourierIds = new Set();
 
   if (rideId && mongoose.Types.ObjectId.isValid(rideId)) {
     const ride = await Ride.findById(rideId)
       .select(
-        "passenger_requested_ride.userId passengers.userId users_request_Couriers.userId all_deliveries.userId stopovers from to routePolyline date"
+        "stopovers from to routePolyline date"
       )
       .lean();
     if (ride) {
-      collectRideParticipantUserIds(ride).forEach((id) => excludeUserIds.add(id));
       const assigned = await collectAssignedRequestDocIds(rideId);
       assigned.passengerRideIds.forEach((id) => excludePassengerRideIds.add(id));
       assigned.courierIds.forEach((id) => excludeCourierIds.add(id));
@@ -482,9 +480,6 @@ const enrouteRequests = async (user, { from, to, date, rideId, stopovers, routeP
     loadPolylineTowns: loadPolylineTownLabels,
   });
 
-  const excludeCreatorIds = Array.from(excludeUserIds).filter((id) =>
-    mongoose.Types.ObjectId.isValid(id)
-  );
   const excludePassengerIds = Array.from(excludePassengerRideIds).filter((id) =>
     mongoose.Types.ObjectId.isValid(id)
   );
@@ -492,17 +487,12 @@ const enrouteRequests = async (user, { from, to, date, rideId, stopovers, routeP
     mongoose.Types.ObjectId.isValid(id)
   );
 
-  const excludeCreatorObjectIds = [
-    user._id,
-    ...excludeCreatorIds.map((id) => new mongoose.Types.ObjectId(id)),
-  ];
-
   const matchesCorridor = (reqFrom, reqTo) =>
     requestMatchesDriverCorridor(reqFrom, reqTo, corridor, fromTrim, toTrim);
 
   const passengers = await PassengerRide.find({
     ...OPEN_PASSENGER_FILTER,
-    creator: { $nin: excludeCreatorObjectIds },
+    creator: { $ne: user._id },
     ...(excludePassengerIds.length
       ? { _id: { $nin: excludePassengerIds.map((id) => new mongoose.Types.ObjectId(id)) } }
       : {}),
@@ -512,7 +502,6 @@ const enrouteRequests = async (user, { from, to, date, rideId, stopovers, routeP
   const passengerRequests = passengers
     .filter(
       (p) =>
-        !excludeUserIds.has(String(p.creator?._id || p.creator)) &&
         !excludePassengerRideIds.has(String(p._id)) &&
         matchesCorridor(p.from, p.to)
     )
@@ -534,7 +523,7 @@ const enrouteRequests = async (user, { from, to, date, rideId, stopovers, routeP
 
   const couriers = await Courier.find({
     ...OPEN_COURIER_FILTER,
-    creator: { $nin: excludeCreatorObjectIds },
+    creator: { $ne: user._id },
     ...(excludeCourierDocIds.length
       ? { _id: { $nin: excludeCourierDocIds.map((id) => new mongoose.Types.ObjectId(id)) } }
       : {}),
@@ -544,7 +533,6 @@ const enrouteRequests = async (user, { from, to, date, rideId, stopovers, routeP
   const courierRequests = couriers
     .filter(
       (c) =>
-        !excludeUserIds.has(String(c.creator?._id || c.creator)) &&
         !excludeCourierIds.has(String(c._id)) &&
         matchesCorridor(c.from, c.to)
     )
@@ -566,7 +554,7 @@ const enrouteRequests = async (user, { from, to, date, rideId, stopovers, routeP
     courier_status: c.courier_status,
     courier_receiver_details: c.courier_receiver_details,
   }));
-  const allRequests = dedupeEnrouteRequestsByCreator([
+  const allRequests = dedupeEnrouteRequestsByRequestId([
     ...passengerRequests,
     ...courierRequests,
   ]);

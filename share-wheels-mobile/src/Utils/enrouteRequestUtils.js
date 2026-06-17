@@ -7,7 +7,11 @@ export const formatEnrouteItems = (list, from, to) => {
     const isCourier = item.request_type?.toLowerCase().includes("courier");
 
     return {
-      id: item.passengerId || item.courierId || item._id || `row-${index}`,
+      id:
+        item.passengerId ||
+        item.courierId ||
+        item._id ||
+        `${item.creatorId || "user"}-${item.from || ""}-${item.to || ""}-${index}`,
       rideId: item.rideId || item.ride_id,
       courierId: item.courierId || item.courier_id,
       passengerId: item.passengerId || item.passenger_id,
@@ -104,11 +108,9 @@ export const collectRideParticipantUserIds = ({
 };
 
 export const filterEnrouteByParticipants = (data = [], participantUserIds) => {
-  if (!participantUserIds?.size) return data;
-  return data.filter((item) => {
-    const creatorId = normalizeUserId(item?.creatorId);
-    return !creatorId || !participantUserIds.has(creatorId);
-  });
+  // Keep all corridor-matched requests visible; pick conflicts are handled at pick time.
+  void participantUserIds;
+  return data;
 };
 
 export const getEnroutePickConflict = (item, participantUserIds) => {
@@ -158,10 +160,6 @@ export const shouldRemoveEnrouteRow = (row, payload) => {
     payload.courierId &&
     String(row.courierId || "") === String(payload.courierId)
   ) {
-    return true;
-  }
-
-  if (payload.userId && String(row.creatorId || "") === String(payload.userId)) {
     return true;
   }
 
