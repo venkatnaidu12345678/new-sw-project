@@ -33,9 +33,6 @@ const {
 const { toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
 const {
   closeStandaloneRequestsAfterJoin,
-  getUserCourierParticipatedRides,
-  getUserPassengerParticipatedRides,
-  shouldHideStandaloneByParticipation,
   routesRoughlyMatch,
 } = require("../utils/participantRequestCleanup");
 const {
@@ -1684,12 +1681,8 @@ const buildMyPassengerRequests = async (user) => {
     $or: [{ assigned_to: { $exists: false } }, { "assigned_to.rideId": null }],
   }).lean();
 
-  const participatedRides = await getUserPassengerParticipatedRides(userId);
-
   const visiblePassengerData = passengerData.filter(
-    (p) =>
-      !p.assigned_to?.rideId &&
-      !shouldHideStandaloneByParticipation(p, participatedRides)
+    (p) => !p.assigned_to?.rideId
   );
 
   const standalonePassengerRequests = visiblePassengerData.map((p) => ({
@@ -1739,13 +1732,9 @@ const buildMyCourierRequests = async (user) => {
     ],
   }).lean();
 
-  const participatedRides = await getUserCourierParticipatedRides(userId);
-
   const courierRequestsBase = courierRequestsData
     .filter(
-      (c) =>
-        !c.driver_assigned_courier?.rideId &&
-        !shouldHideStandaloneByParticipation(c, participatedRides)
+      (c) => !c.driver_assigned_courier?.rideId
     )
     .map((c) => ({
       requestId: c._id,
