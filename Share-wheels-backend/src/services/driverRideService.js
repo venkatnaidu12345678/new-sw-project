@@ -101,20 +101,24 @@ const acceptPassengerRequest = async (user, { rideId, passenger_userId }) => {
 
   let segFrom = String(reqObj.from || "").trim() || ride.from;
   let segTo = String(reqObj.to || "").trim() || ride.to;
+  let linkedPassengerRideId = null;
   const fullRideSegment =
     segFrom.toLowerCase() === String(ride.from || "").trim().toLowerCase() &&
     segTo.toLowerCase() === String(ride.to || "").trim().toLowerCase();
+  const linkedPassengerRide = await PassengerRide.findOne({
+    creator: reqObj.userId,
+    $or: [
+      { "assigned_to.rideId": ride._id },
+      { join_requested_By: { $elemMatch: { rideId: ride._id } } },
+    ],
+  })
+    .sort({ updatedAt: -1 })
+    .select("_id from to")
+    .lean();
+  if (linkedPassengerRide?._id) {
+    linkedPassengerRideId = String(linkedPassengerRide._id);
+  }
   if (fullRideSegment) {
-    const linkedPassengerRide = await PassengerRide.findOne({
-      creator: reqObj.userId,
-      $or: [
-        { "assigned_to.rideId": ride._id },
-        { join_requested_By: { $elemMatch: { rideId: ride._id } } },
-      ],
-    })
-      .sort({ updatedAt: -1 })
-      .select("from to")
-      .lean();
     if (linkedPassengerRide?.from && linkedPassengerRide?.to) {
       segFrom = linkedPassengerRide.from;
       segTo = linkedPassengerRide.to;
@@ -139,7 +143,9 @@ const acceptPassengerRequest = async (user, { rideId, passenger_userId }) => {
   ride.availableSeats -= seatsNeeded;
   ride.passenger_requested_ride = ride.passenger_requested_ride.filter((item) => item.userId.toString() !== passenger_userId.toString());
   await ride.save();
-  await closeStandaloneRequestsAfterJoin(passenger_userId, ride);
+  await closeStandaloneRequestsAfterJoin(passenger_userId, ride, {
+    explicitPassengerRideId: linkedPassengerRideId,
+  });
   await UserRides.findOneAndUpdate(
     { creator: passenger_userId },
     {
