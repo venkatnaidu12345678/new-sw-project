@@ -33,30 +33,7 @@ export const shouldRemoveMyRequestRow = (row, payload = {}) => {
   ) {
     return true;
   }
-
-  const joinedActions = new Set([
-    "passenger_assigned",
-    "courier_assigned",
-    "ride_request_accepted",
-    "passenger_joined",
-    "courier_joined",
-    "passenger_request_sent",
-    "courier_request_sent",
-  ]);
-  if (!joinedActions.has(String(payload.action || ""))) return false;
-
-  const payloadFrom = String(payload.from || "").trim().toLowerCase();
-  const payloadTo = String(payload.to || "").trim().toLowerCase();
-  if (!payloadFrom || !payloadTo) return false;
-
-  const rowFrom = String(row.from || row.raw?.from || "").trim().toLowerCase();
-  const rowTo = String(row.to || row.raw?.to || "").trim().toLowerCase();
-  if (!rowFrom || !rowTo) return false;
-
-  const fromMatch =
-    rowFrom.includes(payloadFrom) || payloadFrom.includes(rowFrom);
-  const toMatch = rowTo.includes(payloadTo) || payloadTo.includes(rowTo);
-  return fromMatch && toMatch;
+  return false;
 };
 
 export const filterOpenPassengerRequests = (items = []) =>
