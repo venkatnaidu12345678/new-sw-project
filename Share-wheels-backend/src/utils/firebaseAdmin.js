@@ -221,18 +221,20 @@ async function sendPushNotification(token, title, body, data = {}) {
     data: payload,
     android: {
       priority: "high",
+      directBootOk: true,
+      ttl: 86400,
       collapseKey: rideId || notifType,
       notification: {
         channelId,
-        tag,
+        tag: String(tag),
         icon: "ic_notification",
         color: "#2563EB",
         sound: "default",
-        priority: "high",
+        notificationPriority: "PRIORITY_HIGH",
         visibility: "public",
         defaultSound: true,
         defaultVibrateTimings: true,
-        ...(rideId ? { threadId: rideId } : {}),
+        notificationCount: 1,
       },
     },
     apns: {
@@ -260,7 +262,7 @@ async function sendPushNotification(token, title, body, data = {}) {
     if (INVALID_TOKEN_CODES.has(code)) {
       return { success: false, invalidToken: true, code };
     }
-    console.warn("[FCM] Send failed:", code || error.message);
+    console.warn("[FCM] Send failed:", code || error.message, error?.message || "");
     return { success: false, reason: error.message, code };
   }
 }

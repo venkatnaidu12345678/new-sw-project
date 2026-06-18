@@ -232,7 +232,7 @@ const verifyOtp = async ({ userId, otp, fcmToken }) => {
   user.otp = null;
   user.otpExpires = null;
   user.otpPurpose = null;
-  if (fcmToken) user.fcmToken = fcmToken;
+  if (fcmToken) user.fcmToken = String(fcmToken).trim();
   await user.save();
 
   const token = issueToken(user);

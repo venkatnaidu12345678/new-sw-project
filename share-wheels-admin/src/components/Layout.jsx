@@ -47,6 +47,8 @@ const NAV_GROUPS = [
       { to: "/locations", label: "Locations", icon: IconMap },
       { to: "/lookup-types", label: "Dropdown types", icon: IconList },
       { to: "/subscription-plans", label: "Driver plans", icon: IconList },
+      { to: "/subscribed-users", label: "Subscribed users", icon: IconUsers },
+      { to: "/subscription-payments", label: "Plan payments", icon: IconList },
       { to: "/vehicle-fares", label: "Vehicle fares", icon: IconList },
     ],
   },
@@ -65,6 +67,8 @@ const ROUTE_TITLES = {
   "/feedback": "Feedback",
   "/legal": "Legal",
   "/subscription-plans": "Driver plans",
+  "/subscribed-users": "Subscribed users",
+  "/subscription-payments": "Plan payments",
   "/vehicle-fares": "Vehicle fares",
 };
 
@@ -188,7 +192,7 @@ export default function Layout() {
   );
 
   return (
-    <div className="flex h-full min-h-screen bg-canvas">
+    <div className="flex h-screen max-h-[100dvh] overflow-hidden bg-canvas">
       {mobileOpen ? (
         <button
           type="button"
@@ -261,12 +265,14 @@ export default function Layout() {
           <div
             className={
               isDashboard
-                ? "flex h-full flex-col overflow-hidden p-4 lg:p-5"
+                ? "flex min-h-0 flex-1 flex-col overflow-y-auto p-4 scrollbar-thin lg:p-5"
                 : "flex h-full min-h-0 flex-col overflow-hidden p-4 lg:p-5"
             }
           >
             <div
-              className={`page-enter mx-auto flex h-full min-h-0 w-full flex-col ${isWidePage ? "max-w-[1600px]" : "max-w-7xl"}`}
+              className={`page-enter mx-auto flex w-full flex-col ${
+                isDashboard ? "min-h-0 flex-1" : "h-full min-h-0"
+              } ${isWidePage ? "max-w-[1600px]" : "max-w-7xl"}`}
             >
               <Outlet />
             </div>

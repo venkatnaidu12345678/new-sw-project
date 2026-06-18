@@ -16,6 +16,7 @@ const INTENTS = {
   COURIER: "courier",
   CANCEL: "cancel",
   PAYMENT: "payment",
+  SUBSCRIPTION: "subscription",
   DRIVER: "driver",
   VEHICLE: "vehicle",
   OTP: "otp",
@@ -42,6 +43,8 @@ const detectIntent = (text = "") => {
   if (/passenger|seat|join ride|request seat/.test(t)) return INTENTS.PASSENGER;
   if (/courier|parcel|deliver|package/.test(t)) return INTENTS.COURIER;
   if (/cancel/.test(t)) return INTENTS.CANCEL;
+  if (/subscription|driver plan|enroute pick|upgrade plan|renew plan|free plan|my plan|picks remaining/.test(t))
+    return INTENTS.SUBSCRIPTION;
   if (/payment|pay|money|refund|amount|₹|rs/.test(t)) return INTENTS.PAYMENT;
   if (/driver|not responding|late|pickup/.test(t)) return INTENTS.DRIVER;
   if (/passenger.*request|someone request|pending.*passenger|accept passenger/.test(t))
@@ -61,7 +64,10 @@ const formatRideLine = (r) =>
 const defaultSuggestions = (snap) => {
   const chips = ["Full account summary", "My upcoming rides", "My requests"];
   if (!snap.profile.hasVehicle) chips.push("Add vehicle");
-  else chips.push("Offer a ride");
+  else {
+    chips.push("Offer a ride");
+    chips.push(snap.subscription?.isActive ? "My driver subscription" : "Driver subscription");
+  }
   chips.push("Rides available today", "Courier help");
   return chips.slice(0, 6);
 };
@@ -75,6 +81,14 @@ const buildSummaryReply = (snap) => {
   text += `\nRequests: ${c.passengerRequestsOpen} passenger + ${c.courierRequestsOpen} courier open`;
   if (snap.profile.hasVehicle) {
     text += `\nDriver inbox: ${c.pendingPassengerOnMyDrives} passenger seat requests, ${c.pendingCourierOnMyDrives} courier requests on your rides`;
+  }
+  if (snap.subscription) {
+    const sub = snap.subscription;
+    const planName = sub.plan?.name || "Driver plan";
+    const picks = sub.unlimitedPicks
+      ? "unlimited enroute pickups"
+      : `${sub.picksRemaining ?? 0} pickup(s) left of ${sub.enroutePickLimit ?? 0}`;
+    text += `\nDriver subscription: ${planName} — ${sub.isActive ? "active" : "inactive"} (${picks}), expires ${sub.expiresAt ? new Date(sub.expiresAt).toLocaleDateString() : "—"}`;
   }
   text += `\nYour bookings: ${c.myPendingSeatRequests} pending seat requests on others' rides`;
   text += `\n\nPlatform today: ${snap.platform.openRidesToday} open rides, ${snap.platform.openPassengerRequests} passenger requests, ${snap.platform.openCourierRequests} courier jobs`;
@@ -255,11 +269,57 @@ const replyForIntent = (intent, message, snap) => {
     case INTENTS.PAYMENT:
       return {
         reply: plain(
-          `Payments: seat price × seats on rides. Your records show ${c.upcomingRides} upcoming with amounts in ride details. Pay driver directly as arranged.`
+          snap.subscription
+            ? `Ride payments: seat price × seats — pay your driver as arranged. Driver subscription: ${snap.subscription.plan?.name || "plan"} (${snap.subscription.isActive ? "active" : "inactive"}). Open Profile → Driver subscription for upgrades.`
+            : `Payments: seat price × seats on rides. Your records show ${c.upcomingRides} upcoming with amounts in ride details. Pay driver directly as arranged.`
         ),
-        suggestions: ["My upcoming rides", "Full account summary"],
-        escalate: true,
+        suggestions: snap.profile.hasVehicle
+          ? ["My driver subscription", "My upcoming rides", "Full account summary"]
+          : ["My upcoming rides", "Full account summary"],
+        escalate: !snap.subscription,
       };
+
+    case INTENTS.SUBSCRIPTION: {
+      const sub = snap.subscription;
+      const meta = snap.subscriptionMeta || {};
+      if (!sub) {
+        return {
+          reply: plain(
+            p.hasVehicle
+              ? "No driver subscription on file yet. Open Profile → Driver subscription to activate the free trial or upgrade to a paid plan for enroute pickups."
+              : "Driver subscriptions apply when you host rides. Add a vehicle in Profile first, then open Driver subscription."
+          ),
+          suggestions: p.hasVehicle
+            ? ["Driver subscription", "Offer a ride"]
+            : ["Add vehicle", "Account help"],
+        };
+      }
+      const planName = sub.plan?.name || "Driver plan";
+      const picks = sub.unlimitedPicks
+        ? "Unlimited enroute pickups"
+        : `${sub.picksUsed ?? 0} used, ${sub.picksRemaining ?? 0} remaining of ${sub.enroutePickLimit ?? 0}`;
+      const expiry = sub.expiresAt
+        ? new Date(sub.expiresAt).toLocaleDateString()
+        : "—";
+      let text = `Driver subscription — ${planName}\n`;
+      text += `Status: ${sub.isActive ? "Active" : "Inactive"}${sub.isDeactivated && sub.deactivationReason ? ` (${sub.deactivationReason.replace(/_/g, " ")})` : ""}\n`;
+      text += `Enroute pickups: ${picks}\n`;
+      text += `Valid until: ${expiry}\n`;
+      text += `Amount paid: ₹${sub.amountPaid ?? 0}`;
+      if (!sub.isActive && !meta.freePlanUsed && meta.canSubscribeToFree) {
+        text += "\n\nYou can still activate the one-time free plan from the app.";
+      } else if (!sub.isActive && meta.freePlanUsed) {
+        text += meta.razorpayConfigured
+          ? "\n\nUpgrade to a paid plan in Profile → Driver subscription (Razorpay)."
+          : "\n\nContact support to renew your driver plan.";
+      }
+      return {
+        reply: plain(text),
+        suggestions: sub.isActive
+          ? ["Offer a ride", "Driver inbox", "Full account summary"]
+          : ["Driver subscription", "My upcoming rides"],
+      };
+    }
 
     case INTENTS.DRIVER:
       return {
@@ -325,6 +385,12 @@ const getContext = async (user) => {
         ...snap.counts,
         hasVehicle: snap.profile.hasVehicle,
         platformOpenToday: snap.platform.openRidesToday,
+        subscription: snap.subscription,
+        subscriptionActive: !!snap.subscription?.isActive,
+        subscriptionPlan: snap.subscription?.plan?.name || null,
+        picksRemaining: snap.subscription?.picksRemaining ?? null,
+        subscriptionExpiresAt: snap.subscription?.expiresAt || null,
+        freePlanUsed: snap.subscriptionMeta?.freePlanUsed ?? false,
       },
     },
   };

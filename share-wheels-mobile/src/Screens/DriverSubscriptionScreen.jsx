@@ -26,7 +26,8 @@ import {
   verifySubscriptionPayment,
 } from "../ApiService/subscriptionApiService";
 import { getApiErrorMessage } from "../Utils/apiErrors";
-import { buildRazorpayCheckoutOptions } from "../Utils/razorpayCheckout";
+import { buildNativeRazorpayCheckoutOptions } from "../Utils/razorpayCheckout";
+import { wakeBackendIfRemote } from "../Utils/wakeBackend";
 
 let RazorpayCheckout = null;
 try {
@@ -152,7 +153,14 @@ const PlanCard = ({
         : "Deactivated";
 
   return (
-    <View style={[styles.planCardOuter, { borderColor: theme.border }]}>
+    <View
+      style={[
+        styles.planCardOuter,
+        { borderColor: theme.border },
+        isCurrent && styles.planCardOuterActive,
+        isDeactivated && styles.planCardOuterDeactivated,
+      ]}
+    >
       <LinearGradient
         colors={theme.bg}
         start={{ x: 0, y: 0 }}
@@ -163,8 +171,15 @@ const PlanCard = ({
           colors={theme.accent}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
-          style={styles.planTopAccent}
+          style={[styles.planTopAccent, isCurrent && styles.planTopAccentActive]}
         />
+
+        {isCurrent ? (
+          <View style={styles.activePlanRibbon}>
+            <Icon name="star" size={12} color={colors.inverseText} />
+            <Text style={styles.activePlanRibbonText}>Your active plan</Text>
+          </View>
+        ) : null}
 
         <View style={styles.planInner}>
           <View style={styles.planHeaderRow}>
@@ -178,7 +193,8 @@ const PlanCard = ({
                 </Text>
                 {isCurrent ? (
                   <View style={styles.activePill}>
-                    <Text style={styles.activePillText}>Current</Text>
+                    <Icon name="checkmark-circle" size={11} color={colors.successText} />
+                    <Text style={styles.activePillText}>Active</Text>
                   </View>
                 ) : null}
                 {isDeactivated ? (
@@ -354,30 +370,51 @@ const DriverSubscriptionScreen = () => {
       return;
     }
 
-    const orderRes = await createSubscriptionOrder(token, plan._id);
+    await wakeBackendIfRemote();
+
+    const orderRes = await createSubscriptionOrder(token, String(plan._id));
     const keyId = orderRes?.keyId || razorpayKeyId;
-    if (!keyId || !orderRes?.order?.id) {
+    const orderId = orderRes?.order?.id;
+    const amountPaise = Number(
+      orderRes?.order?.amountPaise ?? orderRes?.order?.amount
+    );
+
+    if (!keyId || !orderId || !Number.isFinite(amountPaise) || amountPaise < 100) {
       throw new Error("Could not start payment. Try again.");
     }
 
-    const baseOptions = buildRazorpayCheckoutOptions({
+    const options = buildNativeRazorpayCheckoutOptions({
       key: keyId,
-      amount: orderRes.order.amount,
+      amountPaise,
       currency: orderRes.order.currency || "INR",
       name: "Share Wheels",
       description: plan.name,
-      order_id: orderRes.order.id,
+      order_id: orderId,
       prefill: orderRes.prefill || {},
       theme: { color: colors.primary || "#2563EB" },
     });
-    const options = orderRes?.checkout
-      ? { ...baseOptions, ...orderRes.checkout }
-      : baseOptions;
 
-    const paymentData = await RazorpayCheckout.open(options);
+    let paymentData;
+    try {
+      paymentData = await RazorpayCheckout.open(options);
+    } catch (checkoutErr) {
+      const checkoutCode = checkoutErr?.code ?? checkoutErr?.error?.code;
+      if (checkoutCode === 0 || checkoutCode === 2) {
+        return;
+      }
+      throw checkoutErr;
+    }
+
+    if (
+      !paymentData?.razorpay_order_id ||
+      !paymentData?.razorpay_payment_id ||
+      !paymentData?.razorpay_signature
+    ) {
+      throw new Error("Payment was not completed.");
+    }
 
     const verifyRes = await verifySubscriptionPayment(token, {
-      planId: plan._id,
+      planId: String(plan._id),
       razorpay_order_id: paymentData.razorpay_order_id,
       razorpay_payment_id: paymentData.razorpay_payment_id,
       razorpay_signature: paymentData.razorpay_signature,
@@ -411,8 +448,16 @@ const DriverSubscriptionScreen = () => {
 
       await handlePaidSubscribe(token, plan);
     } catch (err) {
-      const code = err?.code;
-      if (code === 0 || /cancel/i.test(String(err?.description || err?.message || ""))) {
+      const code = err?.code ?? err?.error?.code;
+      const description = String(err?.description || err?.message || "");
+      if (code === 0 || code === 2 || /cancel/i.test(description)) {
+        return;
+      }
+      if (err?.code === "RAZORPAY_NOT_CONFIGURED") {
+        Alert.alert(
+          "Payments unavailable",
+          "Razorpay is not configured on the server yet."
+        );
         return;
       }
       Alert.alert("Subscribe failed", getApiErrorMessage(err, "Try again."));
@@ -421,8 +466,23 @@ const DriverSubscriptionScreen = () => {
     }
   };
 
-  const subscriptionPlanId =
-    subscription?.planId?.toString?.() || subscription?.planId;
+  const subscriptionPlanId = useMemo(() => {
+    const raw = subscription?.planId;
+    if (!raw) return null;
+    if (typeof raw === "object" && raw._id) return String(raw._id);
+    return String(raw);
+  }, [subscription?.planId]);
+
+  const sortedPlans = useMemo(() => {
+    if (!subscriptionPlanId || !subscription?.isActive) return plans;
+    return [...plans].sort((a, b) => {
+      const aMatch = String(a._id) === subscriptionPlanId;
+      const bMatch = String(b._id) === subscriptionPlanId;
+      if (aMatch && !bMatch) return -1;
+      if (!aMatch && bMatch) return 1;
+      return 0;
+    });
+  }, [plans, subscriptionPlanId, subscription?.isActive]);
 
   const hasPaidPlans = useMemo(
     () => plans.some((plan) => !plan.isFree && Number(plan.amount) > 0),
@@ -653,7 +713,7 @@ const DriverSubscriptionScreen = () => {
               </Text>
             </View>
           ) : (
-            plans.map((plan) => {
+            sortedPlans.map((plan) => {
               const planId = String(plan._id);
               const isPlanMatch =
                 subscriptionPlanId && String(subscriptionPlanId) === planId;
@@ -913,12 +973,46 @@ const createStyles = (c) =>
       shadowRadius: 10,
       elevation: 2,
     },
+    planCardOuterActive: {
+      borderWidth: 2.5,
+      borderColor: c.primary,
+      shadowColor: c.primary,
+      shadowOpacity: 0.22,
+      shadowRadius: 14,
+      elevation: 5,
+    },
+    planCardOuterDeactivated: {
+      borderWidth: 2,
+      borderColor: c.warningText || "#D97706",
+      shadowColor: c.warningText || "#D97706",
+      shadowOpacity: 0.12,
+      elevation: 3,
+    },
     planCardGradient: {
       borderRadius: 18,
     },
     planTopAccent: {
       height: 4,
       width: "100%",
+    },
+    planTopAccentActive: {
+      height: 5,
+    },
+    activePlanRibbon: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+      backgroundColor: c.primary,
+      paddingVertical: 7,
+      paddingHorizontal: 12,
+    },
+    activePlanRibbonText: {
+      fontSize: 11,
+      fontWeight: "800",
+      color: c.inverseText,
+      letterSpacing: 0.6,
+      textTransform: "uppercase",
     },
     planInner: {
       padding: 16,
@@ -953,10 +1047,15 @@ const createStyles = (c) =>
       flexShrink: 1,
     },
     activePill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
       backgroundColor: c.successBg,
       borderRadius: 999,
       paddingHorizontal: 10,
       paddingVertical: 4,
+      borderWidth: 1,
+      borderColor: c.successText + "55",
     },
     activePillText: {
       fontSize: 10,

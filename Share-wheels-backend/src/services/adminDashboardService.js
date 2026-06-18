@@ -3,6 +3,8 @@ const User = require("../models/userModel");
 const Ride = require("../models/rideModel");
 const PassengerRide = require("../models/passengerRideModel");
 const Courier = require("../models/courierModel");
+const UserSubscription = require("../models/userSubscriptionModel");
+const SubscriptionPaymentOrder = require("../models/subscriptionPaymentOrderModel");
 
 const { mapUserForAdmin } = require("./adminUserService");
 const { clearRideChatMessages } = require("./rideChatService");
@@ -36,6 +38,125 @@ const buildDailySeries = async (Model, days = 7) => {
     });
   }
   return series;
+};
+
+const PLAN_CHART_COLORS = [
+  "#6366f1",
+  "#10b981",
+  "#f59e0b",
+  "#f43f5e",
+  "#06b6d4",
+  "#8b5cf6",
+  "#ec4899",
+  "#64748b",
+];
+
+const getSubscriptionDashboardData = async () => {
+  const now = new Date();
+
+  const [
+    activeSubscriptions,
+    expiredSubscriptions,
+    cancelledSubscriptions,
+    totalSubscriptions,
+    paidPayments,
+    failedPayments,
+    pendingPayments,
+    revenueAgg,
+    planRows,
+    recentSubscriptions,
+    subscriptionActivity,
+  ] = await Promise.all([
+    UserSubscription.countDocuments({ status: "active", expiresAt: { $gt: now } }),
+    UserSubscription.countDocuments({ status: "expired" }),
+    UserSubscription.countDocuments({ status: "cancelled" }),
+    UserSubscription.countDocuments(),
+    SubscriptionPaymentOrder.countDocuments({ status: "paid" }),
+    SubscriptionPaymentOrder.countDocuments({ status: "failed" }),
+    SubscriptionPaymentOrder.countDocuments({ status: { $in: ["created", "expired"] } }),
+    SubscriptionPaymentOrder.aggregate([
+      { $match: { status: "paid" } },
+      { $group: { _id: null, total: { $sum: "$amount" } } },
+    ]),
+    UserSubscription.aggregate([
+      { $match: { status: "active", expiresAt: { $gt: now } } },
+      {
+        $group: {
+          _id: { $ifNull: ["$planSnapshot.name", "Unknown plan"] },
+          count: { $sum: 1 },
+          isFree: { $max: { $cond: ["$planSnapshot.isFree", 1, 0] } },
+        },
+      },
+      { $sort: { count: -1 } },
+      { $limit: 8 },
+    ]),
+    UserSubscription.find()
+      .sort({ createdAt: -1 })
+      .limit(6)
+      .populate("userId", "name email mobile")
+      .select("status planSnapshot startsAt expiresAt amountPaid createdAt userId")
+      .lean(),
+    buildDailySeries(UserSubscription, 7),
+  ]);
+
+  const subscriptionRevenue = revenueAgg[0]?.total || 0;
+
+  const freeActive = planRows
+    .filter((row) => row.isFree)
+    .reduce((sum, row) => sum + row.count, 0);
+  const paidActive = Math.max(0, activeSubscriptions - freeActive);
+
+  const subscriptionStatusBreakdown = [
+    { name: "Active", value: activeSubscriptions, color: "#10b981" },
+    { name: "Expired", value: expiredSubscriptions, color: "#f59e0b" },
+    { name: "Cancelled", value: cancelledSubscriptions, color: "#94a3b8" },
+  ].filter((row) => row.value > 0);
+
+  const subscriptionPlanBreakdown = planRows.map((row, index) => ({
+    name: row._id || "Unknown plan",
+    value: row.count,
+    color: PLAN_CHART_COLORS[index % PLAN_CHART_COLORS.length],
+  }));
+
+  const subscriptionPaymentBreakdown = [
+    { name: "Paid", value: paidPayments, color: "#10b981" },
+    { name: "Failed", value: failedPayments, color: "#f43f5e" },
+    { name: "Pending / expired", value: pendingPayments, color: "#f59e0b" },
+  ].filter((row) => row.value > 0);
+
+  const subscriptionTypeBreakdown = [
+    { name: "Paid active", value: paidActive, color: "#6366f1" },
+    { name: "Free active", value: freeActive, color: "#10b981" },
+  ].filter((row) => row.value > 0);
+
+  return {
+    stats: {
+      activeSubscriptions,
+      expiredSubscriptions,
+      totalSubscriptions,
+      subscriptionRevenue,
+      paidPayments,
+      paidActiveSubscriptions: paidActive,
+      freeActiveSubscriptions: freeActive,
+    },
+    subscriptionStatusBreakdown,
+    subscriptionPlanBreakdown,
+    subscriptionPaymentBreakdown,
+    subscriptionTypeBreakdown,
+    subscriptionActivityChart: subscriptionActivity,
+    recentSubscriptions: recentSubscriptions.map((row) => ({
+      id: String(row._id),
+      user: row.userId?.name || "—",
+      email: row.userId?.email || row.userId?.mobile || "",
+      plan: row.planSnapshot?.name || "—",
+      status: row.status,
+      amountPaid: row.amountPaid ?? 0,
+      isFree: !!row.planSnapshot?.isFree,
+      startsAt: row.startsAt,
+      expiresAt: row.expiresAt,
+      createdAt: row.createdAt,
+    })),
+  };
 };
 
 const getDashboardStats = async () => {
@@ -78,6 +199,8 @@ const getDashboardStats = async () => {
     buildDailySeries(User, 7),
   ]);
 
+  const subscriptionData = await getSubscriptionDashboardData();
+
   return {
     status: 200,
     body: {
@@ -92,6 +215,7 @@ const getDashboardStats = async () => {
         openCouriers,
         pendingRides,
         startedRides,
+        ...subscriptionData.stats,
       },
       rideStatusBreakdown: [
         { name: "Pending", value: pendingRides, color: "#f59e0b" },
@@ -103,7 +227,14 @@ const getDashboardStats = async () => {
       activityChart: rideActivity.map((row, i) => ({
         ...row,
         users: userActivity[i]?.count || 0,
+        subscriptions: subscriptionData.subscriptionActivityChart[i]?.count || 0,
       })),
+      subscriptionStatusBreakdown: subscriptionData.subscriptionStatusBreakdown,
+      subscriptionPlanBreakdown: subscriptionData.subscriptionPlanBreakdown,
+      subscriptionPaymentBreakdown: subscriptionData.subscriptionPaymentBreakdown,
+      subscriptionTypeBreakdown: subscriptionData.subscriptionTypeBreakdown,
+      subscriptionActivityChart: subscriptionData.subscriptionActivityChart,
+      recentSubscriptions: subscriptionData.recentSubscriptions,
       recentRides: recentRides.map((r) => ({
         id: String(r._id),
         from: r.from,

@@ -65,6 +65,10 @@ router.post("/subscription-plans", adminSubscriptionController.createPlan);
 router.patch("/subscription-plans/:id", adminSubscriptionController.updatePlan);
 router.delete("/subscription-plans/:id", adminSubscriptionController.deletePlan);
 
+router.get("/subscriptions", adminSubscriptionController.listSubscribedUsers);
+router.get("/subscription-payments", adminSubscriptionController.listPayments);
+router.post("/users/:userId/subscription", adminSubscriptionController.assignPlanToUser);
+
 router.get("/vehicle-fares", adminVehicleFareController.listFares);
 router.post("/vehicle-fares", adminVehicleFareController.createFare);
 router.patch("/vehicle-fares/:id", adminVehicleFareController.updateFare);

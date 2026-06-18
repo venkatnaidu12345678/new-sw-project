@@ -80,15 +80,6 @@ const parsePlanBody = (body = {}, { partial = false } = {}) => {
     }
   }
 
-  if (body.rideLimit !== undefined && body.rideLimit !== null) {
-    const limit = Number(body.rideLimit);
-    if (!Number.isInteger(limit) || limit < 1) {
-      errors.push("rideLimit must be a positive integer");
-    } else {
-      data.rideLimit = limit;
-    }
-  }
-
   if (body.isActive !== undefined) data.isActive = !!body.isActive;
   if (body.isDefault !== undefined) data.isDefault = !!body.isDefault;
 
@@ -101,9 +92,25 @@ const parsePlanBody = (body = {}, { partial = false } = {}) => {
   return { data, errors };
 };
 
+const applyEnroutePickupRules = (data, source = {}) => {
+  const unlimitedPicks = !!(data.unlimitedPicks ?? source.unlimitedPicks);
+  data.unlimitedPicks = unlimitedPicks;
+
+  if (unlimitedPicks) {
+    data.enroutePickLimit = undefined;
+    return null;
+  }
+
+  const limit = Number(data.enroutePickLimit ?? source.enroutePickLimit);
+  if (!Number.isInteger(limit) || limit < 1) {
+    return "enroutePickLimit is required when enroute pickups are not unlimited";
+  }
+  data.enroutePickLimit = limit;
+  return null;
+};
+
 const validatePlanFields = (data, source = {}, { partial = false } = {}) => {
   const isFree = data.isFree ?? source.isFree;
-  const unlimitedPicks = !!(data.unlimitedPicks ?? source.unlimitedPicks);
 
   const periodValue = Number(data.periodValue ?? source.periodValue);
   if (!Number.isInteger(periodValue) || periodValue < 1) {
@@ -117,22 +124,12 @@ const validatePlanFields = (data, source = {}, { partial = false } = {}) => {
   }
   data.periodUnit = unit;
 
+  const pickupError = applyEnroutePickupRules(data, source);
+  if (pickupError) return pickupError;
+
   if (isFree) {
     data.isFree = true;
     data.amount = 0;
-    data.unlimitedPicks = unlimitedPicks;
-    data.rideLimit = undefined;
-
-    if (unlimitedPicks) {
-      data.enroutePickLimit = undefined;
-    } else {
-      const limit = Number(data.enroutePickLimit ?? source.enroutePickLimit);
-      if (!Number.isInteger(limit) || limit < 1) {
-        return "enroutePickLimit is required when unlimited picks is off";
-      }
-      data.enroutePickLimit = limit;
-    }
-
     return null;
   }
 
@@ -142,18 +139,6 @@ const validatePlanFields = (data, source = {}, { partial = false } = {}) => {
   }
   data.amount = amount;
   data.isFree = false;
-  data.unlimitedPicks = unlimitedPicks;
-  data.rideLimit = undefined;
-
-  if (unlimitedPicks) {
-    data.enroutePickLimit = undefined;
-  } else {
-    const limit = Number(data.enroutePickLimit ?? source.enroutePickLimit);
-    if (!Number.isInteger(limit) || limit < 1) {
-      return "enroutePickLimit is required when unlimited picks is off";
-    }
-    data.enroutePickLimit = limit;
-  }
 
   return null;
 };
@@ -169,11 +154,8 @@ const buildUpdatePayload = (existing, body) => {
     amount: existing.amount,
     periodValue: existing.periodValue ?? 30,
     periodUnit: existing.periodUnit ?? "days",
-    enroutePickLimit:
-      existing.enroutePickLimit ??
-      (existing.rideLimit ? existing.rideLimit * 3 : 5),
+    enroutePickLimit: existing.enroutePickLimit ?? 5,
     unlimitedPicks: !!existing.unlimitedPicks,
-    rideLimit: existing.rideLimit,
     ...data,
   };
 
@@ -189,9 +171,10 @@ const buildUpdatePayload = (existing, body) => {
   if (updateData.enroutePickLimit === undefined && existing.enroutePickLimit != null) {
     $unset.enroutePickLimit = "";
   }
-  if (updateData.rideLimit === undefined && existing.rideLimit != null) {
-    $unset.rideLimit = "";
+  if (updateData.unlimitedPicks === true) {
+    $unset.enroutePickLimit = "";
   }
+  $unset.rideLimit = "";
 
   return { $set, $unset: Object.keys($unset).length ? $unset : null };
 };

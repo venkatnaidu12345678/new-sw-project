@@ -4,6 +4,7 @@ const Ride = require("../models/rideModel");
 const PassengerRide = require("../models/passengerRideModel");
 const Courier = require("../models/courierModel");
 const UserRides = require("../models/userRides");
+const driverSubscriptionService = require("./driverSubscriptionService");
 
 const uid = (id) => new mongoose.Types.ObjectId(id);
 const str = (id) => (id ? id.toString() : "");
@@ -66,6 +67,7 @@ const buildFullUserSnapshot = async (userId) => {
     couriersCreated,
     userRidesDoc,
     platformStats,
+    subscriptionStatus,
   ] = await Promise.all([
     Ride.find({ creator: userOid })
       .sort({ date: -1 })
@@ -91,6 +93,7 @@ const buildFullUserSnapshot = async (userId) => {
     Courier.find({ creator: userOid }).sort({ createdAt: -1 }).limit(50).lean(),
     UserRides.findOne({ creator: userOid }).lean(),
     getPlatformStats(),
+    driverSubscriptionService.getDriverSubscriptionStatus(userId),
   ]);
 
   const upcoming = [];
@@ -156,6 +159,9 @@ const buildFullUserSnapshot = async (userId) => {
     )
   );
 
+  const subBody = subscriptionStatus?.body || {};
+  const subscription = subBody.subscription || null;
+
   return {
     profile: {
       name: user.name,
@@ -203,6 +209,13 @@ const buildFullUserSnapshot = async (userId) => {
         }
       : { pending: [], accepted: [] },
     platform: platformStats,
+    subscription,
+    subscriptionMeta: {
+      freePlanUsed: !!subBody.freePlanUsed,
+      canSubscribeToFree: subBody.canSubscribeToFree !== false,
+      razorpayConfigured: !!subBody.razorpayConfigured,
+      activePlans: (subBody.plans || []).filter((p) => p.isActive !== false).length,
+    },
   };
 };
 

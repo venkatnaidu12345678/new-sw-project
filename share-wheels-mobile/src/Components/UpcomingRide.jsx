@@ -125,17 +125,17 @@ const UpcomingRide = ({ data, onPress }) => {
     data?.status === "started"
       ? { bg: colors.successBg, text: colors.successText }
       : isAwaitingDriver
-        ? { bg: colors.warningBg, text: colors.warningText }
+        ? { bg: colors.errorBg, text: colors.errorText }
         : data?.isSchedulePassed && role === "driver"
           ? { bg: colors.primaryMuted, text: colors.primaryText }
           : { bg: colors.surface, text: colors.textMuted };
 
-  const cardBorderColor = isAwaitingDriver ? colors.warningText : theme.border;
+  const cardBorderColor = isAwaitingDriver ? colors.errorText : theme.border;
   const accentColors = isAwaitingDriver
-    ? [colors.warningText, colors.warningBorder]
+    ? [colors.errorText, colors.errorBorder]
     : theme.accent;
   const cardBgColors = isAwaitingDriver
-    ? [colors.warningBg, colors.tintOrange, theme.bg[theme.bg.length - 1]]
+    ? [colors.errorBg, colors.surface, theme.bg[theme.bg.length - 1]]
     : theme.bg;
 
   const dateLabel = formatDisplayDate(data?.date, { showYear: false, weekday: false });
@@ -165,9 +165,9 @@ const UpcomingRide = ({ data, onPress }) => {
         />
 
         {isAwaitingDriver ? (
-          <View style={[styles.awaitingBanner, { backgroundColor: colors.warningBg }]}>
-            <Icon name="hourglass-outline" size={14} color={colors.warningText} />
-            <Text style={[styles.awaitingBannerText, { color: colors.warningText }]}>
+          <View style={[styles.awaitingBanner, { backgroundColor: colors.errorBg }]}>
+            <Icon name="hourglass-outline" size={14} color={colors.errorText} />
+            <Text style={[styles.awaitingBannerText, { color: colors.errorText }]}>
               Awaiting driver approval
             </Text>
           </View>
@@ -197,7 +197,7 @@ const UpcomingRide = ({ data, onPress }) => {
                   styles.profileSub,
                   isAwaitingDriver && [
                     styles.profileSubAwaiting,
-                    { color: colors.warningText },
+                    { color: colors.errorText },
                   ],
                 ]}
                 numberOfLines={1}
@@ -214,7 +214,7 @@ const UpcomingRide = ({ data, onPress }) => {
                     { backgroundColor: statusColors.bg },
                     isAwaitingDriver && [
                       styles.statusPillAwaiting,
-                      { borderColor: colors.warningBorder },
+                      { borderColor: colors.errorBorder },
                     ],
                   ]}
                 >
@@ -274,7 +274,7 @@ const createStyles = (c) =>
   },
   cardOuterAwaiting: {
     borderWidth: 2,
-    shadowColor: c.warningText,
+    shadowColor: c.errorText,
     shadowOpacity: 0.14,
     shadowRadius: 8,
     elevation: 3,
@@ -298,7 +298,7 @@ const createStyles = (c) =>
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderBottomWidth: 1,
-    borderBottomColor: c.warningBorder,
+    borderBottomColor: c.errorBorder,
   },
   awaitingBannerText: {
     fontSize: 11,

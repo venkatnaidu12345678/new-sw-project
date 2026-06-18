@@ -43,9 +43,11 @@ app.get("/health", async (_req, res) => {
   } catch (error) {
     authProbe = { ok: false, reason: error?.message || "probe_failed" };
   }
+  const { isRazorpayConfigured } = require("./services/razorpayService");
   res.status(200).json({
     ok: true,
     service: "share-wheels-backend",
+    razorpayConfigured: isRazorpayConfigured(),
     fcmPushEnabled: isFirebaseReady(),
     fcm,
     passwordReset: {
@@ -83,7 +85,11 @@ const PORT = process.env.PORT || 3001;
 
 server.listen(PORT, "0.0.0.0", () => {
   const { isFirebaseReady } = require("./utils/firebaseAdmin");
+  const { isRazorpayConfigured } = require("./services/razorpayService");
   console.log(`Server running on http://localhost:${PORT}`);
   console.log(`LAN access: use your PC IP on port ${PORT} (e.g. http://192.168.x.x:${PORT})`);
   console.log(`FCM push: ${isFirebaseReady() ? "configured" : "NOT configured (set FIREBASE_SERVICE_ACCOUNT_JSON on Render)"}`);
+  console.log(
+    `Razorpay: ${isRazorpayConfigured() ? "configured" : "NOT configured (set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET)"}`
+  );
 });

@@ -177,6 +177,22 @@ export const updateSubscriptionPlan = (id, body) =>
 export const deleteSubscriptionPlan = (id) =>
   api(`/admin/subscription-plans/${id}`, { method: "DELETE" });
 
+export const getSubscribedUsers = (params = {}) => {
+  const q = new URLSearchParams(params).toString();
+  return api(`/admin/subscriptions${q ? `?${q}` : ""}`);
+};
+
+export const assignUserSubscriptionPlan = (userId, planId) =>
+  api(`/admin/users/${userId}/subscription`, {
+    method: "POST",
+    body: JSON.stringify({ planId }),
+  });
+
+export const getSubscriptionPayments = (params = {}) => {
+  const q = new URLSearchParams(params).toString();
+  return api(`/admin/subscription-payments${q ? `?${q}` : ""}`);
+};
+
 export const getVehicleFares = (params = {}) => {
   const q = new URLSearchParams(params).toString();
   return api(`/admin/vehicle-fares${q ? `?${q}` : ""}`);

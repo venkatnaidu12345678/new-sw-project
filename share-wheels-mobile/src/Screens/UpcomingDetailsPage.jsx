@@ -534,15 +534,16 @@ const UpcomingDetailsPage = ({ route }) => {
     isDriver &&
     (normalizedRideStatus === "pending" || normalizedRideStatus === "started");
 
-  const participantTabs = useMemo(() => {
-    const tabs = ["All", "Passengers", "Couriers"];
-    const hasPending =
-      passengerRequests.length > 0 || courierRequests.length > 0;
-    if (!quickReserve || hasPending) {
-      tabs.push("Pax requests", "Courier requests");
-    }
-    return tabs;
-  }, [quickReserve, passengerRequests.length, courierRequests.length]);
+  const participantTabs = useMemo(
+    () => [
+      "All",
+      "Passengers",
+      "Couriers",
+      "Pax requests",
+      "Courier requests",
+    ],
+    []
+  );
 
   const pendingRequestCount =
     passengerRequests.length + courierRequests.length;

@@ -30,16 +30,19 @@ const ensureDefaultSubscriptionPlan = async () => {
       existing.periodUnit = "days";
       changed = true;
     }
-    if (!existing.enroutePickLimit && !existing.rideLimit) {
+    if (existing.unlimitedPicks == null) {
+      existing.unlimitedPicks = false;
+      changed = true;
+    }
+    if (!existing.unlimitedPicks && !existing.enroutePickLimit) {
       existing.enroutePickLimit = 5;
       changed = true;
     }
-    if (existing.rideLimit && !existing.enroutePickLimit) {
-      existing.enroutePickLimit = existing.rideLimit * 3;
-      changed = true;
-    }
-    existing.unlimitedPicks = false;
     if (changed) await existing.save();
+    await SubscriptionPlan.updateOne(
+      { _id: existing._id },
+      { $unset: { rideLimit: "" } }
+    );
     return existing;
   }
 
@@ -49,7 +52,7 @@ const ensureDefaultSubscriptionPlan = async () => {
     name: "Free Plan",
     slug: "free",
     description:
-      "Try en route picking with a limited number of picks during your trial period.",
+      "Free trial with configurable duration and enroute pickup allowance.",
     isFree: true,
     amount: 0,
     currency: "INR",

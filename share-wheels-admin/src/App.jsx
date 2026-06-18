@@ -13,6 +13,8 @@ import LookupTypes from "./pages/LookupTypes";
 import Feedbacks from "./pages/Feedbacks";
 import LegalPolicies from "./pages/LegalPolicies";
 import SubscriptionPlans from "./pages/SubscriptionPlans";
+import SubscribedUsers from "./pages/SubscribedUsers";
+import SubscriptionPayments from "./pages/SubscriptionPayments";
 import VehicleFarePricing from "./pages/VehicleFarePricing";
 
 const isAuthed = () => !!localStorage.getItem("adminToken");
@@ -44,6 +46,8 @@ export default function App() {
         <Route path="feedback" element={<Feedbacks />} />
         <Route path="legal" element={<LegalPolicies />} />
         <Route path="subscription-plans" element={<SubscriptionPlans />} />
+        <Route path="subscribed-users" element={<SubscribedUsers />} />
+        <Route path="subscription-payments" element={<SubscriptionPayments />} />
         <Route path="vehicle-fares" element={<VehicleFarePricing />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

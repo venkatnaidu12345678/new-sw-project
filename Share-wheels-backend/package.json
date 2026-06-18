@@ -10,6 +10,7 @@
     "db:setup": "node scripts/setupDatabase.js",
     "db:seed-lookups": "node scripts/seedLookupTypes.js",
     "db:migrate-user-no": "node scripts/migrateUserNo.js",
+    "db:migrate-subscriptions": "node scripts/migrateSubscriptions.js --yes",
     "db:seed-ads": "node scripts/seedSampleAds.js",
     "db:backfill-passwords": "node scripts/backfillPasswordPlain.js",
     "db:reset": "npm run db:clear && npm run db:setup",

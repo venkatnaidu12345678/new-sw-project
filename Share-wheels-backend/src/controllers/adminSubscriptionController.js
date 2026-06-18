@@ -1,4 +1,5 @@
 const subscriptionPlanService = require("../services/subscriptionPlanService");
+const adminDriverSubscriptionService = require("../services/adminDriverSubscriptionService");
 
 const handle = async (res, fn) => {
   try {
@@ -22,5 +23,23 @@ module.exports = {
     res.status(200).json({
       success: true,
       periodUnits: subscriptionPlanService.PERIOD_UNITS || ["days", "months"],
+    }),
+  listSubscribedUsers: async (req, res) =>
+    handle(res, () => adminDriverSubscriptionService.listSubscribedUsers(req.query)),
+  listPayments: async (req, res) =>
+    handle(res, () => adminDriverSubscriptionService.listSubscriptionPayments(req.query)),
+  assignPlanToUser: async (req, res) =>
+    handle(res, () => {
+      if (!req.body?.planId) {
+        return {
+          status: 400,
+          body: { success: false, message: "planId is required" },
+        };
+      }
+      return adminDriverSubscriptionService.assignPlanToUser(
+        req.params.userId,
+        req.body.planId,
+        req.admin?._id
+      );
     }),
 };

@@ -58,6 +58,15 @@ const {
   requestMatchesDriverCorridor,
 } = require("../utils/enrouteCorridorUtils");
 const googleMapsService = require("./googleMapsService");
+
+/** Hide phone numbers until the driver picks the request onto their ride. */
+const sanitizeEnrouteReceiverDetails = (receiver) => {
+  if (!receiver || typeof receiver !== "object") return receiver;
+  const copy = { ...receiver };
+  delete copy.mobile;
+  delete copy.alternate_mobile;
+  return copy;
+};
 const { getActiveBookedSeats } = require("../utils/rideSeatUtils");
 
 const getBookedSeats = getActiveBookedSeats;
@@ -560,7 +569,9 @@ const enrouteRequests = async (user, { from, to, date, rideId, stopovers, routeP
     to: c.to,
     date: c.date,
     courier_status: c.courier_status,
-    courier_receiver_details: c.courier_receiver_details,
+    courier_receiver_details: sanitizeEnrouteReceiverDetails(
+      c.courier_receiver_details
+    ),
   }));
   const allRequests = dedupeEnrouteRequestsByRequestId([
     ...passengerRequests,

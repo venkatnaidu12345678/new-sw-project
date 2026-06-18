@@ -478,8 +478,11 @@ const MyRequest = () => {
   const canDeleteRequest = (item) =>
     String(item?.status || "").toLowerCase() === "pending";
 
-  const canEditRequest = (item) =>
-    canDeleteRequest(item) && String(item?.requestKind || "") === "standalone";
+  const canEditRequest = (item) => {
+    if (!canDeleteRequest(item)) return false;
+    const kind = String(item?.requestKind || "").toLowerCase();
+    return kind === "standalone" || kind === "courier";
+  };
 
   const handleEditRequest = (item) => {
     if (!canEditRequest(item)) {
@@ -494,7 +497,7 @@ const MyRequest = () => {
       from: item.from,
       to: item.to,
       seats: item.raw?.seats,
-      amount: item.raw?.amount,
+      amount: item.raw?.amount ?? item.raw?.amount_will,
       raw: item.raw || {},
     };
     if (item.role === "Courier") {
