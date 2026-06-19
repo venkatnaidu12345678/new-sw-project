@@ -66,6 +66,8 @@ const DashboardPage = () => {
 
   const [fromValue, setFromValue] = useState("");
   const [toValue, setToValue] = useState("");
+  const [fromSelected, setFromSelected] = useState(false);
+  const [toSelected, setToSelected] = useState(false);
   const [activeField, setActiveField] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
@@ -190,6 +192,11 @@ const DashboardPage = () => {
       return;
     }
 
+    if (!fromSelected || !toSelected) {
+      setErrorMsg("Please select From and To from the suggestions list");
+      return;
+    }
+
     try {
       setLoadingAllRides(true);
       setShowAllRides(true);
@@ -222,6 +229,8 @@ const DashboardPage = () => {
   const exitSearchResults = () => {
     setFromValue("");
     setToValue("");
+    setFromSelected(false);
+    setToSelected(false);
     setSuggestions([]);
     setShowAllRides(false);
     setAllRides([]);
@@ -269,10 +278,22 @@ const DashboardPage = () => {
     }).start(() => setShowFilters(false));
   };
 
-  const filterLocations = (text, field) => {
+  const filterLocations = (text, field, options = {}) => {
     expandFilters();
-    if (field === "FROM") setFromValue(text);
-    if (field === "TO") setToValue(text);
+    const selected = options.selected !== false;
+
+    if (field === "FROM") {
+      setFromValue(text);
+      setFromSelected(selected);
+      if (!selected) {
+        setToValue("");
+        setToSelected(false);
+      }
+    }
+    if (field === "TO") {
+      setToValue(text);
+      setToSelected(selected);
+    }
     setActiveField(field);
 
     const query = String(text || "").trim();
@@ -297,8 +318,14 @@ const DashboardPage = () => {
         : typeof item === "string"
           ? item
           : item?.label || "";
-    if (activeField === "FROM") setFromValue(label);
-    if (activeField === "TO") setToValue(label);
+    if (activeField === "FROM") {
+      setFromValue(label);
+      setFromSelected(true);
+    }
+    if (activeField === "TO") {
+      setToValue(label);
+      setToSelected(true);
+    }
     setSuggestions([]);
     setSuggestionsLoading(false);
   };
@@ -338,6 +365,8 @@ const DashboardPage = () => {
   const searchProps = {
     fromValue,
     toValue,
+    fromSelected,
+    toSelected,
     activeField,
     suggestions,
     suggestionsLoading,

@@ -93,7 +93,7 @@ const PassengerRequest = () => {
     {
       key: "from",
       label: "From",
-      placeholder: "Enter starting location",
+      placeholder: "Select starting location from list",
       value: payload.from,
       onChangeText: (text) => updatePayload("from", text),
       rules: [(v) => validateLocation(v, "From")],
@@ -101,7 +101,7 @@ const PassengerRequest = () => {
     {
       key: "to",
       label: "To",
-      placeholder: "Enter destination",
+      placeholder: "Select destination from list",
       value: payload.to,
       onChangeText: (text) => updatePayload("to", text),
       rules: [(v) => validateLocation(v, "To")],
@@ -111,7 +111,7 @@ const PassengerRequest = () => {
   const handleCreateRequest = async () => {
     const isValid = formRef.current?.validate?.();
     if (!isValid) {
-      alertValidation("Please fill in From and To locations.");
+      alertValidation("Please select From and To from the suggestions list.");
       return;
     }
 
@@ -222,6 +222,9 @@ const PassengerRequest = () => {
             ref={formRef}
             fields={fields}
             variant="route"
+            presetConfirmed={
+              isEditMode ? { from: true, to: true } : undefined
+            }
           />
         </RequestSection>
 

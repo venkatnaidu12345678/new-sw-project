@@ -492,7 +492,8 @@ const MyRequest = () => {
         date: deliveryDate,
         receiver_name: recv.name,
         receiver_mobile: recv.mobile,
-        receiver_alternate_mobile: recv.alternate_mobile || recv.alternateMobile,
+        receiver_alternate_mobile:
+          recv.alternate_mobile || recv.alternateMobile || recv.mobile,
         receiver_address: recv.Address || recv.address,
         standaloneCourierId: requestItem?.id || raw.requestId,
       });

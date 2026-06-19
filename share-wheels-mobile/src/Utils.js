@@ -244,6 +244,16 @@ export const validateLocation = (value, fieldName = "Field") => {
   return "";
 };
 
+export const validatePlaceFromDropdown = (
+  isConfirmed,
+  fieldName = "Field"
+) => {
+  if (!isConfirmed) {
+    return `Please select ${fieldName} from the suggestions list`;
+  }
+  return "";
+};
+
 export const validateDate = (date) => {
   if (!date) return "Date is required";
 

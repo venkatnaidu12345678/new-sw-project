@@ -156,10 +156,7 @@ const CreateRidePage = () => {
       return;
     }
 
-    const hasEndpoints =
-      (fromCoords?.lat != null && toCoords?.lat != null) ||
-      (rideData.from.trim() && rideData.to.trim());
-    if (hasEndpoints && !routePlan?.routePolyline) {
+    if (!routePlan?.routePolyline) {
       alertValidation("Select a route on the map before publishing.");
       return;
     }

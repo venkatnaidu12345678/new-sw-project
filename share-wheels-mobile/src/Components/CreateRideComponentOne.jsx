@@ -88,7 +88,7 @@ const CreateRideComponentOne = forwardRef(
         {
           key: "from",
           label: "From",
-          placeholder: "Enter starting location",
+          placeholder: "Select starting location from list",
           value: rideData.from,
           onChangeText: (text) => updateRideData("from", text),
           rules: [(v) => validators.required(v, "From")],
@@ -96,7 +96,7 @@ const CreateRideComponentOne = forwardRef(
         {
           key: "to",
           label: "To",
-          placeholder: "Enter destination",
+          placeholder: "Select destination from list",
           value: rideData.to,
           onChangeText: (text) => updateRideData("to", text),
           rules: [(v) => validators.required(v, "To")],
@@ -318,7 +318,7 @@ const CreateRideComponentOne = forwardRef(
           style={styles.lastSection}
           styles={styles}
         >
-          <Text style={styles.fieldLabel}>Alternate phone</Text>
+          <Text style={styles.fieldLabel}>Alternate phone (optional)</Text>
           <View style={styles.phoneBox}>
             <View style={styles.phoneIconWrap}>
               <Icon name="call-outline" size={18} color={CR.sections.optional.color} />

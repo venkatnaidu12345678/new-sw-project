@@ -104,7 +104,7 @@ const CourierRequest = () => {
     {
       key: "from",
       label: "From",
-      placeholder: "Pickup location",
+      placeholder: "Select pickup location from list",
       value: payload.from,
       onChangeText: (text) => updatePayload("from", text),
       rules: [(v) => validateLocation(v, "From")],
@@ -112,7 +112,7 @@ const CourierRequest = () => {
     {
       key: "to",
       label: "To",
-      placeholder: "Delivery destination",
+      placeholder: "Select delivery destination from list",
       value: payload.to,
       onChangeText: (text) => updatePayload("to", text),
       rules: [(v) => validateLocation(v, "To")],
@@ -122,7 +122,7 @@ const CourierRequest = () => {
   const handleCreateRequest = async () => {
     const routeValid = fromToRef.current?.validate?.() ?? true;
     if (!routeValid) {
-      alertValidation("Please fill in From and To locations.");
+      alertValidation("Please select From and To from the suggestions list.");
       return;
     }
 
@@ -270,6 +270,9 @@ const CourierRequest = () => {
             ref={fromToRef}
             fields={fields}
             variant="route"
+            presetConfirmed={
+              isEditMode ? { from: true, to: true } : undefined
+            }
           />
         </RequestSection>
 

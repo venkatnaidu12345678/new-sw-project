@@ -4,6 +4,7 @@ import React, {
   forwardRef,
   useImperativeHandle,
   useRef,
+  useEffect,
 } from "react";
 import {
   View,
@@ -15,7 +16,11 @@ import {
   Keyboard,
 } from "react-native";
 
-import { validateForm, validateLocation } from "../Utils";
+import {
+  validateForm,
+  validateLocation,
+  validatePlaceFromDropdown,
+} from "../Utils";
 import { useTheme } from "../context/ThemeContext";
 import { useLocationSuggestions } from "../hooks/useLocationSuggestions";
 import { getSuggestionKey, getSuggestionLabel } from "../Utils/placeSuggestions";
@@ -35,273 +40,367 @@ const getRouteFieldStyle = (c) => ({
   },
 });
 
-const FromToInput = forwardRef(({ fields = [], variant, onPlaceSelect }, ref) => {
-  const { input, colors } = useTheme();
-  const routeFieldStyle = getRouteFieldStyle(colors);
-  const isRoute = variant === "route";
-  const [dropdownState, setDropdownState] = useState({});
-  const [errors, setErrors] = useState({});
-  const blurTimers = useRef({});
-  const inputRefs = useRef({});
-  const selectingRef = useRef(false);
-  const { searchPlaces, resolvePlace } = useLocationSuggestions();
+const FromToInput = forwardRef(
+  (
+    {
+      fields = [],
+      variant,
+      onPlaceSelect,
+      requireDropdown = true,
+      presetConfirmed = null,
+    },
+    ref
+  ) => {
+    const { input, colors } = useTheme();
+    const routeFieldStyle = getRouteFieldStyle(colors);
+    const isRoute = variant === "route";
+    const [dropdownState, setDropdownState] = useState({});
+    const [errors, setErrors] = useState({});
+    const [confirmedFields, setConfirmedFields] = useState({});
+    const blurTimers = useRef({});
+    const inputRefs = useRef({});
+    const selectingRef = useRef(false);
+    const { searchPlaces, resolvePlace } = useLocationSuggestions();
 
-  const validateField = (field) => {
-    if (!field.rules) return;
+    useEffect(() => {
+      if (!presetConfirmed || typeof presetConfirmed !== "object") return;
+      setConfirmedFields((prev) => ({ ...prev, ...presetConfirmed }));
+    }, [presetConfirmed]);
 
-    for (let rule of field.rules) {
-      const errorMsg = rule(field.value);
-      if (errorMsg) {
-        setErrors((prev) => ({ ...prev, [field.key]: errorMsg }));
+    const isFieldConfirmed = useCallback(
+      (key) => Boolean(confirmedFields[key]),
+      [confirmedFields]
+    );
+
+    const isFromConfirmed = isFieldConfirmed("from");
+
+    const validateField = (field) => {
+      const valueError = validateLocation(field.value, field.label);
+      if (valueError) {
+        setErrors((prev) => ({ ...prev, [field.key]: valueError }));
         return;
       }
-    }
 
-    setErrors((prev) => ({ ...prev, [field.key]: "" }));
-  };
+      if (requireDropdown) {
+        const dropdownError = validatePlaceFromDropdown(
+          isFieldConfirmed(field.key),
+          field.label
+        );
+        if (dropdownError) {
+          setErrors((prev) => ({ ...prev, [field.key]: dropdownError }));
+          return;
+        }
+      }
 
-  useImperativeHandle(ref, () => ({
-    validate: () => {
-      const validationErrors = validateForm(
-        fields.reduce((acc, field) => {
-          acc[field.key] = {
-            value: field.value,
-            rules:
-              field.rules ||
-              [(v) => validateLocation(v, field.label)],
-          };
-          return acc;
-        }, {})
-      );
+      if (field.rules) {
+        for (let rule of field.rules) {
+          const errorMsg = rule(field.value);
+          if (errorMsg) {
+            setErrors((prev) => ({ ...prev, [field.key]: errorMsg }));
+            return;
+          }
+        }
+      }
 
-      setErrors(validationErrors);
-      return Object.keys(validationErrors).length === 0;
-    },
-  }));
+      setErrors((prev) => ({ ...prev, [field.key]: "" }));
+    };
 
-  const clearBlurTimer = (key) => {
-    if (blurTimers.current[key]) {
-      clearTimeout(blurTimers.current[key]);
-      blurTimers.current[key] = null;
-    }
-  };
+    useImperativeHandle(ref, () => ({
+      validate: () => {
+        const validationErrors = validateForm(
+          fields.reduce((acc, field) => {
+            const rules = [
+              (v) => validateLocation(v, field.label),
+              ...(requireDropdown
+                ? [
+                    () =>
+                      validatePlaceFromDropdown(
+                        isFieldConfirmed(field.key),
+                        field.label
+                      ),
+                  ]
+                : []),
+              ...(field.rules || []),
+            ];
 
-  const getFieldState = useCallback(
-    (key) => {
-      const raw = dropdownState[key];
-      return {
-        show: Boolean(raw?.show),
-        data: Array.isArray(raw?.data) ? raw.data : [],
-        loading: Boolean(raw?.loading),
-      };
-    },
-    [dropdownState]
-  );
+            acc[field.key] = {
+              value: field.value,
+              rules,
+            };
+            return acc;
+          }, {})
+        );
 
-  const scheduleHideDropdown = (key) => {
-    clearBlurTimer(key);
-    blurTimers.current[key] = setTimeout(() => {
-      if (selectingRef.current) return;
-      setDropdownState((prev) => {
-        const current = prev[key];
+        setErrors(validationErrors);
+        return Object.keys(validationErrors).length === 0;
+      },
+      isFieldConfirmed,
+    }));
+
+    const clearBlurTimer = (key) => {
+      if (blurTimers.current[key]) {
+        clearTimeout(blurTimers.current[key]);
+        blurTimers.current[key] = null;
+      }
+    };
+
+    const getFieldState = useCallback(
+      (key) => {
+        const raw = dropdownState[key];
         return {
+          show: Boolean(raw?.show),
+          data: Array.isArray(raw?.data) ? raw.data : [],
+          loading: Boolean(raw?.loading),
+        };
+      },
+      [dropdownState]
+    );
+
+    const scheduleHideDropdown = (key) => {
+      clearBlurTimer(key);
+      blurTimers.current[key] = setTimeout(() => {
+        if (selectingRef.current) return;
+        setDropdownState((prev) => {
+          const current = prev[key];
+          return {
+            ...prev,
+            [key]: {
+              show: false,
+              data: Array.isArray(current?.data) ? current.data : [],
+              loading: false,
+            },
+          };
+        });
+      }, BLUR_HIDE_MS);
+    };
+
+    const resetDownstreamFrom = useCallback(
+      (editedKey) => {
+        if (editedKey !== "from") return;
+
+        const toField = fields.find((field) => field.key === "to");
+        if (toField?.value) {
+          toField.onChangeText?.("");
+        }
+        onPlaceSelect?.("to", null);
+        setConfirmedFields((prev) => ({ ...prev, to: false }));
+      },
+      [fields, onPlaceSelect]
+    );
+
+    const runSearch = useCallback(
+      async (key, text, onChangeText) => {
+        onChangeText(text);
+        clearBlurTimer(key);
+
+        setConfirmedFields((prev) => ({ ...prev, [key]: false }));
+        onPlaceSelect?.(key, null);
+        resetDownstreamFrom(key);
+
+        if (!text || text.trim() === "") {
+          setDropdownState((prev) => ({
+            ...prev,
+            [key]: { show: false, data: [], loading: false },
+          }));
+          return;
+        }
+
+        setDropdownState((prev) => ({
+          ...prev,
+          [key]: { show: true, data: prev[key]?.data || [], loading: true },
+        }));
+
+        const filtered = await searchPlaces(text);
+        setDropdownState((prev) => ({
           ...prev,
           [key]: {
-            show: false,
-            data: Array.isArray(current?.data) ? current.data : [],
+            show: filtered.length > 0,
+            data: filtered,
             loading: false,
           },
-        };
-      });
-    }, BLUR_HIDE_MS);
-  };
+        }));
+      },
+      [onPlaceSelect, resetDownstreamFrom, searchPlaces]
+    );
 
-  const runSearch = useCallback(
-    async (key, text, onChangeText) => {
-      onChangeText(text);
-      clearBlurTimer(key);
+    const handleSelect = useCallback(
+      async (key, item, onChangeText) => {
+        selectingRef.current = true;
+        clearBlurTimer(key);
 
-      if (!text || text.trim() === "") {
+        const resolved = await resolvePlace(item);
+        const label = getSuggestionLabel(resolved || item);
+        onChangeText(label);
+        onPlaceSelect?.(key, resolved || { label });
+
+        setConfirmedFields((prev) => ({ ...prev, [key]: true }));
         setDropdownState((prev) => ({
           ...prev,
           [key]: { show: false, data: [], loading: false },
         }));
-        return;
-      }
+        setErrors((prev) => ({ ...prev, [key]: "" }));
+        inputRefs.current[key]?.blur?.();
+        Keyboard.dismiss();
+        setTimeout(() => {
+          selectingRef.current = false;
+        }, 100);
+      },
+      [onPlaceSelect, resolvePlace]
+    );
 
-      setDropdownState((prev) => ({
-        ...prev,
-        [key]: { show: true, data: prev[key]?.data || [], loading: true },
-      }));
+    const renderField = (field, index) => {
+      const state = getFieldState(field.key);
+      const error = errors[field.key];
+      const showDropdown = state.show && (state.data.length > 0 || state.loading);
+      const routeStyle = isRoute ? routeFieldStyle[field.key] : null;
+      const isToField = field.key === "to";
+      const blockedByFrom = isToField && requireDropdown && !isFromConfirmed;
+      const fieldEditable = !blockedByFrom;
 
-      const filtered = await searchPlaces(text);
-      setDropdownState((prev) => ({
-        ...prev,
-        [key]: {
-          show: filtered.length > 0,
-          data: filtered,
-          loading: false,
-        },
-      }));
-    },
-    [searchPlaces]
-  );
-
-  const handleSelect = useCallback(
-    async (key, item, onChangeText) => {
-      selectingRef.current = true;
-      clearBlurTimer(key);
-
-      const resolved = await resolvePlace(item);
-      const label = getSuggestionLabel(resolved || item);
-      onChangeText(label);
-      onPlaceSelect?.(key, resolved || { label });
-
-      setDropdownState((prev) => ({
-        ...prev,
-        [key]: { show: false, data: [], loading: false },
-      }));
-      setErrors((prev) => ({ ...prev, [key]: "" }));
-      inputRefs.current[key]?.blur?.();
-      Keyboard.dismiss();
-      setTimeout(() => {
-        selectingRef.current = false;
-      }, 100);
-    },
-    [onPlaceSelect, resolvePlace]
-  );
-
-  const renderField = (field, index) => {
-    const state = getFieldState(field.key);
-    const error = errors[field.key];
-    const showDropdown = state.show && (state.data.length > 0 || state.loading);
-    const routeStyle = isRoute ? routeFieldStyle[field.key] : null;
-
-    return (
-      <View
-        key={field.key}
-        style={[
-          styles.container,
-          isRoute && styles.routeField,
-          { zIndex: 100 - index },
-        ]}
-      >
-        <Text style={[styles.label, { color: colors.text }, routeStyle?.label]}>
-          {field.label}
-          {field.rules && <Text style={styles.star}> *</Text>}
-        </Text>
-
-        <TextInput
-          ref={(node) => {
-            if (node) inputRefs.current[field.key] = node;
-          }}
+      return (
+        <View
+          key={field.key}
           style={[
-            styles.input,
-            {
-              backgroundColor: input.background,
-              borderColor: input.border,
-              color: input.text,
-            },
-            routeStyle?.input,
-            error && styles.inputError,
+            styles.container,
+            isRoute && styles.routeField,
+            { zIndex: 100 - index },
           ]}
-          placeholder={field.placeholder}
-          placeholderTextColor={input.placeholder}
-          value={field.value}
-          blurOnSubmit={false}
-          onChangeText={(text) => {
-            runSearch(field.key, text, field.onChangeText);
-            if (error) {
-              setErrors((prev) => ({ ...prev, [field.key]: "" }));
-            }
-          }}
-          onFocus={() => {
-            clearBlurTimer(field.key);
-            const text = String(field.value || "").trim();
-            if (text.length >= 2) {
-              runSearch(field.key, text, field.onChangeText);
-            }
-          }}
-          onBlur={() => {
-            scheduleHideDropdown(field.key);
-            validateField(field);
-          }}
-        />
+        >
+          <Text style={[styles.label, { color: colors.text }, routeStyle?.label]}>
+            {field.label}
+            {field.rules && <Text style={styles.star}> *</Text>}
+          </Text>
 
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-        {showDropdown ? (
-          <View
+          <TextInput
+            ref={(node) => {
+              if (node) inputRefs.current[field.key] = node;
+            }}
             style={[
-              styles.dropdownWrapper,
+              styles.input,
               {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
+                backgroundColor: input.background,
+                borderColor: input.border,
+                color: input.text,
               },
+              routeStyle?.input,
+              error && styles.inputError,
+              blockedByFrom && styles.inputDisabled,
             ]}
-          >
-            <ScrollView
-              nestedScrollEnabled
-              keyboardShouldPersistTaps="always"
-              keyboardDismissMode="none"
-              style={styles.dropdownScroll}
+            placeholder={
+              blockedByFrom
+                ? "Select From from suggestions first"
+                : field.placeholder
+            }
+            placeholderTextColor={input.placeholder}
+            value={field.value}
+            editable={fieldEditable}
+            blurOnSubmit={false}
+            onChangeText={(text) => {
+              if (!fieldEditable) return;
+              runSearch(field.key, text, field.onChangeText);
+              if (error) {
+                setErrors((prev) => ({ ...prev, [field.key]: "" }));
+              }
+            }}
+            onFocus={() => {
+              if (blockedByFrom) {
+                setErrors((prev) => ({
+                  ...prev,
+                  from:
+                    prev.from ||
+                    "Please select From from the suggestions list first",
+                }));
+                inputRefs.current.from?.focus?.();
+                return;
+              }
+
+              clearBlurTimer(field.key);
+              const text = String(field.value || "").trim();
+              if (text.length >= 2) {
+                runSearch(field.key, text, field.onChangeText);
+              }
+            }}
+            onBlur={() => {
+              scheduleHideDropdown(field.key);
+              validateField(field);
+            }}
+          />
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+          {showDropdown && fieldEditable ? (
+            <View
+              style={[
+                styles.dropdownWrapper,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+              ]}
             >
-              {state.loading && state.data.length === 0 ? (
-                <Text style={[styles.loadingText, { color: colors.textMuted }]}>
-                  Searching places…
-                </Text>
-              ) : null}
-              {state.data.map((item, idx) => (
-                <Pressable
-                  key={getSuggestionKey(item, idx)}
-                  style={({ pressed }) => [
-                    styles.item,
-                    { borderColor: colors.border },
-                    pressed && { backgroundColor: colors.primaryMuted },
-                  ]}
-                  onPress={() =>
-                    handleSelect(field.key, item, field.onChangeText)
-                  }
-                >
-                  <Text style={[styles.itemText, { color: colors.text }]}>
-                    {getSuggestionLabel(item)}
+              <ScrollView
+                nestedScrollEnabled
+                keyboardShouldPersistTaps="always"
+                keyboardDismissMode="none"
+                style={styles.dropdownScroll}
+              >
+                {state.loading && state.data.length === 0 ? (
+                  <Text style={[styles.loadingText, { color: colors.textMuted }]}>
+                    Searching places…
                   </Text>
-                  {item?.description ? (
-                    <Text
-                      style={[styles.itemSubtext, { color: colors.textMuted }]}
-                      numberOfLines={1}
-                    >
-                      {item.description}
+                ) : null}
+                {state.data.map((item, idx) => (
+                  <Pressable
+                    key={getSuggestionKey(item, idx)}
+                    style={({ pressed }) => [
+                      styles.item,
+                      { borderColor: colors.border },
+                      pressed && { backgroundColor: colors.primaryMuted },
+                    ]}
+                    onPress={() =>
+                      handleSelect(field.key, item, field.onChangeText)
+                    }
+                  >
+                    <Text style={[styles.itemText, { color: colors.text }]}>
+                      {getSuggestionLabel(item)}
                     </Text>
-                  ) : null}
-                </Pressable>
-              ))}
-            </ScrollView>
+                    {item?.description ? (
+                      <Text
+                        style={[styles.itemSubtext, { color: colors.textMuted }]}
+                        numberOfLines={1}
+                      >
+                        {item.description}
+                      </Text>
+                    ) : null}
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+        </View>
+      );
+    };
+
+    if (isRoute && fields.length >= 2) {
+      const fromStyle = routeFieldStyle.from;
+      const toStyle = routeFieldStyle.to;
+      return (
+        <View style={styles.routeCard}>
+          <View style={styles.routeTimeline}>
+            <View style={[styles.routeDot, { backgroundColor: fromStyle.dot }]} />
+            <View style={[styles.routeLine, { backgroundColor: colors.border }]} />
+            <View style={[styles.routeDot, { backgroundColor: toStyle.dot }]} />
           </View>
-        ) : null}
-      </View>
-    );
-  };
+          <View style={styles.routeFields}>
+            {fields.map((field, index) => renderField(field, index))}
+          </View>
+        </View>
+      );
+    }
 
-  if (isRoute && fields.length >= 2) {
-    const fromStyle = routeFieldStyle.from;
-    const toStyle = routeFieldStyle.to;
-    return (
-      <View style={styles.routeCard}>
-        <View style={styles.routeTimeline}>
-          <View style={[styles.routeDot, { backgroundColor: fromStyle.dot }]} />
-          <View style={[styles.routeLine, { backgroundColor: colors.border }]} />
-          <View style={[styles.routeDot, { backgroundColor: toStyle.dot }]} />
-        </View>
-        <View style={styles.routeFields}>
-          {fields.map((field, index) => renderField(field, index))}
-        </View>
-      </View>
-    );
+    return <>{fields.map((field, index) => renderField(field, index))}</>;
   }
-
-  return <>{fields.map((field, index) => renderField(field, index))}</>;
-});
+);
 
 export default FromToInput;
 
@@ -353,6 +452,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 14,
     fontSize: 15,
+  },
+  inputDisabled: {
+    opacity: 0.55,
   },
   inputError: {
     borderColor: "red",

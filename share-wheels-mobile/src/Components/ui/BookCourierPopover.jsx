@@ -196,7 +196,7 @@ const BookCourierPopover = ({
           />
           <StyledTextInput
             theme={T}
-            placeholder="Alternate mobile"
+            placeholder="Alternate mobile (optional)"
             value={form.receiver_alternate_mobile}
             onChangeText={(v) => update("receiver_alternate_mobile", v)}
             keyboardType="phone-pad"

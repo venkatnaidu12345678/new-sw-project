@@ -21,6 +21,7 @@ import {
   validateForm,
   validateLocation,
   validateDate,
+  validatePlaceFromDropdown,
 } from "../Utils";
 import { getSuggestionKey, getSuggestionLabel } from "../Utils/placeSuggestions";
 
@@ -45,6 +46,8 @@ const SearchLocation = ({
   onBlur,
   onDismissSuggestions,
   activeField,
+  fromSelected = false,
+  toSelected = false,
 }) => {
   const { input, colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -54,11 +57,17 @@ const SearchLocation = ({
     const validationErrors = validateForm({
       from: {
         value: fromValue,
-        rules: [(v) => validateLocation(v, "From")],
+        rules: [
+          (v) => validateLocation(v, "From"),
+          () => validatePlaceFromDropdown(fromSelected, "From"),
+        ],
       },
       to: {
         value: toValue,
-        rules: [(v) => validateLocation(v, "To")],
+        rules: [
+          (v) => validateLocation(v, "To"),
+          () => validatePlaceFromDropdown(toSelected, "To"),
+        ],
       },
       date: {
         value: date,
@@ -119,8 +128,8 @@ const SearchLocation = ({
           blurOnSubmit={false}
           onChangeText={(text) => {
             setFromValue(text);
-            filterLocations(text, "FROM");
-            setErrors((prev) => ({ ...prev, from: "" }));
+            filterLocations(text, "FROM", { selected: false });
+            setErrors((prev) => ({ ...prev, from: "", to: "" }));
           }}
           onFocus={() => onFocus?.("FROM")}
           onBlur={() => onBlur?.()}
@@ -133,18 +142,36 @@ const SearchLocation = ({
 
       <GradientField variant="to">
         <TextInput
-          placeholder="To — destination city"
+          placeholder={
+            fromSelected
+              ? "To — destination city"
+              : "Select From from suggestions first"
+          }
           placeholderTextColor={input.placeholder}
           value={toValue}
+          editable={fromSelected}
           blurOnSubmit={false}
           onChangeText={(text) => {
+            if (!fromSelected) return;
             setToValue(text);
-            filterLocations(text, "TO");
+            filterLocations(text, "TO", { selected: false });
             setErrors((prev) => ({ ...prev, to: "" }));
           }}
-          onFocus={() => onFocus?.("TO")}
+          onFocus={() => {
+            if (!fromSelected) {
+              setErrors((prev) => ({
+                ...prev,
+                from:
+                  prev.from ||
+                  "Please select From from the suggestions list first",
+              }));
+              onFocus?.("FROM");
+              return;
+            }
+            onFocus?.("TO");
+          }}
           onBlur={() => onBlur?.()}
-          style={styles.input}
+          style={[styles.input, !fromSelected && styles.inputDisabled]}
         />
         <Icon name="radio-button-on" size={18} color={colors.successText} />
       </GradientField>
@@ -219,6 +246,9 @@ const createStyles = (c) =>
     flex: 1,
     fontSize: 15,
     color: c.text,
+  },
+  inputDisabled: {
+    opacity: 0.55,
   },
   dateTap: {
     flex: 1,

@@ -293,10 +293,9 @@ const RideDetails = ({ navigation, route }) => {
         !courierForm.amount_will ||
         !courierForm.receiver_name ||
         !courierForm.receiver_mobile ||
-        !courierForm.receiver_alternate_mobile ||
         !courierForm.receiver_address
       ) {
-        Alert.alert("Missing fields", "Please fill all courier fields.");
+        Alert.alert("Missing fields", "Please fill all required courier fields.");
         return;
       }
 
@@ -320,7 +319,9 @@ const RideDetails = ({ navigation, route }) => {
         timeSlot: now.toISOString(),
         receiver_name: courierForm.receiver_name,
         receiver_mobile: courierForm.receiver_mobile,
-        receiver_alternate_mobile: courierForm.receiver_alternate_mobile,
+        receiver_alternate_mobile:
+          courierForm.receiver_alternate_mobile?.trim() ||
+          courierForm.receiver_mobile,
         receiver_address: courierForm.receiver_address,
       };
 
