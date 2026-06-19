@@ -38,6 +38,7 @@ export const CoachMarksProvider = ({
   children,
   tabNavigationRef,
   autoStartEnabled = false,
+  userId = null,
 }) => {
   const anchorsRef = useRef({});
   const scrollPreparersRef = useRef({});
@@ -124,15 +125,15 @@ export const CoachMarksProvider = ({
     setSpotlight(null);
     setStepIndex(0);
     if (completed) {
-      await markTourCompleted(MAIN_APP_TOUR_ID);
+      await markTourCompleted(MAIN_APP_TOUR_ID, userId);
     }
     tabNavigationRef?.current?.navigate?.("Home");
-  }, [tabNavigationRef]);
+  }, [tabNavigationRef, userId]);
 
   const startTour = useCallback(
     async ({ force = false } = {}) => {
       if (active) return true;
-      if (!force && (await isTourCompleted(MAIN_APP_TOUR_ID))) {
+      if (!force && (await isTourCompleted(MAIN_APP_TOUR_ID, userId))) {
         return false;
       }
 
@@ -141,7 +142,7 @@ export const CoachMarksProvider = ({
       await focusStep(steps[0]);
       return true;
     },
-    [active, focusStep, steps]
+    [active, focusStep, steps, userId]
   );
 
   const goNext = useCallback(async () => {

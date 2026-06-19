@@ -160,7 +160,6 @@ const UpcomingDetailsPage = ({ route }) => {
   const [canCarryCourier, setCanCarryCourier] = useState(
     !!rideData?.CanCarryCourier
   );
-  const [quickReserve, setQuickReserve] = useState(!!rideData?.QuickReserve);
   const [courierRequests, setCourierRequests] = useState([]);
   const [passengerRequests, setPassengerRequests] = useState([]);
   const [rideStatus, setRideStatus] = useState(
@@ -256,9 +255,6 @@ const UpcomingDetailsPage = ({ route }) => {
     }
     if (data.CanCarryCourier != null) {
       setCanCarryCourier(!!data.CanCarryCourier);
-    }
-    if (data.QuickReserve != null) {
-      setQuickReserve(!!data.QuickReserve);
     }
     if (data.date != null || data.startTime != null) {
       setScheduleInfo((prev) => ({
@@ -1539,14 +1535,10 @@ const UpcomingDetailsPage = ({ route }) => {
                     rideId={rideData?._id}
                     token={driverToken}
                     canCarryCourier={canCarryCourier}
-                    quickReserve={quickReserve}
                     disabled={!driverToken}
                     onUpdated={(opts) => {
                       if (opts.CanCarryCourier != null) {
                         setCanCarryCourier(!!opts.CanCarryCourier);
-                      }
-                      if (opts.QuickReserve != null) {
-                        setQuickReserve(!!opts.QuickReserve);
                       }
                     }}
                   />
@@ -1589,14 +1581,6 @@ const UpcomingDetailsPage = ({ route }) => {
           </View>
         </View>
 
-        {quickReserve && isDriver && canEditSeats ? (
-          <View style={styles.quickReserveBanner}>
-            <Text style={styles.quickReserveBannerText}>
-              Quick Reserve is ON — passengers & couriers join without your approval
-            </Text>
-          </View>
-        ) : null}
-
         {/* DRIVER VIEW — participants in popover */}
         {isDriver && (
           <>
@@ -1604,7 +1588,6 @@ const UpcomingDetailsPage = ({ route }) => {
               passengerCount={passengers.length}
               courierCount={couriers.length}
               pendingCount={pendingRequestCount}
-              quickReserve={quickReserve}
               onOpen={() => openParticipantsSlider("default")}
               onOpenPending={() => openParticipantsSlider("pending")}
             />
@@ -2317,20 +2300,6 @@ const createStyles = (c) => {
     marginBottom: 12,
     marginTop: 16,
     color: c.text,
-  },
-  quickReserveBanner: {
-    backgroundColor: c.successBg,
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-  },
-  quickReserveBannerText: {
-    color: c.successText,
-    fontSize: 13,
-    fontWeight: "600",
-    textAlign: "center",
   },
   sendRequestBtn: {
     backgroundColor: c.primaryMuted,

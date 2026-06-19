@@ -14,7 +14,10 @@ const {
   emitEnrouteRequestAdded,
 } = require("../utils/socketEmit");
 const { escapeRegex, toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
-const { closeStandaloneRequestsAfterJoin } = require("../utils/participantRequestCleanup");
+const {
+  closeStandaloneRequestsAfterJoin,
+  assertStandaloneCourierAvailableForRide,
+} = require("../utils/participantRequestCleanup");
 const { expirePendingRideIfStale } = require("./rideExpiryService");
 const { syncLiveTrackingRoster } = require("./rideTrackingService");
 const {
@@ -265,6 +268,18 @@ const requestCourier = async (user, body) => {
   const passengerConflict = rejectIfPassengerJoiningAsCourier(ride, user._id);
   if (passengerConflict.blocked) {
     return { status: 400, body: { success: false, message: passengerConflict.message } };
+  }
+
+  const standaloneLock = await assertStandaloneCourierAvailableForRide(
+    user._id,
+    standaloneCourierId,
+    rideId
+  );
+  if (!standaloneLock.ok) {
+    return {
+      status: 400,
+      body: { success: false, message: standaloneLock.message },
+    };
   }
 
   const bookingSegment = await resolveCourierBookingSegment(user._id, ride, {

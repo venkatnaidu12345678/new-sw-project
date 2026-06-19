@@ -15,6 +15,7 @@ import { useThemedStyles } from "../../theme/useThemedStyles";
 const RequestMatchingRides = ({
   rides = [],
   linkedRide = null,
+  lockedRideId = null,
   role = "Passenger",
   joiningRideId = null,
   onViewRide,
@@ -47,17 +48,22 @@ const RequestMatchingRides = ({
         {linkedRide ? "Your ride" : "Matching rides"}
       </Text>
       {list.map((ride) => {
-        const isLinked = linkedRide && String(ride._id) === String(linkedRide._id);
+        const rideId = String(ride._id);
+        const isLinked =
+          (linkedRide && rideId === String(linkedRide._id)) ||
+          (lockedRideId && rideId === String(lockedRideId));
+        const lockedElsewhere =
+          lockedRideId && rideId !== String(lockedRideId);
         const pending = isCourier
           ? ride.courierRequestPending
           : ride.passengerRequestPending;
         const joinInFlight = !!joiningRideId;
-        const busy = joinInFlight && String(joiningRideId) === String(ride._id);
+        const busy = joinInFlight && String(joiningRideId) === rideId;
         const seats = ride.availableSeats ?? 1;
         const driverName = ride.creator?.name || "Driver";
 
         return (
-          <View key={String(ride._id)} style={styles.rideCard}>
+          <View key={rideId} style={styles.rideCard}>
             <View style={styles.driverRow}>
               <UserAvatar user={ride.creator} size={44} borderColor={colors.border} />
               <View style={styles.driverCol}>
@@ -70,7 +76,13 @@ const RequestMatchingRides = ({
               </View>
               {isLinked ? (
                 <View style={styles.linkedBadge}>
-                  <Text style={styles.linkedBadgeText}>Joined</Text>
+                  <Text style={styles.linkedBadgeText}>
+                    {pending ? "Pending" : "Joined"}
+                  </Text>
+                </View>
+              ) : lockedElsewhere ? (
+                <View style={styles.blockedBadge}>
+                  <Text style={styles.blockedBadgeText}>Other driver</Text>
                 </View>
               ) : null}
             </View>
@@ -97,7 +109,11 @@ const RequestMatchingRides = ({
                 <View style={styles.pendingPill}>
                   <Text style={styles.pendingText}>Request pending</Text>
                 </View>
-              ) : isLinked ? null : (
+              ) : isLinked ? null : lockedElsewhere ? (
+                <View style={styles.blockedPill}>
+                  <Text style={styles.blockedText}>Another driver</Text>
+                </View>
+              ) : (
                 <TouchableOpacity
                   style={[styles.primaryBtn, joinInFlight && styles.primaryBtnDisabled]}
                   onPress={() => onJoinRide?.(ride)}
@@ -179,6 +195,17 @@ const createStyles = (c) =>
       fontWeight: "700",
       color: c.primaryText,
     },
+    blockedBadge: {
+      backgroundColor: c.warningBg,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 999,
+    },
+    blockedBadgeText: {
+      fontSize: 10,
+      fontWeight: "700",
+      color: c.warningText,
+    },
     rideMeta: {
       fontSize: 12,
       color: c.textMuted,
@@ -231,6 +258,20 @@ const createStyles = (c) =>
       fontSize: 12,
       fontWeight: "600",
       color: c.warningText,
+    },
+    blockedPill: {
+      flex: 1,
+      backgroundColor: c.surfaceAlt,
+      paddingVertical: 8,
+      borderRadius: 8,
+      alignItems: "center",
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    blockedText: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: c.textMuted,
     },
     emptyWrap: {
       alignItems: "center",

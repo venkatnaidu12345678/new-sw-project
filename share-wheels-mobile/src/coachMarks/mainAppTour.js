@@ -1,4 +1,4 @@
-/** Main launch tour — shown once after terms are accepted. */
+/** Main launch tour — auto-starts once for new users after terms acceptance. */
 export const MAIN_APP_TOUR_ID = "main_v1";
 
 export const TAB_ANCHOR_BY_ROUTE = {

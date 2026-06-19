@@ -9,7 +9,6 @@ const DriverParticipantsHub = ({
   passengerCount,
   courierCount,
   pendingCount,
-  quickReserve,
   onOpen,
   onOpenPending,
 }) => {
@@ -20,18 +19,10 @@ const DriverParticipantsHub = ({
 
   const subtitle = (() => {
     if (showPending && total === 0) {
-      return quickReserve
-        ? `${pendingCount} pending request${pendingCount === 1 ? "" : "s"} · tap to review`
-        : `${pendingCount} request${pendingCount === 1 ? "" : "s"} need approval`;
-    }
-    if (total > 0 && quickReserve) {
-      return `${total} on this ride · Quick Reserve on`;
+      return `${pendingCount} request${pendingCount === 1 ? "" : "s"} need approval`;
     }
     if (total > 0) {
       return `${total} on this ride · tap to manage`;
-    }
-    if (quickReserve) {
-      return "Quick Reserve on · waiting for joiners";
     }
     return "No one joined yet · tap to view requests";
   })();
@@ -81,17 +72,7 @@ const DriverParticipantsHub = ({
               </Text>
               <Text style={styles.statLabel}>Pending</Text>
             </View>
-          ) : (
-            <View style={[styles.statPill, styles.statQuick]}>
-              <Icon
-                name={quickReserve ? "flash" : "time-outline"}
-                size={18}
-                color={quickReserve ? colors.primary : colors.textMuted}
-              />
-              <Text style={styles.statNum}>{quickReserve ? "ON" : "OFF"}</Text>
-              <Text style={styles.statLabel}>Quick reserve</Text>
-            </View>
-          )}
+          ) : null}
         </View>
       </TouchableOpacity>
 
@@ -198,10 +179,6 @@ const createStyles = (c) =>
     statPendingActive: {
       backgroundColor: c.warningBg,
       borderColor: c.warningBorder,
-    },
-    statQuick: {
-      backgroundColor: c.primaryMuted,
-      borderColor: c.border,
     },
     statNum: {
       fontSize: 20,

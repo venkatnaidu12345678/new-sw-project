@@ -41,6 +41,8 @@ import {
   filterOpenPassengerRequests,
   filterOpenCourierRequests,
   shouldRemoveMyRequestRow,
+  isRequestLockedToOtherDriver,
+  REQUEST_LOCKED_TO_DRIVER_MESSAGE,
 } from "../Utils/myRequestUtils";
 import { getApiErrorMessage } from "../Utils/apiErrors";
 import { formatRequestDate } from "../Utils";
@@ -412,6 +414,10 @@ const MyRequest = () => {
 
   const handleJoinPassenger = async (ride, requestItem) => {
     if (joiningRideId) return;
+    if (isRequestLockedToOtherDriver(requestItem, ride._id)) {
+      Alert.alert("Already linked", REQUEST_LOCKED_TO_DRIVER_MESSAGE);
+      return;
+    }
     const token = await AsyncStorage.getItem("token");
     if (!token) {
       Alert.alert("Sign in required", "Please log in to request a seat.");
@@ -458,6 +464,10 @@ const MyRequest = () => {
 
   const handleJoinCourier = async (ride, requestItem) => {
     if (joiningRideId) return;
+    if (isRequestLockedToOtherDriver(requestItem, ride._id)) {
+      Alert.alert("Already linked", REQUEST_LOCKED_TO_DRIVER_MESSAGE);
+      return;
+    }
     const raw = requestItem?.raw || {};
     const recv = raw.receiver || {};
     if (!raw.courier_img) {
@@ -602,7 +612,19 @@ const MyRequest = () => {
 
   const handleJoinRide = (ride) => {
     if (!selectedRide || joiningRideId) return;
-    if (selectedRide.requestKind === "ride_join" || ride.passengerRequestPending) {
+    if (selectedRide.requestKind === "ride_join") {
+      handleViewRide(ride);
+      return;
+    }
+    if (isRequestLockedToOtherDriver(selectedRide, ride._id)) {
+      Alert.alert("Already linked", REQUEST_LOCKED_TO_DRIVER_MESSAGE);
+      return;
+    }
+    const pending =
+      selectedRide.role === "Courier"
+        ? ride.courierRequestPending
+        : ride.passengerRequestPending;
+    if (pending) {
       handleViewRide(ride);
       return;
     }

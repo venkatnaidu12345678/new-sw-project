@@ -15,6 +15,8 @@ const {
   closeSiblingStandalonesAfterEnroutePick,
   collectAssignedRequestDocIds,
   dedupeEnrouteRequestsByRequestId,
+  resolveCourierLockedRideId,
+  LOCKED_TO_OTHER_DRIVER_MESSAGE,
 } = require("../utils/participantRequestCleanup");
 const {
   emitToUser,
@@ -618,7 +620,21 @@ const pickCourier = async (user, { rideId, courierId }) => {
   if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
   const courier = await Courier.findById(courierId);
   if (!courier) return { status: 404, body: { success: false, message: "Courier not found" } };
-  if (courier.courier_status !== "pending" && courier.courier_status !== "request_to_driver") return { status: 400, body: { success: false, message: "Courier already assigned or completed" } };
+  if (courier.courier_status !== "pending" && courier.courier_status !== "request_to_driver") {
+    return {
+      status: 400,
+      body: { success: false, message: LOCKED_TO_OTHER_DRIVER_MESSAGE },
+    };
+  }
+
+  const lockedRideId = resolveCourierLockedRideId(courier);
+  if (lockedRideId && lockedRideId !== String(rideId)) {
+    return {
+      status: 400,
+      body: { success: false, message: LOCKED_TO_OTHER_DRIVER_MESSAGE },
+    };
+  }
+
   if (ride.creator.toString() !== user._id.toString()) {
     return { status: 403, body: { success: false, message: "Unauthorized" } };
   }
@@ -657,7 +673,10 @@ const pickCourier = async (user, { rideId, courierId }) => {
     { new: true }
   );
   if (!claimedCourier) {
-    return { status: 400, body: { success: false, message: "Courier already assigned or completed" } };
+    return {
+      status: 400,
+      body: { success: false, message: LOCKED_TO_OTHER_DRIVER_MESSAGE },
+    };
   }
 
   const courierEntry = {

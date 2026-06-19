@@ -8,7 +8,7 @@ const { ensureParticipantBoardingOtp } = require("./rideVerificationService");
 const { notifyUser } = require("./notificationService");
 const { getRideDetails } = require("./rideService");
 const { toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
-const { closeSiblingStandalonesAfterEnroutePick } = require("../utils/participantRequestCleanup");
+const { closeSiblingStandalonesAfterEnroutePick, resolvePassengerLockedRideId, LOCKED_TO_OTHER_DRIVER_MESSAGE } = require("../utils/participantRequestCleanup");
 const {
   emitToUser,
   emitRideParticipantsUpdated,
@@ -130,7 +130,15 @@ const pickPassenger = async (user, { passenger_rideId, rideId }) => {
   if (passengerRide.status === "expired") {
     return { status: 400, body: { message: "This passenger request has expired" } };
   }
-  if (passengerRide.status !== "pending") return { status: 400, body: { message: "Passenger already picked" } };
+  if (passengerRide.status !== "pending") {
+    return { status: 400, body: { message: LOCKED_TO_OTHER_DRIVER_MESSAGE } };
+  }
+
+  const lockedRideId = resolvePassengerLockedRideId(passengerRide);
+  if (lockedRideId && lockedRideId !== String(rideId)) {
+    return { status: 400, body: { message: LOCKED_TO_OTHER_DRIVER_MESSAGE } };
+  }
+
   let ride = await Ride.findById(rideId);
   if (!ride) return { status: 404, body: { message: "Ride not found" } };
   if (ride.creator.toString() !== user._id.toString()) return { status: 403, body: { message: "Unauthorized" } };
@@ -167,7 +175,10 @@ const pickPassenger = async (user, { passenger_rideId, rideId }) => {
     { new: true }
   );
   if (!claimedPassengerRide) {
-    return { status: 400, body: { message: "Passenger already picked" } };
+    return {
+      status: 400,
+      body: { message: "This request is already picked by another driver" },
+    };
   }
 
   const perSeatOffer = Math.round(Number(claimedPassengerRide.amount_will) || 0);

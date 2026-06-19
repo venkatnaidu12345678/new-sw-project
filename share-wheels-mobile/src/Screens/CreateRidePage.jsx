@@ -56,8 +56,8 @@ const CreateRidePage = () => {
     date: "",
     AlternatePhoneNumber: "",
     startTime: "",
-    CanCarryCourier: false,
-    QuickReserve: false,
+    CanCarryCourier: true,
+    QuickReserve: true,
   });
 
   const vehicleInfo = ProfileDetails?.data?.vehicleInfo;

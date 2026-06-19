@@ -13,6 +13,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { userTermsApi } from "../ApiService/AuthApiService";
 import { getLegalPolicies } from "../ApiService/legalApiService";
+import { setPendingAppTour } from "../coachMarks/storage";
 import { splitParagraphs } from "../Utils/htmlUtils";
 import { useTheme } from "../context/ThemeContext";
 import { useThemedStyles } from "../theme/useThemedStyles";
@@ -69,6 +70,7 @@ const TermsPopup = ({ visible = true, onSuccess, setRefresh }) => {
       const resp = await userTermsApi(token, true);
 
       if (resp && resp.success) {
+        await setPendingAppTour();
         Alert.alert("Success", "Terms accepted successfully");
         setRefresh((prev) => prev + 1);
         if (onSuccess) onSuccess();

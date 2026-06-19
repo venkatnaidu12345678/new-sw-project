@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import { View, StyleSheet, Image, Platform, Pressable } from "react-native";
 import { createBottomTabNavigator, BottomTabBar } from "@react-navigation/bottom-tabs";
 import { useIsFocused, useNavigationState } from "@react-navigation/native";
@@ -17,7 +17,11 @@ import { shouldShowCreateFab } from "../Utils/mainTabNavigation";
 import { useTheme } from "../context/ThemeContext";
 import { CoachMarksProvider } from "../context/CoachMarksContext";
 import { profileData } from "../Navigation/AuthNavigator";
-import { TAB_ANCHOR_BY_ROUTE } from "../coachMarks/mainAppTour";
+import { TAB_ANCHOR_BY_ROUTE, MAIN_APP_TOUR_ID } from "../coachMarks/mainAppTour";
+import {
+  consumePendingAppTour,
+  markTourCompleted,
+} from "../coachMarks/storage";
 
 import requestIcon from "../assets/requesticon.png";
 
@@ -27,13 +31,17 @@ function BottomNavigatorInner() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const tabNavRef = useRef(null);
-  const termsAccepted = profileData()?.ProfileDetails?.data?.terms === true;
-
-  const bottomPad =
-    Platform.OS === "ios"
-      ? Math.max(insets.bottom, 8)
-      : Math.max(insets.bottom, 8);
-  const tabHeight = LAYOUT.sizes.tabBarHeight + bottomPad;
+  const profileCtx = profileData();
+  const profile = profileCtx?.ProfileDetails;
+  const termsAccepted = profile?.data?.terms === true;
+  const profileRefresh = profileCtx?.refresh;
+  const userId =
+    profile?._id ||
+    profile?.id ||
+    profile?.data?.personalInfo?._id ||
+    profile?.data?.personalInfo?.id ||
+    null;
+  const [autoStartTour, setAutoStartTour] = useState(false);
 
   const isNavigatorFocused = useIsFocused();
   const showCreateFabOnTab = useNavigationState((state) =>
@@ -41,10 +49,44 @@ function BottomNavigatorInner() {
   );
   const showCreateFab = isNavigatorFocused && showCreateFabOnTab;
 
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      if (!termsAccepted || !isNavigatorFocused) {
+        if (!cancelled) setAutoStartTour(false);
+        return;
+      }
+
+      const pending = await consumePendingAppTour();
+      if (cancelled) return;
+
+      if (pending) {
+        setAutoStartTour(true);
+        return;
+      }
+
+      // Returning user — terms were already accepted; skip auto tour.
+      await markTourCompleted(MAIN_APP_TOUR_ID, userId);
+      setAutoStartTour(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [termsAccepted, isNavigatorFocused, userId, profileRefresh]);
+
+  const bottomPad =
+    Platform.OS === "ios"
+      ? Math.max(insets.bottom, 8)
+      : Math.max(insets.bottom, 8);
+  const tabHeight = LAYOUT.sizes.tabBarHeight + bottomPad;
+
   return (
     <CoachMarksProvider
       tabNavigationRef={tabNavRef}
-      autoStartEnabled={termsAccepted && isNavigatorFocused}
+      autoStartEnabled={autoStartTour && isNavigatorFocused}
+      userId={userId}
     >
       <View style={[styles.shell, { backgroundColor: colors.background }]}>
         <Tab.Navigator

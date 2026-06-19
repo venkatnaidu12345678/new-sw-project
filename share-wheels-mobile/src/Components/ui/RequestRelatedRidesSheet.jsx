@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import RequestMatchingRides from "./RequestMatchingRides";
+import { getRequestLockedRideId } from "../../Utils/myRequestUtils";
 import { DS } from "../../theme/designSystem";
 import { useThemedStyles } from "../../theme/useThemedStyles";
 
@@ -73,6 +74,7 @@ const RequestRelatedRidesSheet = ({
   const rideCount =
     (request?.matchingRides?.length || 0) +
     (request?.linkedRide ? 1 : 0);
+  const lockedRideId = getRequestLockedRideId(request);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={dismiss}>
@@ -111,6 +113,7 @@ const RequestRelatedRidesSheet = ({
             <RequestMatchingRides
               rides={request?.matchingRides || []}
               linkedRide={request?.linkedRide || null}
+              lockedRideId={lockedRideId}
               role={request?.role || "Passenger"}
               joiningRideId={joiningRideId}
               onViewRide={onViewRide}

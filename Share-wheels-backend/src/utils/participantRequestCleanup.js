@@ -535,6 +535,94 @@ const shouldHideStandaloneByParticipation = (req, participatedRides = []) =>
     routesRoughlyMatch(req.from, req.to, ride.from, ride.to)
   );
 
+const LOCKED_TO_OTHER_DRIVER_MESSAGE =
+  "This request is already picked by another driver";
+
+const resolvePassengerLockedRideId = (doc) => {
+  if (!doc) return null;
+  const assigned = doc.assigned_to?.rideId?.toString?.();
+  if (assigned) return assigned;
+  const joins = doc.join_requested_By || [];
+  for (let i = joins.length - 1; i >= 0; i -= 1) {
+    const rideId = joins[i]?.rideId?.toString?.();
+    if (rideId) return rideId;
+  }
+  return null;
+};
+
+const resolveCourierLockedRideId = (doc) =>
+  doc?.driver_assigned_courier?.rideId?.toString?.() || null;
+
+/** Block linking a standalone My Request row to a second driver ride. */
+const assertStandalonePassengerAvailableForRide = async (
+  userId,
+  passengerRideId,
+  targetRideId
+) => {
+  if (!passengerRideId || !mongoose.Types.ObjectId.isValid(passengerRideId)) {
+    return { ok: true };
+  }
+  if (!targetRideId) {
+    return { ok: false, message: LOCKED_TO_OTHER_DRIVER_MESSAGE };
+  }
+
+  const doc = await PassengerRide.findOne({
+    _id: passengerRideId,
+    creator: userId,
+  })
+    .select("status assigned_to join_requested_By")
+    .lean();
+
+  if (!doc) {
+    return { ok: false, message: "Passenger request not found" };
+  }
+  if (doc.status !== "pending") {
+    return { ok: false, message: LOCKED_TO_OTHER_DRIVER_MESSAGE };
+  }
+
+  const lockedRideId = resolvePassengerLockedRideId(doc);
+  if (lockedRideId && lockedRideId !== String(targetRideId)) {
+    return { ok: false, message: LOCKED_TO_OTHER_DRIVER_MESSAGE };
+  }
+
+  return { ok: true };
+};
+
+/** Block linking a standalone courier My Request row to a second driver ride. */
+const assertStandaloneCourierAvailableForRide = async (
+  userId,
+  courierId,
+  targetRideId
+) => {
+  if (!courierId || !mongoose.Types.ObjectId.isValid(courierId)) {
+    return { ok: true };
+  }
+  if (!targetRideId) {
+    return { ok: false, message: LOCKED_TO_OTHER_DRIVER_MESSAGE };
+  }
+
+  const doc = await Courier.findOne({
+    _id: courierId,
+    creator: userId,
+  })
+    .select("courier_status driver_assigned_courier")
+    .lean();
+
+  if (!doc) {
+    return { ok: false, message: "Courier request not found" };
+  }
+  if (!["pending", "request_to_driver"].includes(String(doc.courier_status || ""))) {
+    return { ok: false, message: LOCKED_TO_OTHER_DRIVER_MESSAGE };
+  }
+
+  const lockedRideId = resolveCourierLockedRideId(doc);
+  if (lockedRideId && lockedRideId !== String(targetRideId)) {
+    return { ok: false, message: LOCKED_TO_OTHER_DRIVER_MESSAGE };
+  }
+
+  return { ok: true };
+};
+
 module.exports = {
   collectRideParticipantUserIds,
   collectConfirmedRideParticipantUserIds,
@@ -554,4 +642,9 @@ module.exports = {
   closeOpenOppositeRoleStandalones,
   dedupeEnrouteRequestsByCreator,
   dedupeEnrouteRequestsByRequestId,
+  LOCKED_TO_OTHER_DRIVER_MESSAGE,
+  resolvePassengerLockedRideId,
+  resolveCourierLockedRideId,
+  assertStandalonePassengerAvailableForRide,
+  assertStandaloneCourierAvailableForRide,
 };

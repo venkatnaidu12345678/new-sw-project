@@ -35,6 +35,8 @@ const {
   closeStandaloneRequestsAfterJoin,
   linkStandalonePassengersForRideRequest,
   routesRoughlyMatch,
+  resolvePassengerLockedRideId,
+  assertStandalonePassengerAvailableForRide,
 } = require("../utils/participantRequestCleanup");
 const {
   buildOrderedCorridor,
@@ -599,6 +601,18 @@ const sendPassengerRequest = async (
         success: false,
         message: `Not enough seats available (only ${ride.availableSeats} left)`,
       },
+    };
+  }
+
+  const standaloneLock = await assertStandalonePassengerAvailableForRide(
+    userId,
+    standalonePassengerRideId,
+    rideId
+  );
+  if (!standaloneLock.ok) {
+    return {
+      status: 400,
+      body: { success: false, message: standaloneLock.message },
     };
   }
 
@@ -1649,6 +1663,7 @@ const findMatchingRidesForRequest = async ({
     date: { $gte: range.startDate, $lte: range.endDate },
     status: "pending",
     creator: { $ne: userId },
+    QuickReserve: true,
     $or: [
       { from: fromRegex, to: toRegex },
       { from: fromRegex },
@@ -1714,23 +1729,30 @@ const buildMyPassengerRequests = async (user) => {
     (p) => !p.assigned_to?.rideId
   );
 
-  const standalonePassengerRequests = visiblePassengerData.map((p) => ({
-    requestId: p._id,
-    passengerRideId: p._id,
-    requestKind: "standalone",
-    rideId: null,
-    from: p.from,
-    to: p.to,
-    date: p.date,
-    date_end: p.date_end,
-    seats: p.seats_needed,
-    amount: p.amount_will,
-    luggage: p.luggage_included,
-    requestedAt: p.createdAt,
-    status: p.status,
-    assignedRide: p.assigned_to?.rideId || null,
-    type: "passenger",
-  }));
+  const standalonePassengerRequests = visiblePassengerData.map((p) => {
+    const lockedRideId = resolvePassengerLockedRideId(p);
+    return {
+      requestId: p._id,
+      passengerRideId: p._id,
+      requestKind: "standalone",
+      rideId: lockedRideId,
+      from: p.from,
+      to: p.to,
+      date: p.date,
+      date_end: p.date_end,
+      seats: p.seats_needed,
+      amount: p.amount_will,
+      luggage: p.luggage_included,
+      requestedAt: p.createdAt,
+      status: p.status,
+      assignedRide: p.assigned_to?.rideId || null,
+      join_requested_By: (p.join_requested_By || []).map((row) => ({
+        rideId: row.rideId,
+      })),
+      lockedRideId,
+      type: "passenger",
+    };
+  });
 
   const passengerRequestsBase = standalonePassengerRequests;
 
@@ -1743,7 +1765,11 @@ const buildMyPassengerRequests = async (user) => {
         dateEnd: req.date_end,
         userId,
       });
-      return { ...req, linkedRide: null, matchingRides };
+      const linkedRideId = req.lockedRideId || null;
+      const linkedRide = linkedRideId
+        ? await fetchLinkedRide(linkedRideId, userId)
+        : null;
+      return { ...req, linkedRide, matchingRides };
     })
   );
 };
@@ -1781,6 +1807,7 @@ const buildMyCourierRequests = async (user) => {
       receiver: c.courier_receiver_details,
       status: c.courier_status,
       assignedRide: c.driver_assigned_courier?.rideId || null,
+      lockedRideId: c.driver_assigned_courier?.rideId?.toString?.() || null,
       requestedAt: c.createdAt,
       type: "courier",
     }));
@@ -1795,7 +1822,7 @@ const buildMyCourierRequests = async (user) => {
         userId,
         courierOnly: true,
       });
-      const linkedRideId = c.assignedRide || null;
+      const linkedRideId = c.lockedRideId || c.assignedRide || null;
       const linkedRide = linkedRideId
         ? await fetchLinkedRide(linkedRideId, userId)
         : null;
