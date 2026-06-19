@@ -349,15 +349,6 @@ const CreateRideComponentOne = forwardRef(
               onChange={(value) => updateRideData("CanCarryCourier", value)}
               compact
             />
-            <ToggleComponent
-              title="Quick reserve"
-              subtitle="Auto-accept matching seat requests"
-              icon={require("../assets/reverse.png")}
-              iconBg={colors.tintGreen}
-              value={rideData.QuickReserve}
-              onChange={(value) => updateRideData("QuickReserve", value)}
-              compact
-            />
           </View>
         </FormSection>
 

@@ -596,46 +596,18 @@ const UpcomingDetailsPage = ({ route }) => {
     (normalizedRideStatus === "pending" || normalizedRideStatus === "started");
 
   const participantTabs = useMemo(
-    () => [
-      "All",
-      "Passengers",
-      "Couriers",
-      "Pax requests",
-      "Courier requests",
-    ],
+    () => ["All", "Passengers", "Couriers"],
     []
   );
 
-  const pendingRequestCount =
-    passengerRequests.length + courierRequests.length;
-
-  const participantTotal = passengers.length + couriers.length;
-
-  const resolveParticipantsTabIndex = useCallback(
-    (intent = "default") => {
-      const paxIdx = participantTabs.indexOf("Pax requests");
-      const courierIdx = participantTabs.indexOf("Courier requests");
-
-      if (intent === "pending") {
-        if (passengerRequests.length > 0 && paxIdx >= 0) return paxIdx;
-        if (courierRequests.length > 0 && courierIdx >= 0) return courierIdx;
-        return 0;
-      }
-
-      if (pendingRequestCount > 0 && participantTotal === 0) {
-        if (passengerRequests.length > 0 && paxIdx >= 0) return paxIdx;
-        if (courierRequests.length > 0 && courierIdx >= 0) return courierIdx;
-      }
-
-      return 0;
+  const openParticipantsSlider = useCallback(
+    (tabIndex) => {
+      const resolved = typeof tabIndex === "number" ? tabIndex : 0;
+      const max = Math.max(0, participantTabs.length - 1);
+      setParticipantTabIndex(Math.min(Math.max(0, resolved), max));
+      setActiveSlider("participants");
     },
-    [
-      participantTabs,
-      passengerRequests.length,
-      courierRequests.length,
-      pendingRequestCount,
-      participantTotal,
-    ]
+    [participantTabs.length]
   );
 
   /** Courier role: only this user's parcel — not every delivery on the ride. */
@@ -663,19 +635,6 @@ const UpcomingDetailsPage = ({ route }) => {
   const driverCanCompleteRide = useMemo(
     () => canDriverCompleteRide(driverRideForCompletion),
     [driverRideForCompletion]
-  );
-
-  const openParticipantsSlider = useCallback(
-    (tabIndex) => {
-      const resolved =
-        typeof tabIndex === "number"
-          ? tabIndex
-          : resolveParticipantsTabIndex(tabIndex || "default");
-      const max = Math.max(0, participantTabs.length - 1);
-      setParticipantTabIndex(Math.min(Math.max(0, resolved), max));
-      setActiveSlider("participants");
-    },
-    [participantTabs.length, resolveParticipantsTabIndex]
   );
 
   useEffect(() => {
@@ -1587,9 +1546,7 @@ const UpcomingDetailsPage = ({ route }) => {
             <DriverParticipantsHub
               passengerCount={passengers.length}
               courierCount={couriers.length}
-              pendingCount={pendingRequestCount}
               onOpen={() => openParticipantsSlider("default")}
-              onOpenPending={() => openParticipantsSlider("pending")}
             />
 
             <DriverEnrouteHub
@@ -1718,8 +1675,6 @@ const UpcomingDetailsPage = ({ route }) => {
                 onTabChange: setParticipantTabIndex,
                 passengers,
                 couriers,
-                passengerRequests,
-                courierRequests,
               })
             : activeSlider === "enroute"
               ? buildEnrouteDragHeader({
@@ -1741,8 +1696,6 @@ const UpcomingDetailsPage = ({ route }) => {
             detailsLoading={detailsLoading}
             passengers={passengers}
             couriers={couriers}
-            passengerRequests={passengerRequests}
-            courierRequests={courierRequests}
             rideFrom={rideData?.from}
             rideTo={rideData?.to}
             rideStatus={normalizedRideStatus}
@@ -1762,10 +1715,6 @@ const UpcomingDetailsPage = ({ route }) => {
               openParticipantDetails(item, "passenger")
             }
             onPressCourier={(item) => openParticipantDetails(item, "courier")}
-            onAcceptPassenger={handleAcceptPassenger}
-            onRejectPassenger={handleRejectPassenger}
-            onAcceptCourier={handleAcceptCourier}
-            onRejectCourier={handleRejectCourier}
           />
         )}
 

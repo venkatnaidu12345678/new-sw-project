@@ -57,7 +57,6 @@ const CreateRidePage = () => {
     AlternatePhoneNumber: "",
     startTime: "",
     CanCarryCourier: true,
-    QuickReserve: true,
   });
 
   const vehicleInfo = ProfileDetails?.data?.vehicleInfo;
@@ -180,7 +179,7 @@ const CreateRidePage = () => {
         ride_amount: Number(rideData.ride_amount),
         AlternatePhoneNumber: rideData.AlternatePhoneNumber?.trim() || undefined,
         CanCarryCourier: rideData.CanCarryCourier,
-        QuickReserve: rideData.QuickReserve,
+        QuickReserve: true,
         rideType: rideData.rideType,
         routePolyline: routePlan?.routePolyline || undefined,
         selectedRouteIndex: routePlan?.selectedRouteIndex ?? 0,

@@ -48,135 +48,93 @@ export const buildParticipantsDragHeader = ({
 
   couriers,
 
-  passengerRequests,
+}) => (
 
-  courierRequests,
+  <View style={styles.dragHeader}>
 
-}) => {
+    <View style={styles.titleRow}>
 
-  const pendingTotal =
+      <View style={styles.titleLeft}>
 
-    passengerRequests.length + courierRequests.length;
+        <View style={styles.titleIcon}>
 
+          <Icon name="people" size={20} color={colors.inverseText} />
 
+        </View>
 
-  return (
+        <View style={styles.titleTextCol}>
 
-    <View style={styles.dragHeader}>
+          <Text style={styles.cardTitle}>Participants</Text>
 
-      <View style={styles.titleRow}>
+          <Text style={styles.cardSubtitle}>
 
-        <View style={styles.titleLeft}>
+            Drag down to close · manage riders on this ride
 
-          <View style={styles.titleIcon}>
-
-            <Icon name="people" size={20} color={colors.inverseText} />
-
-          </View>
-
-          <View style={styles.titleTextCol}>
-
-            <Text style={styles.cardTitle}>Participants</Text>
-
-            <Text style={styles.cardSubtitle}>
-
-              Drag down to close · manage riders & requests
-
-            </Text>
-
-          </View>
+          </Text>
 
         </View>
 
       </View>
 
-
-
-      <View style={styles.summaryRow}>
-
-        <SummaryChip
-
-          icon="person"
-
-          label="Passengers"
-
-          value={passengers.length}
-
-          tint={colors.successBg}
-
-          styles={styles}
-
-          iconColor={colors.successText}
-
-        />
-
-        <SummaryChip
-
-          icon="cube"
-
-          label="Couriers"
-
-          value={couriers.length}
-
-          tint={colors.tintOrange}
-
-          styles={styles}
-
-          iconColor="#EA580C"
-
-        />
-
-        {tabs.some((t) => t.includes("req")) ? (
-
-          <SummaryChip
-
-            icon="time"
-
-            label="Pending"
-
-            value={pendingTotal}
-
-            tint={pendingTotal > 0 ? colors.warningBg : colors.chipBg}
-
-            styles={styles}
-
-            iconColor={
-
-              pendingTotal > 0 ? colors.warningText : colors.textMuted
-
-            }
-
-          />
-
-        ) : null}
-
-      </View>
+    </View>
 
 
 
-      <DriverParticipantsSheetHeader
+    <View style={styles.summaryRow}>
 
-        tabs={tabs}
+      <SummaryChip
 
-        activeTabIndex={activeTabIndex}
+        icon="person"
 
-        onTabChange={onTabChange}
+        label="Passengers"
 
-        passengers={passengers}
+        value={passengers.length}
 
-        couriers={couriers}
+        tint={colors.successBg}
 
-        passengerRequests={passengerRequests}
+        styles={styles}
 
-        courierRequests={courierRequests}
+        iconColor={colors.successText}
+
+      />
+
+      <SummaryChip
+
+        icon="cube"
+
+        label="Couriers"
+
+        value={couriers.length}
+
+        tint={colors.tintOrange}
+
+        styles={styles}
+
+        iconColor="#EA580C"
 
       />
 
     </View>
 
-  );
 
-};
+
+    <DriverParticipantsSheetHeader
+
+      tabs={tabs}
+
+      activeTabIndex={activeTabIndex}
+
+      onTabChange={onTabChange}
+
+      passengers={passengers}
+
+      couriers={couriers}
+
+    />
+
+  </View>
+
+);
 
 
 
@@ -193,10 +151,6 @@ const DriverParticipantsSheet = ({
   passengers,
 
   couriers,
-
-  passengerRequests,
-
-  courierRequests,
 
   rideFrom,
 
@@ -226,14 +180,6 @@ const DriverParticipantsSheet = ({
 
   onPressCourier,
 
-  onAcceptPassenger,
-
-  onRejectPassenger,
-
-  onAcceptCourier,
-
-  onRejectCourier,
-
 }) => {
 
   const styles = useThemedStyles(createStyles);
@@ -257,10 +203,6 @@ const DriverParticipantsSheet = ({
         passengers={passengers}
 
         couriers={couriers}
-
-        passengerRequests={passengerRequests}
-
-        courierRequests={courierRequests}
 
         rideFrom={rideFrom}
 
@@ -291,14 +233,6 @@ const DriverParticipantsSheet = ({
         onPressPassenger={onPressPassenger}
 
         onPressCourier={onPressCourier}
-
-        onAcceptPassenger={onAcceptPassenger}
-
-        onRejectPassenger={onRejectPassenger}
-
-        onAcceptCourier={onAcceptCourier}
-
-        onRejectCourier={onRejectCourier}
 
       />
 
@@ -465,5 +399,3 @@ export const participantsSheetStyles = (c) =>
 
 
 const createStyles = participantsSheetStyles;
-
-

@@ -5,27 +5,15 @@ import { useTheme } from "../context/ThemeContext";
 import { useThemedStyles } from "../theme/useThemedStyles";
 import { LAYOUT } from "../theme/layout";
 
-const DriverParticipantsHub = ({
-  passengerCount,
-  courierCount,
-  pendingCount,
-  onOpen,
-  onOpenPending,
-}) => {
+const DriverParticipantsHub = ({ passengerCount, courierCount, onOpen }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const total = passengerCount + courierCount;
-  const showPending = pendingCount > 0;
 
-  const subtitle = (() => {
-    if (showPending && total === 0) {
-      return `${pendingCount} request${pendingCount === 1 ? "" : "s"} need approval`;
-    }
-    if (total > 0) {
-      return `${total} on this ride · tap to manage`;
-    }
-    return "No one joined yet · tap to view requests";
-  })();
+  const subtitle =
+    total > 0
+      ? `${total} on this ride · tap to manage`
+      : "No one joined yet · tap to view participants";
 
   return (
     <View style={styles.wrap}>
@@ -58,40 +46,8 @@ const DriverParticipantsHub = ({
             <Text style={styles.statNum}>{courierCount}</Text>
             <Text style={styles.statLabel}>Couriers</Text>
           </View>
-          {showPending ? (
-            <View
-              style={[
-                styles.statPill,
-                styles.statPending,
-                styles.statPendingActive,
-              ]}
-            >
-              <Icon name="notifications-outline" size={18} color={colors.warningText} />
-              <Text style={[styles.statNum, styles.statNumHighlight]}>
-                {pendingCount}
-              </Text>
-              <Text style={styles.statLabel}>Pending</Text>
-            </View>
-          ) : null}
         </View>
       </TouchableOpacity>
-
-      {showPending ? (
-        <TouchableOpacity
-          style={styles.alertBanner}
-          onPress={onOpenPending}
-          activeOpacity={0.88}
-        >
-          <View style={styles.alertIconWrap}>
-            <Icon name="alert-circle" size={18} color={colors.warningText} />
-          </View>
-          <Text style={styles.alertText}>
-            {pendingCount} request{pendingCount === 1 ? "" : "s"} need your
-            approval
-          </Text>
-          <Text style={styles.alertAction}>Review</Text>
-        </TouchableOpacity>
-      ) : null}
     </View>
   );
 };
@@ -172,22 +128,11 @@ const createStyles = (c) =>
       backgroundColor: c.tintOrange,
       borderColor: c.border,
     },
-    statPending: {
-      backgroundColor: c.chipBg,
-      borderColor: c.border,
-    },
-    statPendingActive: {
-      backgroundColor: c.warningBg,
-      borderColor: c.warningBorder,
-    },
     statNum: {
       fontSize: 20,
       fontWeight: "800",
       color: c.text,
       marginTop: 6,
-    },
-    statNumHighlight: {
-      color: c.warningText,
     },
     statLabel: {
       fontSize: 10,
@@ -197,32 +142,5 @@ const createStyles = (c) =>
       textTransform: "uppercase",
       letterSpacing: 0.35,
       textAlign: "center",
-    },
-    alertBanner: {
-      flexDirection: "row",
-      alignItems: "center",
-      marginTop: 10,
-      paddingVertical: 12,
-      paddingHorizontal: 14,
-      borderRadius: 14,
-      backgroundColor: c.warningBg,
-      borderWidth: 1,
-      borderColor: c.warningBorder,
-    },
-    alertIconWrap: {
-      marginRight: 10,
-    },
-    alertText: {
-      flex: 1,
-      fontSize: 13,
-      fontWeight: "600",
-      color: c.warningText,
-      lineHeight: 18,
-    },
-    alertAction: {
-      fontSize: 13,
-      fontWeight: "800",
-      color: c.primary,
-      marginLeft: 8,
     },
   });
