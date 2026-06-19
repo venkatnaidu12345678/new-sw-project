@@ -170,12 +170,16 @@ const pickPassenger = async (user, { passenger_rideId, rideId }) => {
     return { status: 400, body: { message: "Passenger already picked" } };
   }
 
+  const perSeatOffer = Math.round(Number(claimedPassengerRide.amount_will) || 0);
+  const seatsNeeded = Math.max(1, Number(claimedPassengerRide.seats_needed) || 1);
+  const totalOffer = perSeatOffer * seatsNeeded;
+
   const passengerEntry = {
     userId: claimedPassengerRide.creator,
-    requires_seats: claimedPassengerRide.seats_needed,
+    requires_seats: seatsNeeded,
     from: claimedPassengerRide.from || ride.from,
     to: claimedPassengerRide.to || ride.to,
-    ride_amount: claimedPassengerRide.amount_will || 0,
+    ride_amount: totalOffer,
     status: "accepted",
     joinedAt: new Date(),
   };

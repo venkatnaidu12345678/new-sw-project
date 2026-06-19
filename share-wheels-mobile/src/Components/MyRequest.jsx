@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   FlatList,
   Image,
   Alert,
+  RefreshControl,
+  ActivityIndicator,
 } from "react-native";
 import LinearGradient from "react-native-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -167,6 +169,7 @@ const MyRequest = () => {
   const [passengerRides, setPassengerRides] = useState([]);
   const [courierRides, setCourierRides] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [fetchError, setFetchError] = useState("");
 
   const [selectedRide, setSelectedRide] = useState(null);
@@ -179,16 +182,53 @@ const MyRequest = () => {
   const tabs = ["Passenger", "Courier"];
   const activeIndex = tabs.indexOf(activeTab);
 
-  const activeTabRef = useRef(activeTab);
-  useEffect(() => {
-    activeTabRef.current = activeTab;
-  }, [activeTab]);
+  const loadAllRequests = useCallback(async ({ showLoader = false } = {}) => {
+    if (showLoader) setLoading(true);
+    setFetchError("");
+
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        setFetchError("Please sign in again.");
+        setPassengerRides([]);
+        setCourierRides([]);
+        return;
+      }
+
+      const [passengerRes, courierRes] = await Promise.all([
+        getMyPassengerRequests(token),
+        getMyCourierRequests(token),
+      ]);
+
+      setPassengerRides(
+        sortRequestsByPriority(
+          filterOpenPassengerRequests(
+            (passengerRes?.passengerRequests || []).map(mapPassengerRequest)
+          )
+        )
+      );
+      setCourierRides(
+        sortRequestsByPriority(
+          filterOpenCourierRequests(
+            (courierRes?.courierRequests || []).map(mapCourierRequest)
+          )
+        )
+      );
+    } catch (err) {
+      console.log("❌ MY REQUESTS ERROR:", err.message);
+      setFetchError(getApiErrorMessage(err, "Could not load requests."));
+      setPassengerRides([]);
+      setCourierRides([]);
+    } finally {
+      if (showLoader) setLoading(false);
+    }
+  }, []);
 
   const fetchPassengerRequests = useCallback(async ({ showLoader = true } = {}) => {
-    try {
-      if (showLoader) setLoading(true);
-      setFetchError("");
+    if (showLoader) setLoading(true);
+    setFetchError("");
 
+    try {
       const token = await AsyncStorage.getItem("token");
       if (!token) {
         setFetchError("Please sign in again.");
@@ -209,15 +249,15 @@ const MyRequest = () => {
       setFetchError(getApiErrorMessage(err, "Could not load passenger requests."));
       setPassengerRides([]);
     } finally {
-      setLoading(false);
+      if (showLoader) setLoading(false);
     }
   }, []);
 
   const fetchCourierRequests = useCallback(async ({ showLoader = true } = {}) => {
-    try {
-      if (showLoader) setLoading(true);
-      setFetchError("");
+    if (showLoader) setLoading(true);
+    setFetchError("");
 
+    try {
       const token = await AsyncStorage.getItem("token");
       if (!token) {
         setFetchError("Please sign in again.");
@@ -238,9 +278,20 @@ const MyRequest = () => {
       setFetchError(getApiErrorMessage(err, "Could not load courier requests."));
       setCourierRides([]);
     } finally {
-      setLoading(false);
+      if (showLoader) setLoading(false);
     }
   }, []);
+
+  const onRefresh = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await loadAllRequests({ showLoader: false });
+    } finally {
+      setRefreshing(false);
+      setLoading(false);
+    }
+  }, [loadAllRequests, refreshing]);
 
   const fetchActiveTabRequests = useCallback(() => {
     if (activeTab === "Courier") {
@@ -249,37 +300,35 @@ const MyRequest = () => {
     return fetchPassengerRequests();
   }, [activeTab, fetchCourierRequests, fetchPassengerRequests]);
 
+  const didInitialLoadRef = useRef(false);
+
   useFocusEffect(
     useCallback(() => {
       const paramTab = normalizeRequestTab(route.params?.activeTab, tabs);
 
       if (paramTab) {
         setActiveTab(paramTab);
-        if (paramTab === "Courier") {
-          fetchCourierRequests();
-        } else {
-          fetchPassengerRequests();
-        }
+        didInitialLoadRef.current = true;
+        loadAllRequests({ showLoader: true });
         return;
       }
 
-      const currentTab = activeTabRef.current;
-      if (currentTab === "Courier") {
-        fetchCourierRequests({ showLoader: false });
-      } else {
-        fetchPassengerRequests({ showLoader: false });
+      if (!didInitialLoadRef.current) {
+        didInitialLoadRef.current = true;
+        loadAllRequests({ showLoader: true });
+        return;
       }
-    }, [route.params?.activeTab, fetchCourierRequests, fetchPassengerRequests])
+
+      loadAllRequests({ showLoader: false });
+    }, [route.params?.activeTab, loadAllRequests])
   );
 
   useMyRequestsSocket(
     useCallback(
       (_payload) => {
-        // Refresh both tabs — passenger and courier requests are independent.
-        fetchPassengerRequests({ showLoader: false });
-        fetchCourierRequests({ showLoader: false });
+        loadAllRequests({ showLoader: false });
       },
-      [fetchPassengerRequests, fetchCourierRequests]
+      [loadAllRequests]
     )
   );
 
@@ -694,6 +743,20 @@ const MyRequest = () => {
       <View style={styles.header}>
         <BackButton />
         <Text style={styles.headerTitle}>My Request</Text>
+        <TouchableOpacity
+          style={styles.refreshBtn}
+          onPress={onRefresh}
+          disabled={refreshing}
+          accessibilityRole="button"
+          accessibilityLabel="Refresh my requests"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          {refreshing ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Icon name="refresh" size={22} color={colors.primary} />
+          )}
+        </TouchableOpacity>
       </View>
 
       <AnimatedLoad
@@ -715,19 +778,48 @@ const MyRequest = () => {
         onChange={handleTabChange}
       />
 
-      <FadePanel activeKey={activeTab}>
+      <FadePanel activeKey={activeTab} style={{ flex: 1 }}>
         <FlatList
+          style={{ flex: 1 }}
           data={filteredRides}
           keyExtractor={(item, index) => `${item.id}-${index}`}
           renderItem={renderRide}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[colors.primary]}
+              tintColor={colors.primary}
+            />
+          }
           ListEmptyComponent={
-            <Text style={styles.emptyText}>
-              {fetchError ? "" : "No Requests Found"}
-            </Text>
+            <View style={styles.emptyWrap}>
+              <Text style={styles.emptyText}>
+                {fetchError ? "" : "No Requests Found"}
+              </Text>
+              {!fetchError ? (
+                <TouchableOpacity
+                  style={styles.emptyRefreshBtn}
+                  onPress={onRefresh}
+                  disabled={refreshing}
+                  activeOpacity={0.85}
+                >
+                  {refreshing ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <>
+                      <Icon name="refresh" size={16} color={colors.primary} />
+                      <Text style={styles.emptyRefreshText}>Refresh</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              ) : null}
+            </View>
           }
           contentContainerStyle={{
             paddingBottom: getScrollBottomPadding(insets.bottom),
+            flexGrow: 1,
           }}
         />
       </FadePanel>
@@ -764,24 +856,60 @@ const createStyles = (c) =>
     paddingBottom: LAYOUT.spacing.sm,
   },
 
- header: {
-  flexDirection: "row",
-  alignItems: "center",
-  marginBottom: 16,
-},
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
 
-headerTitle: {
-  fontSize: LAYOUT.font.title,
-  fontWeight: "800",
-  marginLeft: 10,
-  color: c.text,
-},
+  headerTitle: {
+    flex: 1,
+    fontSize: LAYOUT.font.title,
+    fontWeight: "800",
+    marginLeft: 10,
+    color: c.text,
+  },
+
+  refreshBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: c.primaryMuted,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+
+  emptyWrap: {
+    alignItems: "center",
+    marginTop: 40,
+    paddingHorizontal: 16,
+  },
 
   emptyText: {
     textAlign: "center",
-    marginTop: 40,
     color: c.textMuted,
     fontSize: 15,
+    marginBottom: 12,
+  },
+
+  emptyRefreshBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: c.primaryMuted,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+
+  emptyRefreshText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: c.primary,
   },
 
   errorText: {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,7 +6,9 @@ import {
   TouchableOpacity,
   FlatList,
   RefreshControl,
+  ActivityIndicator,
 } from "react-native";
+import Icon from "react-native-vector-icons/Ionicons";
 import LinearGradient from "react-native-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -84,17 +86,10 @@ const RideHistory = () => {
   const [errorMsg, setErrorMsg] = useState("");
   const [detailsLoading, setDetailsLoading] = useState(false);
 
-  // 🔄 AUTO REFRESH ON SCREEN FOCUS
-  useFocusEffect(
-    useCallback(() => {
-      fetchRides();
-      refreshAds();
-    }, [refreshAds])
-  );
-
-  const fetchRides = async () => {
+  const fetchRides = useCallback(async ({ isRefresh = false } = {}) => {
     try {
-      if (!refreshing) setLoading(true);
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
 
       const token = await AsyncStorage.getItem("token");
       if (!token) return;
@@ -123,7 +118,11 @@ const RideHistory = () => {
         );
 
         setRides(data);
-        setFilteredRides(data);
+        setFilteredRides(
+          activeFilter === "All"
+            ? data
+            : data.filter((r) => r.role === activeFilter)
+        );
         setErrorMsg("");
       } else {
         setRides([]);
@@ -139,13 +138,19 @@ const RideHistory = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [activeFilter]);
 
-  // 🔄 PULL TO REFRESH
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchRides();
-  };
+  const onRefresh = useCallback(() => {
+    fetchRides({ isRefresh: true });
+    refreshAds();
+  }, [fetchRides, refreshAds]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchRides({ isRefresh: false });
+      refreshAds();
+    }, [fetchRides, refreshAds])
+  );
 
   const activeFilterIndex = FILTER_TABS.indexOf(activeFilter);
 
@@ -266,6 +271,20 @@ const RideHistory = () => {
       <View style={styles.header}>
         <BackButton />
         <Text style={styles.headerTitle}>Ride History</Text>
+        <TouchableOpacity
+          style={styles.refreshBtn}
+          onPress={onRefresh}
+          disabled={refreshing || loading}
+          accessibilityRole="button"
+          accessibilityLabel="Refresh ride history"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          {refreshing ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Icon name="refresh" size={22} color={colors.primary} />
+          )}
+        </TouchableOpacity>
       </View>
 
       <AnimatedLoad
@@ -287,25 +306,45 @@ const RideHistory = () => {
       />
 
       <FadePanel activeKey={activeFilter}>
-        {filteredRides.length === 0 ? (
-          <View style={styles.noDataContainer}>
-            <Text style={styles.noDataText}>No Ride History Found</Text>
-          </View>
-        ) : (
-          <FlatList
-            data={filteredRides}
-            keyExtractor={(item, index) => `${item.id}-${index}`}
-            ListHeaderComponent={<AdPlacement placement="ride_history" />}
-            renderItem={renderItem}
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-            }
-            contentContainerStyle={{
-              paddingBottom: getScrollBottomPadding(insets.bottom),
-            }}
-          />
-        )}
+        <FlatList
+          data={filteredRides}
+          keyExtractor={(item, index) => `${item.id}-${index}`}
+          ListHeaderComponent={<AdPlacement placement="ride_history" />}
+          renderItem={renderItem}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[colors.primary]}
+              tintColor={colors.primary}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.noDataContainer}>
+              <Text style={styles.noDataText}>No Ride History Found</Text>
+              <TouchableOpacity
+                style={styles.emptyRefreshBtn}
+                onPress={onRefresh}
+                disabled={refreshing || loading}
+                activeOpacity={0.85}
+              >
+                {refreshing ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <>
+                    <Icon name="refresh" size={16} color={colors.primary} />
+                    <Text style={styles.emptyRefreshText}>Refresh</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          }
+          contentContainerStyle={{
+            paddingBottom: getScrollBottomPadding(insets.bottom),
+            flexGrow: 1,
+          }}
+        />
       </FadePanel>
       </AnimatedLoad>
 
@@ -341,10 +380,22 @@ const createStyles = (c) =>
   },
 
   headerTitle: {
+    flex: 1,
     fontSize: LAYOUT.font.title,
     fontWeight: "800",
     marginLeft: 10,
     color: c.text,
+  },
+
+  refreshBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: c.primaryMuted,
+    borderWidth: 1,
+    borderColor: c.border,
   },
 
   skeletonPad: { padding: 16, flex: 1 },
@@ -360,6 +411,23 @@ const createStyles = (c) =>
     fontSize: 16,
     color: c.textMuted,
     fontWeight: "500",
+    marginBottom: 12,
+  },
+  emptyRefreshBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: c.primaryMuted,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  emptyRefreshText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: c.primary,
   },
   errorBanner: {
     color: c.errorText,

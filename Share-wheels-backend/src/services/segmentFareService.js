@@ -1,5 +1,6 @@
 const User = require("../models/userModel");
 const Courier = require("../models/courierModel");
+const PassengerRide = require("../models/passengerRideModel");
 const { normalizeAllowedVehicleType } = require("../constants/vehicleTypes");
 const { getDirections } = require("./googleMapsService");
 const {
@@ -335,6 +336,33 @@ const hydrateCourierRequestRecord = async (entry) => {
   };
 };
 
+/** Restore total offer for passengers picked from enroute (per-seat × seats). */
+const hydratePassengerEnrouteOffer = async (participant, rideId) => {
+  const plain = toParticipantPlain(participant);
+  const userId = plain.userId?._id || plain.userId;
+  if (!userId || !rideId) return plain;
+
+  const linked = await PassengerRide.findOne({
+    creator: userId,
+    "assigned_to.rideId": rideId,
+    status: { $in: ["aisgned_passenger", "assigned"] },
+  })
+    .select("amount_will seats_needed")
+    .lean();
+  if (!linked) return plain;
+
+  const perSeat = Math.round(Number(linked.amount_will) || 0);
+  const seats = Math.max(
+    1,
+    Number(linked.seats_needed) || Number(plain.requires_seats) || 1
+  );
+  if (perSeat > 0) {
+    plain.ride_amount = perSeat * seats;
+    plain.fareSource = "passenger_offer";
+  }
+  return plain;
+};
+
 /** Apply admin tier segment fare onto a passenger/courier row for API responses. */
 const enrichParticipantRecord = async (
   ride,
@@ -389,6 +417,25 @@ const enrichParticipantRecord = async (
     return out;
   }
 
+  // Passengers with an agreed offer (enroute pick, ride request, direct booking) keep stored total.
+  if (role === "passenger") {
+    out.displayFare = stored || total || 0;
+    out.computedSegmentFare = stored || total || 0;
+    out.fareSource = stored > 0 ? "passenger_offer" : "admin_tiers";
+    if (stored > 0) {
+      out.ride_amount = stored;
+      if (total > 0 && total !== stored) {
+        out.fareHint = `Agreed price ₹${stored}`;
+        out.suggestedSegmentFare = total;
+      }
+    } else if (fare.pricingSource === "admin_tiers" && total > 0) {
+      out.ride_amount = total;
+      out.displayFare = total;
+      out.computedSegmentFare = total;
+    }
+    return out;
+  }
+
   if (fare.pricingSource === "admin_tiers" && total > 0) {
     out.computedSegmentFare = total;
     out.displayFare = total;
@@ -432,7 +479,17 @@ const enrichRideListEntry = async (entry) => {
     };
   }
 
-  const participant = entry.activeData || {};
+  let participant = entry.activeData || {};
+  if (role === "passenger" && entry._id) {
+    participant = await hydratePassengerEnrouteOffer(
+      {
+        ...participant,
+        requires_seats: entry.requires_seats || participant.requires_seats,
+      },
+      entry._id
+    );
+  }
+
   const segment = {
     from: entry.bookedFrom || participant.from || entry.from,
     to: entry.bookedTo || participant.to || entry.to,
@@ -456,9 +513,12 @@ const enrichRideListEntry = async (entry) => {
   const participantAmount =
     Math.round(Number(participant.amount_will) || 0) ||
     Math.round(Number(entry.amount_will) || 0);
+  const passengerStored =
+    Math.round(Number(participant.ride_amount) || 0) ||
+    Math.round(Number(entry.ride_amount) || 0);
   const stored =
     role === "passenger"
-      ? Math.round(Number(entry.ride_amount) || 0)
+      ? passengerStored
       : Math.round(Number(entry.ride_amount || participantAmount) || 0);
 
   // Courier bookings use the price declared at booking, not stopover segment tiers.
@@ -470,6 +530,20 @@ const enrichRideListEntry = async (entry) => {
       amount_will: stored,
       ride_amount: stored,
       fareSource: "courier_offer",
+      suggestedSegmentFare:
+        fare.pricingSource === "admin_tiers" && total > 0 ? total : null,
+    };
+  }
+
+  // Passenger offers (enroute pick, ride request, direct booking) keep stored total fare.
+  if (role === "passenger" && passengerStored > 0) {
+    return {
+      ...base,
+      activeData: { ...participant, ride_amount: passengerStored },
+      computedSegmentFare: passengerStored,
+      displayFare: passengerStored,
+      ride_amount: passengerStored,
+      fareSource: "passenger_offer",
       suggestedSegmentFare:
         fare.pricingSource === "admin_tiers" && total > 0 ? total : null,
     };
@@ -507,11 +581,16 @@ const enrichRideDetailsParticipants = async (ride) => {
     (base.users_request_Couriers || []).map((c) => hydrateCourierRequestRecord(c))
   );
 
+  const rideId = base._id;
+  const hydratedPassengers = await Promise.all(
+    (base.passengers || []).map((p) => hydratePassengerEnrouteOffer(p, rideId))
+  );
+
   const [passengers, all_deliveries, passenger_requested_ride, users_request_Couriers] =
     await Promise.all([
       Promise.all(
-        (base.passengers || []).map((p) =>
-          enrichParticipantRecord(enrichedRide, toParticipantPlain(p), "passenger")
+        hydratedPassengers.map((p) =>
+          enrichParticipantRecord(enrichedRide, p, "passenger")
         )
       ),
       Promise.all(

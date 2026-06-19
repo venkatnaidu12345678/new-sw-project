@@ -7,7 +7,11 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
+  TouchableOpacity,
+  ActivityIndicator,
 } from "react-native";
+import Icon from "react-native-vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 
@@ -73,6 +77,7 @@ const DashboardPage = () => {
   const [allRides, setAllRides] = useState([]);
   const [loadingAllRides, setLoadingAllRides] = useState(false);
   const [loadingUpcoming, setLoadingUpcoming] = useState(false);
+  const [refreshingUpcoming, setRefreshingUpcoming] = useState(false);
   const [showAllRides, setShowAllRides] = useState(false);
 
   const [errorMsg, setErrorMsg] = useState("");
@@ -94,9 +99,10 @@ const DashboardPage = () => {
   const { searchPlaces, resolvePlace, reload: reloadLocations } =
     useLocationSuggestions();
 
-  const fetchUpcomingRides = useCallback(async () => {
+  const fetchUpcomingRides = useCallback(async ({ isRefresh = false } = {}) => {
     try {
-      setLoadingUpcoming(true);
+      if (isRefresh) setRefreshingUpcoming(true);
+      else setLoadingUpcoming(true);
       const token = await AsyncStorage.getItem("token");
       if (!token) return;
 
@@ -114,8 +120,15 @@ const DashboardPage = () => {
       setRides([]);
     } finally {
       setLoadingUpcoming(false);
+      setRefreshingUpcoming(false);
     }
   }, []);
+
+  const onRefreshUpcoming = useCallback(() => {
+    fetchUpcomingRides({ isRefresh: true });
+    refreshAds();
+    reloadLocations(true);
+  }, [fetchUpcomingRides, refreshAds, reloadLocations]);
 
   useFocusEffect(
     useCallback(() => {
@@ -363,6 +376,26 @@ const DashboardPage = () => {
     onDismissSuggestions: dismissSuggestions,
   };
 
+  const upcomingSectionTitle = (
+    <View style={styles.sectionRow}>
+      <Text style={styles.section}>Upcoming Rides</Text>
+      <TouchableOpacity
+        style={styles.refreshBtn}
+        onPress={onRefreshUpcoming}
+        disabled={refreshingUpcoming || loadingUpcoming}
+        accessibilityRole="button"
+        accessibilityLabel="Refresh upcoming rides"
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        {refreshingUpcoming ? (
+          <ActivityIndicator size="small" color={colors.primary} />
+        ) : (
+          <Icon name="refresh" size={20} color={colors.primary} />
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+
   const scrollListHeader = (
     <>
       <View
@@ -395,11 +428,11 @@ const DashboardPage = () => {
       >
         {rides.length === 0 ? (
           <CoachMarkAnchor id="home_upcoming" style={styles.upcomingAnchor}>
-            <Text style={styles.section}>Upcoming Rides</Text>
+            {upcomingSectionTitle}
             <Text style={styles.emptyRides}>No upcoming rides</Text>
           </CoachMarkAnchor>
         ) : (
-          <Text style={styles.section}>Upcoming Rides</Text>
+          upcomingSectionTitle
         )}
       </View>
       <AdPlacement placement="home_native" />
@@ -450,6 +483,14 @@ const DashboardPage = () => {
               renderItem={renderRide}
               ListHeaderComponent={scrollListHeader}
               ListEmptyComponent={null}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshingUpcoming}
+                  onRefresh={onRefreshUpcoming}
+                  colors={[colors.primary]}
+                  tintColor={colors.primary}
+                />
+              }
               onScrollToIndexFailed={(info) => {
                 const average = info.averageItemLength || 220;
                 listRef.current?.scrollToOffset({
@@ -500,8 +541,24 @@ const createStyles = (c) =>
     section: {
       fontSize: LAYOUT.font.section,
       fontWeight: "700",
-      marginVertical: LAYOUT.spacing.md,
       color: c.text,
+      flex: 1,
+    },
+    sectionRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginVertical: LAYOUT.spacing.md,
+    },
+    refreshBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.primaryMuted,
+      borderWidth: 1,
+      borderColor: c.border,
     },
     errorText: {
       color: c.errorText,

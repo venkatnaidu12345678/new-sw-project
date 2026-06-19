@@ -8,7 +8,9 @@ import {
   ScrollView,
   Alert,
   DeviceEventEmitter,
+  RefreshControl,
 } from "react-native";
+import Icon from "react-native-vector-icons/Ionicons";
 
 import BottomSlider from "../Components/BottomSlider";
 import EnRoute, {
@@ -165,11 +167,19 @@ const UpcomingDetailsPage = ({ route }) => {
     () => rideData?.status || rideData?.ride_status || "pending"
   );
   const [detailsLoading, setDetailsLoading] = useState(true);
+  const [refreshingPage, setRefreshingPage] = useState(false);
   const [fareMeta, setFareMeta] = useState(() => ({
-    ride_amount: rideData?.ride_amount,
-    displayFare: rideData?.displayFare,
+    ride_amount:
+      rideData?.viewerDisplayFare ??
+      rideData?.displayFare ??
+      rideData?.ride_amount,
+    displayFare:
+      rideData?.viewerDisplayFare ??
+      rideData?.displayFare ??
+      rideData?.ride_amount,
     viewerDisplayFare: rideData?.viewerDisplayFare,
     perSeatFare: rideData?.perSeatFare,
+    fareSource: rideData?.fareSource,
   }));
   const [driverToken, setDriverToken] = useState(null);
   const [verification, setVerification] = useState(null);
@@ -278,11 +288,14 @@ const UpcomingDetailsPage = ({ route }) => {
       data.viewerDisplayFare != null ||
       data.perSeatFare != null
     ) {
+      const viewerFare =
+        data.viewerDisplayFare ?? data.displayFare ?? data.ride_amount;
       setFareMeta({
-        ride_amount: data.ride_amount,
-        displayFare: data.displayFare,
+        ride_amount: viewerFare,
+        displayFare: viewerFare,
         viewerDisplayFare: data.viewerDisplayFare,
         perSeatFare: data.viewerPerSeatFare ?? data.perSeatFare,
+        fareSource: data.fareSource,
       });
     }
   }, []);
@@ -429,6 +442,26 @@ const UpcomingDetailsPage = ({ route }) => {
     }
   }, [isDriver]);
 
+  const handleRefreshPage = useCallback(async () => {
+    setRefreshingPage(true);
+    try {
+      await fetchRideDetails({ showLoading: false });
+      if (isDriver) {
+        await enrouteRequests.refresh();
+        await loadDriverSubscription();
+      }
+      refreshUpcomingList();
+    } finally {
+      if (isMountedRef.current) setRefreshingPage(false);
+    }
+  }, [
+    fetchRideDetails,
+    isDriver,
+    enrouteRequests.refresh,
+    loadDriverSubscription,
+    refreshUpcomingList,
+  ]);
+
   const handleEnroutePickSuccess = useCallback(
     async (_item, response, pickPayload) => {
       if (pickPayload?.userId) {
@@ -545,10 +578,17 @@ const UpcomingDetailsPage = ({ route }) => {
     ...rideData,
     ...fareMeta,
     myRole: role,
+    activeData: rideData?.activeData,
     displayFare:
       fareMeta.viewerDisplayFare ??
       fareMeta.displayFare ??
-      rideData?.displayFare,
+      fareMeta.ride_amount ??
+      rideData?.displayFare ??
+      rideData?.ride_amount,
+    ride_amount:
+      fareMeta.ride_amount ??
+      rideData?.ride_amount ??
+      rideData?.activeData?.ride_amount,
     date: scheduleInfo.date ?? rideData?.date,
     startTime: scheduleInfo.startTime ?? rideData?.startTime,
   };
@@ -1286,7 +1326,24 @@ const UpcomingDetailsPage = ({ route }) => {
 
   return (
     <ScreenContainer style={{ paddingHorizontal: LAYOUT.spacing.screen }}>
-      <ScreenHeader title={detailsViewTitle} />
+      <ScreenHeader
+        title={detailsViewTitle}
+        rightElement={
+          <TouchableOpacity
+            onPress={handleRefreshPage}
+            disabled={refreshingPage}
+            accessibilityRole="button"
+            accessibilityLabel="Refresh ride details"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            {refreshingPage ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Icon name="refresh" size={22} color={colors.primary} />
+            )}
+          </TouchableOpacity>
+        }
+      />
 
       <View style={styles.buttonContainer}>
         <TouchableOpacity
@@ -1341,6 +1398,14 @@ const UpcomingDetailsPage = ({ route }) => {
 
       {/* 📜 SCROLLABLE CONTENT */}
       <ScrollView
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshingPage}
+            onRefresh={handleRefreshPage}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        }
         contentContainerStyle={{
           padding: 2,
           paddingBottom: getScrollBottomPadding(

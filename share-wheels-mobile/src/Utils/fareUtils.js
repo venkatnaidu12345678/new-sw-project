@@ -41,8 +41,20 @@ const pickParticipantFare = (item, storedKeys = []) => {
   return pickStoredAmount(item, storedKeys);
 };
 
-export const getPassengerFare = (item) =>
-  pickParticipantFare(item, ["ride_amount", "amount", "amount_will"]);
+export const getPassengerFare = (item) => {
+  if (!item) return 0;
+  // Agreed passenger total always wins over stopover segment recalculation.
+  const stored = pickStoredAmount(item, ["ride_amount", "amount", "amount_will"]);
+  if (stored > 0) return stored;
+  const displayFare = positiveNumber(item.displayFare);
+  if (displayFare != null) return displayFare;
+  const perSeat = positiveNumber(item.perSeatFare);
+  if (perSeat != null) {
+    const seats = Math.max(1, Number(item.requires_seats) || 1);
+    return Math.round(perSeat * seats);
+  }
+  return positiveNumber(item.computedSegmentFare) ?? 0;
+};
 
 export const getCourierFare = (item) => {
   if (!item) return 0;
@@ -61,11 +73,12 @@ export const getRideDisplayFare = (ride) => {
   const viewerFare = positiveNumber(ride.viewerDisplayFare);
   if (viewerFare != null) return viewerFare;
 
-  const displayFare = positiveNumber(ride.displayFare);
-  if (displayFare != null) return displayFare;
-
+  // Passenger/courier agreed prices before any recalculated displayFare.
   if (ride.myRole === "passenger") return getPassengerFare(ride);
   if (ride.myRole === "courier") return getCourierFare(ride);
+
+  const displayFare = positiveNumber(ride.displayFare);
+  if (displayFare != null) return displayFare;
 
   const perSeat = positiveNumber(ride.perSeatFare);
   if (perSeat != null) return perSeat;
