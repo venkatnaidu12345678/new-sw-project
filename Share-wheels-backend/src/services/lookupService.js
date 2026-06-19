@@ -1,6 +1,7 @@
 const LookupOption = require("../models/lookupOptionModel");
 const { LOOKUP_CATEGORIES } = require("../models/lookupOptionModel");
 const { DEFAULT_LOOKUP_TYPES } = require("../constants/defaultLookupTypes");
+const { ALLOWED_VEHICLE_TYPES } = require("../constants/vehicleTypes");
 
 const normalizeLabel = (label) => String(label || "").trim();
 const slugFromLabel = (label) =>
@@ -44,9 +45,13 @@ const listByCategory = async (category) => {
   const types = await LookupOption.find({ category })
     .sort({ sortOrder: 1, label: 1 })
     .lean();
+  const filtered =
+    category === "vehicle_type"
+      ? types.filter((t) => ALLOWED_VEHICLE_TYPES.includes(String(t.value || "").toLowerCase()))
+      : types;
   return {
     status: 200,
-    body: { success: true, category, types },
+    body: { success: true, category, types: filtered },
   };
 };
 
@@ -64,6 +69,15 @@ const createOption = async (body) => {
 
   if (!isValidCategory(category)) {
     return { status: 400, body: { success: false, message: "Invalid category" } };
+  }
+  if (category === "vehicle_type" && !ALLOWED_VEHICLE_TYPES.includes(value)) {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message: `Only these vehicle types are supported: ${ALLOWED_VEHICLE_TYPES.join(", ")}`,
+      },
+    };
   }
   if (!label || !value) {
     return {

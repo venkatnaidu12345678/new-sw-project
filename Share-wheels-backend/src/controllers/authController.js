@@ -31,6 +31,8 @@ const forgotPassword = async (req, res) =>
   handle(res, () => authService.forgotPassword(req.body));
 const resetPasswordWithOtp = async (req, res) =>
   handle(res, () => authService.resetPasswordWithOtp(req.body));
+const scanVehicleDocument = async (req, res) =>
+  handle(res, () => authService.scanVehicleDocument(req.file, req.body?.documentType));
 
 const getMyVehicle = async (req, res) => {
   const user = req.user;
@@ -57,4 +59,5 @@ module.exports = {
   changePassword,
   forgotPassword,
   resetPasswordWithOtp,
+  scanVehicleDocument,
 };

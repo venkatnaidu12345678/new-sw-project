@@ -42,7 +42,7 @@ const {
 } = require("../utils/enrouteCorridorUtils");
 const googleMapsService = require("./googleMapsService");
 const driverSubscriptionService = require("./driverSubscriptionService");
-const { calculatePerSeatFareForSegment, quoteSegmentFare } = require("./segmentFareService");
+const { calculatePerSeatFareForSegment, quoteSegmentFare, enrichRideListEntry, enrichRideDetailsParticipants } = require("./segmentFareService");
 const { expireStalePendingRides, expirePendingRideIfStale } = require("./rideExpiryService");
 const { expireStaleOpenRequests } = require("./requestExpiryService");
 const { rejectIfCourierJoiningAsPassenger } = require("../utils/rideParticipantRules");
@@ -1339,7 +1339,9 @@ const listRidesByPhase = async (user, completed) => {
         return aTime - bTime;
       });
 
-  return { status: 200, body: { success: true, count: ridesOut.length, rides: ridesOut } };
+  const enrichedRides = await Promise.all(ridesOut.map((entry) => enrichRideListEntry(entry)));
+
+  return { status: 200, body: { success: true, count: enrichedRides.length, rides: enrichedRides } };
 };
 
 const USER_FIELDS = USER_PUBLIC_FIELDS;
@@ -1376,14 +1378,22 @@ const getRideDetails = async (rideId, viewerId) => {
   const passengers = (ride.passengers || []).map((p) => sanitizeParticipant(p, viewerId));
   const all_deliveries = (ride.all_deliveries || []).map((c) => sanitizeParticipant(c, viewerId));
 
+  const enrichedData = await enrichRideDetailsParticipants({
+    ...ride.toObject(),
+    passengers,
+    all_deliveries,
+    passenger_requested_ride: ride.passenger_requested_ride || [],
+    users_request_Couriers: ride.users_request_Couriers || [],
+  });
+
   const verificationParticipants = [
-    ...passengers.map((p) => ({
+    ...enrichedData.passengers.map((p) => ({
       role: "passenger",
       name: p.userId?.name,
       userNo: p.userId?.userNo,
       isBoardingVerified: !!p.isBoardingVerified,
     })),
-    ...all_deliveries.map((c) => ({
+    ...enrichedData.all_deliveries.map((c) => ({
       role: "courier",
       name: c.userId?.name,
       userNo: c.userId?.userNo,
@@ -1395,18 +1405,26 @@ const getRideDetails = async (rideId, viewerId) => {
   let myBoarding = null;
   let bookedFrom = null;
   let bookedTo = null;
+  let viewerDisplayFare = enrichedData.displayFare;
+  let viewerPerSeatFare = enrichedData.perSeatFare;
+  let viewerFareHint = "";
   if (viewerId) {
     const vid = viewerId.toString();
-    const asPassenger = passengers.find((p) => p.userId?._id?.toString() === vid);
-    const asCourier = all_deliveries.find((c) => c.userId?._id?.toString() === vid);
-    const pendingPassengerReq = (ride.passenger_requested_ride || []).find(
+    const asPassenger = enrichedData.passengers.find((p) => p.userId?._id?.toString() === vid);
+    const asCourier = enrichedData.all_deliveries.find((c) => c.userId?._id?.toString() === vid);
+    const pendingPassengerReq = enrichedData.passenger_requested_ride.find(
       (r) => r.userId?._id?.toString() === vid || r.userId?.toString() === vid
     );
-    const pendingCourierReq = (ride.users_request_Couriers || []).find(
+    const pendingCourierReq = enrichedData.users_request_Couriers.find(
       (r) => r.userId?._id?.toString() === vid || r.userId?.toString() === vid
     );
-    const self = asPassenger || asCourier;
+    const self = asPassenger || asCourier || pendingPassengerReq || pendingCourierReq;
     if (self) {
+      viewerDisplayFare = self.displayFare ?? self.computedSegmentFare ?? self.ride_amount ?? self.amount_will ?? viewerDisplayFare;
+      viewerPerSeatFare = self.perSeatFare ?? viewerPerSeatFare;
+      viewerFareHint = self.fareHint || "";
+    }
+    if (asPassenger || asCourier) {
       myBoarding = {
         role: asPassenger ? "passenger" : "courier",
         userNo: self.userId?.userNo,
@@ -1479,14 +1497,17 @@ const getRideDetails = async (rideId, viewerId) => {
         postponedAt: ride.postponedAt,
         originalScheduledStart: ride.originalScheduledStart,
         cancel_reason: ride.cancel_reason,
-        ride_amount: ride.ride_amount,
+        ride_amount: enrichedData.ride_amount,
+        displayFare: enrichedData.displayFare,
+        perSeatFare: enrichedData.perSeatFare,
+        resolvedVehicleType: enrichedData.resolvedVehicleType,
         availableSeats: ride.availableSeats,
         CanCarryCourier: !!ride.CanCarryCourier,
         QuickReserve: !!ride.QuickReserve,
-        passengers,
-        all_deliveries,
-        passenger_requested_ride: ride.passenger_requested_ride,
-        users_request_Couriers: ride.users_request_Couriers,
+        passengers: enrichedData.passengers,
+        all_deliveries: enrichedData.all_deliveries,
+        passenger_requested_ride: enrichedData.passenger_requested_ride,
+        users_request_Couriers: enrichedData.users_request_Couriers,
         verification: {
           total: verificationParticipants.length,
           pending: pendingVerification,
@@ -1495,6 +1516,9 @@ const getRideDetails = async (rideId, viewerId) => {
         },
         myBoarding,
         ...(bookedFrom && bookedTo ? { bookedFrom, bookedTo } : {}),
+        viewerDisplayFare,
+        viewerPerSeatFare,
+        viewerFareHint,
       },
     },
   };

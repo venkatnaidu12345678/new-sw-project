@@ -1,4 +1,5 @@
 const User = require("../models/userModel");
+const { normalizeAllowedVehicleType } = require("../constants/vehicleTypes");
 const { getDirections } = require("./googleMapsService");
 const {
   quoteFareForVehicle,
@@ -10,7 +11,7 @@ const { buildOrderedCorridor } = require("../utils/enrouteCorridorUtils");
 const normalizeLabel = (value) => String(value || "").trim();
 
 const normalizeVehicleType = (value) =>
-  String(value || "car").trim().toLowerCase();
+  normalizeAllowedVehicleType(value) || "car";
 
 const labelsMatch = (a, b) => {
   const x = normalizeLabel(a).toLowerCase();
@@ -298,6 +299,168 @@ const quoteSegmentFare = async (ride, { from, to, seats = 1 } = {}) => {
   };
 };
 
+const resolveParticipantSegment = (ride, participant = {}) => ({
+  from: normalizeLabel(participant.from || ride?.from),
+  to: normalizeLabel(participant.to || ride?.to),
+});
+
+/** Apply admin tier segment fare onto a passenger/courier row for API responses. */
+const enrichParticipantRecord = async (ride, participant, role = "passenger") => {
+  if (!participant || !ride) return participant;
+
+  const enrichedRide = await enrichRideVehicle(ride);
+  const segment = resolveParticipantSegment(enrichedRide, participant);
+  const fare = await resolveSegmentFare(enrichedRide, segment);
+  const perSeat = Math.round(Number(fare.perSeat) || 0);
+  const seats =
+    role === "passenger"
+      ? Math.max(1, Number(participant.requires_seats) || 1)
+      : 1;
+  const total = role === "passenger" ? perSeat * seats : perSeat;
+
+  const out = { ...participant, perSeatFare: perSeat, fareHint: fare.fareHint || "" };
+  out.pricingSource = fare.pricingSource;
+  out.resolvedVehicleType = resolveRideVehicleType(enrichedRide);
+
+  if (fare.pricingSource === "admin_tiers" && total > 0) {
+    out.computedSegmentFare = total;
+    out.displayFare = total;
+    if (role === "passenger") out.ride_amount = total;
+    if (role === "courier") out.amount_will = total;
+    return out;
+  }
+
+  const stored =
+    role === "passenger"
+      ? Math.round(Number(participant.ride_amount) || 0)
+      : Math.round(Number(participant.amount_will) || 0);
+  out.computedSegmentFare = stored || total;
+  out.displayFare = stored || total || 0;
+  return out;
+};
+
+/** Upcoming/history list entry for passenger, courier, or driver. */
+const enrichRideListEntry = async (entry) => {
+  if (!entry) return entry;
+
+  const enrichedRide = await enrichRideVehicle(entry);
+  const role = entry.myRole || "passenger";
+
+  if (role === "driver") {
+    const fare = await resolveSegmentFare(enrichedRide, {
+      from: enrichedRide.from,
+      to: enrichedRide.to,
+    });
+    const perSeat = Math.round(Number(fare.perSeat) || 0);
+    if (fare.pricingSource === "admin_tiers" && perSeat > 0) {
+      return {
+        ...entry,
+        ride_amount: perSeat,
+        perSeatFare: perSeat,
+        displayFare: perSeat,
+        fareHint: fare.fareHint || "",
+        pricingSource: fare.pricingSource,
+        resolvedVehicleType: resolveRideVehicleType(enrichedRide),
+      };
+    }
+    return {
+      ...entry,
+      displayFare: Math.round(Number(entry.ride_amount) || 0),
+      resolvedVehicleType: resolveRideVehicleType(enrichedRide),
+    };
+  }
+
+  const participant = entry.activeData || {};
+  const segment = {
+    from: entry.bookedFrom || participant.from || entry.from,
+    to: entry.bookedTo || participant.to || entry.to,
+  };
+  const fare = await resolveSegmentFare(enrichedRide, segment);
+  const perSeat = Math.round(Number(fare.perSeat) || 0);
+  const seats =
+    role === "passenger"
+      ? Math.max(1, Number(entry.requires_seats || participant.requires_seats) || 1)
+      : 1;
+  const total = role === "passenger" ? perSeat * seats : perSeat;
+
+  const base = {
+    ...entry,
+    perSeatFare: perSeat,
+    fareHint: fare.fareHint || "",
+    pricingSource: fare.pricingSource,
+    resolvedVehicleType: resolveRideVehicleType(enrichedRide),
+  };
+
+  if (fare.pricingSource === "admin_tiers" && total > 0) {
+    return {
+      ...base,
+      computedSegmentFare: total,
+      displayFare: total,
+      ride_amount: role === "passenger" ? total : entry.ride_amount,
+      amount_will: role === "courier" ? total : entry.amount_will,
+    };
+  }
+
+  const stored =
+    role === "passenger"
+      ? Math.round(Number(entry.ride_amount) || 0)
+      : Math.round(Number(entry.amount_will || entry.ride_amount) || 0);
+
+  return {
+    ...base,
+    computedSegmentFare: stored || total,
+    displayFare: stored || total || 0,
+  };
+};
+
+const enrichRideDetailsParticipants = async (ride) => {
+  if (!ride) return ride;
+
+  const base = ride.toObject ? ride.toObject() : { ...ride };
+  const enrichedRide = await enrichRideVehicle(base);
+
+  const [passengers, all_deliveries, passenger_requested_ride, users_request_Couriers] =
+    await Promise.all([
+      Promise.all(
+        (base.passengers || []).map((p) => enrichParticipantRecord(enrichedRide, p, "passenger"))
+      ),
+      Promise.all(
+        (base.all_deliveries || []).map((c) => enrichParticipantRecord(enrichedRide, c, "courier"))
+      ),
+      Promise.all(
+        (base.passenger_requested_ride || []).map((p) =>
+          enrichParticipantRecord(enrichedRide, p, "passenger")
+        )
+      ),
+      Promise.all(
+        (base.users_request_Couriers || []).map((c) =>
+          enrichParticipantRecord(enrichedRide, c, "courier")
+        )
+      ),
+    ]);
+
+  let driverDisplayFare = Math.round(Number(base.ride_amount) || 0);
+  const driverFare = await resolveSegmentFare(enrichedRide, {
+    from: base.from,
+    to: base.to,
+  });
+  if (driverFare.pricingSource === "admin_tiers" && driverFare.perSeat > 0) {
+    driverDisplayFare = Math.round(driverFare.perSeat);
+  }
+
+  return {
+    ...base,
+    passengers,
+    all_deliveries,
+    passenger_requested_ride,
+    users_request_Couriers,
+    ride_amount: driverDisplayFare,
+    displayFare: driverDisplayFare,
+    perSeatFare: driverDisplayFare,
+    resolvedVehicleType: resolveRideVehicleType(enrichedRide),
+  };
+};
+
 module.exports = {
   calculatePerSeatFareForSegment,
   quoteSegmentFare,
@@ -305,4 +468,7 @@ module.exports = {
   isFullRideSegment,
   resolveFullRideDistanceMeters,
   enrichRideVehicle,
+  enrichParticipantRecord,
+  enrichRideListEntry,
+  enrichRideDetailsParticipants,
 };

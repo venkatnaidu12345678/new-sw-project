@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  Modal,
 } from "react-native";
 import LinearGradient from "react-native-linear-gradient";
 import Icon from "react-native-vector-icons/Ionicons";
@@ -27,7 +28,6 @@ import {
 } from "../ApiService/subscriptionApiService";
 import { getApiErrorMessage } from "../Utils/apiErrors";
 import { buildNativeRazorpayCheckoutOptions } from "../Utils/razorpayCheckout";
-import { wakeBackendIfRemote } from "../Utils/wakeBackend";
 
 let RazorpayCheckout = null;
 try {
@@ -327,6 +327,7 @@ const DriverSubscriptionScreen = () => {
   const [canSubscribeToFree, setCanSubscribeToFree] = useState(true);
   const [razorpayConfigured, setRazorpayConfigured] = useState(false);
   const [razorpayKeyId, setRazorpayKeyId] = useState("");
+  const [paymentPhase, setPaymentPhase] = useState(null);
 
   const load = useCallback(async ({ showSpinner = true } = {}) => {
     try {
@@ -370,58 +371,66 @@ const DriverSubscriptionScreen = () => {
       return;
     }
 
-    await wakeBackendIfRemote();
+    setPaymentPhase("preparing");
 
-    const orderRes = await createSubscriptionOrder(token, String(plan._id));
-    const keyId = orderRes?.keyId || razorpayKeyId;
-    const orderId = orderRes?.order?.id;
-    const amountPaise = Number(
-      orderRes?.order?.amountPaise ?? orderRes?.order?.amount
-    );
-
-    if (!keyId || !orderId || !Number.isFinite(amountPaise) || amountPaise < 100) {
-      throw new Error("Could not start payment. Try again.");
-    }
-
-    const options = buildNativeRazorpayCheckoutOptions({
-      key: keyId,
-      amountPaise,
-      currency: orderRes.order.currency || "INR",
-      name: "Share Wheels",
-      description: plan.name,
-      order_id: orderId,
-      prefill: orderRes.prefill || {},
-      theme: { color: colors.primary || "#2563EB" },
-    });
-
-    let paymentData;
     try {
-      paymentData = await RazorpayCheckout.open(options);
-    } catch (checkoutErr) {
-      const checkoutCode = checkoutErr?.code ?? checkoutErr?.error?.code;
-      if (checkoutCode === 0 || checkoutCode === 2) {
-        return;
+      const orderRes = await createSubscriptionOrder(token, String(plan._id));
+      const keyId = orderRes?.keyId || razorpayKeyId;
+      const orderId = orderRes?.order?.id;
+      const amountPaise = Number(
+        orderRes?.order?.amountPaise ?? orderRes?.order?.amount
+      );
+
+      if (!keyId || !orderId || !Number.isFinite(amountPaise) || amountPaise < 100) {
+        throw new Error("Could not start payment. Try again.");
       }
-      throw checkoutErr;
+
+      const options = buildNativeRazorpayCheckoutOptions({
+        key: keyId,
+        amountPaise,
+        currency: orderRes.order.currency || "INR",
+        name: "Share Wheels",
+        description: plan.name,
+        order_id: orderId,
+        prefill: orderRes.prefill || {},
+        theme: { color: colors.primary || "#2563EB" },
+      });
+
+      setPaymentPhase("checkout");
+
+      let paymentData;
+      try {
+        paymentData = await RazorpayCheckout.open(options);
+      } catch (checkoutErr) {
+        const checkoutCode = checkoutErr?.code ?? checkoutErr?.error?.code;
+        if (checkoutCode === 0 || checkoutCode === 2) {
+          return;
+        }
+        throw checkoutErr;
+      }
+
+      if (
+        !paymentData?.razorpay_order_id ||
+        !paymentData?.razorpay_payment_id ||
+        !paymentData?.razorpay_signature
+      ) {
+        throw new Error("Payment was not completed.");
+      }
+
+      setPaymentPhase("verifying");
+
+      const verifyRes = await verifySubscriptionPayment(token, {
+        planId: String(plan._id),
+        razorpay_order_id: paymentData.razorpay_order_id,
+        razorpay_payment_id: paymentData.razorpay_payment_id,
+        razorpay_signature: paymentData.razorpay_signature,
+      });
+
+      Alert.alert("Success", verifyRes?.message || "Subscription activated");
+      await load({ showSpinner: false });
+    } finally {
+      setPaymentPhase(null);
     }
-
-    if (
-      !paymentData?.razorpay_order_id ||
-      !paymentData?.razorpay_payment_id ||
-      !paymentData?.razorpay_signature
-    ) {
-      throw new Error("Payment was not completed.");
-    }
-
-    const verifyRes = await verifySubscriptionPayment(token, {
-      planId: String(plan._id),
-      razorpay_order_id: paymentData.razorpay_order_id,
-      razorpay_payment_id: paymentData.razorpay_payment_id,
-      razorpay_signature: paymentData.razorpay_signature,
-    });
-
-    Alert.alert("Success", verifyRes?.message || "Subscription activated");
-    await load({ showSpinner: false });
   };
 
   const handleSubscribe = async (plan) => {
@@ -519,6 +528,28 @@ const DriverSubscriptionScreen = () => {
   return (
     <ScreenContainer style={{ paddingHorizontal: LAYOUT.spacing.screen }}>
       <ScreenHeader title="Driver subscription" onBack={() => navigation.goBack()} />
+
+      <Modal visible={!!paymentPhase} transparent animationType="fade">
+        <View style={styles.paymentOverlay}>
+          <View style={styles.paymentOverlayCard}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.paymentOverlayTitle}>
+              {paymentPhase === "preparing"
+                ? "Preparing payment…"
+                : paymentPhase === "checkout"
+                  ? "Opening Razorpay…"
+                  : "Confirming payment…"}
+            </Text>
+            <Text style={styles.paymentOverlaySub}>
+              {paymentPhase === "preparing"
+                ? "Creating your secure order"
+                : paymentPhase === "checkout"
+                  ? "UPI, cards, and wallets will appear shortly"
+                  : "Almost done"}
+            </Text>
+          </View>
+        </View>
+      </Modal>
 
       {loading ? (
         <View style={styles.centerBox}>
@@ -755,6 +786,38 @@ const createStyles = (c) =>
       fontSize: 14,
       color: c.textMuted,
       fontWeight: "600",
+    },
+    paymentOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.45)",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 24,
+    },
+    paymentOverlayCard: {
+      width: "100%",
+      maxWidth: 320,
+      backgroundColor: c.surface,
+      borderRadius: 20,
+      paddingVertical: 28,
+      paddingHorizontal: 24,
+      alignItems: "center",
+      gap: 10,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    paymentOverlayTitle: {
+      fontSize: 16,
+      fontWeight: "800",
+      color: c.text,
+      marginTop: 4,
+      textAlign: "center",
+    },
+    paymentOverlaySub: {
+      fontSize: 13,
+      color: c.textMuted,
+      textAlign: "center",
+      lineHeight: 18,
     },
     usageCardOuter: {
       borderRadius: 22,

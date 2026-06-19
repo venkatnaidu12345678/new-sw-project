@@ -33,6 +33,7 @@ const { assignUserNoIfMissing } = require("../utils/userNoHelper");
 const { findUserByEmail, findUserByMobile, verifyUserPassword } = require("../utils/authCredentials");
 const { validateUserFields, EMAIL_RE, MOBILE_RE, normalizeEmail, normalizeMobile } = require("../utils/userValidation");
 const { JWT_EXPIRES_IN } = require("../config/jwt");
+const vehicleDocumentOcrService = require("./vehicleDocumentOcrService");
 
 const toAuthUser = (user) => ({
   id: user._id,
@@ -377,15 +378,15 @@ const buildVehicleImages = async (body, files = {}) => {
 };
 
 const addVehicle = async (user, body, files = {}) => {
-  const { company, model, type, license_number, issue_date, expiry_date, car_no } =
+  const { company, model, type, license_number, issue_date, expiry_date, car_no, owner_name } =
     body || {};
 
-  if (!company?.trim() || !model?.trim() || !type?.trim() || !license_number?.trim()) {
+  if (!company?.trim() || !model?.trim() || !type?.trim()) {
     return {
       status: 400,
       body: {
         success: false,
-        message: "Company, model, vehicle type and license number are required",
+        message: "Company, model, and vehicle type are required",
       },
     };
   }
@@ -395,10 +396,13 @@ const addVehicle = async (user, body, files = {}) => {
     return { status: 400, body: { success: false, message: typeCheck.message } };
   }
 
-  if (!car_no?.trim()) {
+  if (!car_no?.trim() && !license_number?.trim()) {
     return {
       status: 400,
-      body: { success: false, message: "Vehicle registration number (RC) is required" },
+      body: {
+        success: false,
+        message: "Licence number or vehicle registration number is required",
+      },
     };
   }
 
@@ -412,16 +416,25 @@ const addVehicle = async (user, body, files = {}) => {
     };
   }
 
-  if (!images.license_image) {
+  if (!images.license_image && !images.rc_image) {
     return {
       status: 400,
-      body: { success: false, message: "Driving license image is required" },
+      body: {
+        success: false,
+        message: "Upload and verify at least your driving licence or RC photo",
+      },
     };
   }
-  if (!images.rc_image) {
+  if (images.license_image && !license_number?.trim()) {
     return {
       status: 400,
-      body: { success: false, message: "RC (registration certificate) image is required" },
+      body: { success: false, message: "Driving licence number is required when licence photo is uploaded" },
+    };
+  }
+  if (images.rc_image && !car_no?.trim()) {
+    return {
+      status: 400,
+      body: { success: false, message: "Registration number is required when RC photo is uploaded" },
     };
   }
   if (!images.car_image) {
@@ -441,8 +454,9 @@ const addVehicle = async (user, body, files = {}) => {
     company: company.trim(),
     model: model.trim(),
     type: typeCheck.value,
-    license_number: license_number.trim(),
-    car_no: car_no.trim(),
+    license_number: license_number?.trim() || "",
+    car_no: car_no?.trim() || "",
+    owner_name: owner_name?.trim() || "",
     car_image: images.car_image || "",
     license_image: images.license_image,
     rc_image: images.rc_image,
@@ -460,12 +474,27 @@ const addVehicle = async (user, body, files = {}) => {
   };
 };
 
+const scanVehicleDocument = async (file, documentType) => {
+  if (!file?.buffer?.length) {
+    return {
+      status: 400,
+      body: { success: false, ok: false, message: "Image file is required (field: image)" },
+    };
+  }
+
+  return vehicleDocumentOcrService.scanDocumentBuffer(
+    file.buffer,
+    documentType,
+    file.mimetype || "image/jpeg"
+  );
+};
+
 const editVehicle = async (user, body, files = {}) => {
   if (!user.vehicle) {
     return { status: 404, body: { success: false, message: "No vehicle found to update" } };
   }
 
-  const { company, model, type, license_number, issue_date, expiry_date, car_no } =
+  const { company, model, type, license_number, issue_date, expiry_date, car_no, owner_name } =
     body || {};
 
   let images;
@@ -489,6 +518,7 @@ const editVehicle = async (user, body, files = {}) => {
   }
   if (license_number !== undefined) user.vehicle.license_number = license_number;
   if (car_no !== undefined) user.vehicle.car_no = car_no;
+  if (owner_name !== undefined) user.vehicle.owner_name = String(owner_name || "").trim();
   if (issue_date !== undefined) user.vehicle.issue_date = issue_date;
   if (expiry_date !== undefined) user.vehicle.expiry_date = expiry_date;
   if (images.car_image) user.vehicle.car_image = images.car_image;
@@ -561,7 +591,7 @@ const getUserProfile = async (userId) => {
           vehicleType: user.vehicle?.type,
           licenseNumber: user.vehicle?.license_number,
           carNo: user.vehicle?.car_no,
-          licensePlateHolder: user.name,
+          licensePlateHolder: user.vehicle?.owner_name?.trim() || user.name,
           issueDate: user.vehicle?.issue_date,
           expiryDate: user.vehicle?.expiry_date,
           carImage: user.vehicle?.car_image,
@@ -703,6 +733,7 @@ module.exports = {
   updateProfileImage,
   sendNotification,
   addVehicle,
+  scanVehicleDocument,
   editVehicle,
   updateTerms,
   getUsersData,

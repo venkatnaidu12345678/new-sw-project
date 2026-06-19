@@ -165,6 +165,12 @@ const UpcomingDetailsPage = ({ route }) => {
     () => rideData?.status || rideData?.ride_status || "pending"
   );
   const [detailsLoading, setDetailsLoading] = useState(true);
+  const [fareMeta, setFareMeta] = useState(() => ({
+    ride_amount: rideData?.ride_amount,
+    displayFare: rideData?.displayFare,
+    viewerDisplayFare: rideData?.viewerDisplayFare,
+    perSeatFare: rideData?.perSeatFare,
+  }));
   const [driverToken, setDriverToken] = useState(null);
   const [verification, setVerification] = useState(null);
   const [myBoarding, setMyBoarding] = useState(null);
@@ -264,6 +270,19 @@ const UpcomingDetailsPage = ({ route }) => {
       setBookingMeta({
         from: data.bookedFrom,
         to: data.bookedTo,
+      });
+    }
+    if (
+      data.ride_amount != null ||
+      data.displayFare != null ||
+      data.viewerDisplayFare != null ||
+      data.perSeatFare != null
+    ) {
+      setFareMeta({
+        ride_amount: data.ride_amount,
+        displayFare: data.displayFare,
+        viewerDisplayFare: data.viewerDisplayFare,
+        perSeatFare: data.viewerPerSeatFare ?? data.perSeatFare,
       });
     }
   }, []);
@@ -524,6 +543,12 @@ const UpcomingDetailsPage = ({ route }) => {
   const isRideStarted = normalizedRideStatus === "started";
   const effectiveRide = {
     ...rideData,
+    ...fareMeta,
+    myRole: role,
+    displayFare:
+      fareMeta.viewerDisplayFare ??
+      fareMeta.displayFare ??
+      rideData?.displayFare,
     date: scheduleInfo.date ?? rideData?.date,
     startTime: scheduleInfo.startTime ?? rideData?.startTime,
   };
@@ -1484,7 +1509,7 @@ const UpcomingDetailsPage = ({ route }) => {
               <Image source={priceIcon} style={styles.icon} />{" "}
               {isDriver ? "Price / Seat" : "Your Fare"}
             </Text>
-            <Text style={styles.value}>₹ {getRideDisplayFare(rideData)}</Text>
+            <Text style={styles.value}>₹ {getRideDisplayFare(effectiveRide)}</Text>
           </View>
 
           <View

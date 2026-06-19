@@ -14,7 +14,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { editVechileApi } from "../ApiService/AuthApiService";
-import { useLookupOptions } from "../hooks/useLookupOptions";
+import { useLookupOptions, normalizeVehicleType } from "../hooks/useLookupOptions";
 import { useTheme } from "../context/ThemeContext";
 import { useThemedStyles } from "../theme/useThemedStyles";
 

@@ -3,6 +3,17 @@ import { getActiveLookupTypes } from "../ApiService/lookupsApiService";
 
 export const ALLOWED_VEHICLE_TYPES = ["bike", "auto", "car"];
 
+/** Normalize stored/API vehicle type to bike, auto, or car. */
+export const normalizeVehicleType = (value) => {
+  const type = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (ALLOWED_VEHICLE_TYPES.includes(type)) return type;
+  if (type === "scooter") return "bike";
+  if (["hatchback", "sedan", "suv", "muv", "van"].includes(type)) return "car";
+  return type;
+};
+
 export const LOOKUP_FALLBACKS = {
   courier_type: [
     { label: "Document", value: "document" },

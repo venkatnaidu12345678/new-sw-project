@@ -8,9 +8,10 @@ import {
   isValidCorridorSegment,
 } from "../Utils/rideCorridorUtils";
 import { computeFareQuoteLocal } from "../Utils/vehicleFareQuote";
+import { normalizeVehicleType } from "./useLookupOptions";
 
 const resolveVehicleType = (ride) =>
-  String(ride?.vehicle?.type || "car").trim().toLowerCase();
+  normalizeVehicleType(ride?.vehicle?.type) || "car";
 
 const toKm = (meters) => {
   const km = Number(meters) / 1000;

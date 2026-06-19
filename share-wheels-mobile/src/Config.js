@@ -130,4 +130,5 @@ export const endPoints = {
   subscriptionVerifyPaymenturl: "/subscriptions/verify-payment",
   fareQuoteurl: "/fare/quote",
   fareRulesurl: "/fare/rules",
+  scanVehicleDocumenturl: "/auth/scan-vehicle-document",
 };

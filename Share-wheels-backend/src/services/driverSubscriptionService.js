@@ -227,13 +227,13 @@ const ensureDefaultSubscription = async (userId) =>
   resolveDriverSubscription(userId, { autoProvisionFree: true });
 
 const getDriverSubscriptionStatus = async (userId) => {
-  const subscription = await resolveDriverSubscription(userId, {
-    autoProvisionFree: true,
-  });
-  const freePlanUsed = await userHasUsedFreePlan(userId);
-  const plansRes = await SubscriptionPlan.find({ isActive: true })
-    .sort({ isFree: -1, amount: 1, createdAt: -1 })
-    .lean();
+  const [subscription, freePlanUsed, plansRes] = await Promise.all([
+    resolveDriverSubscription(userId, { autoProvisionFree: true }),
+    userHasUsedFreePlan(userId),
+    SubscriptionPlan.find({ isActive: true })
+      .sort({ isFree: -1, amount: 1, createdAt: -1 })
+      .lean(),
+  ]);
 
   return {
     status: 200,
@@ -345,17 +345,21 @@ const createPaymentOrder = async (userId, planId) => {
 
   const receipt = `sub_${userId.toString().slice(-6)}_${Date.now()}`.slice(0, 40);
   let order;
+  let user;
   try {
-    order = await razorpayService.createOrder({
-      amount: plan.amount,
-      currency: plan.currency || "INR",
-      receipt,
-      notes: {
-        userId: userId.toString(),
-        planId: plan._id.toString(),
-        planName: plan.name,
-      },
-    });
+    [order, user] = await Promise.all([
+      razorpayService.createOrder({
+        amount: plan.amount,
+        currency: plan.currency || "INR",
+        receipt,
+        notes: {
+          userId: userId.toString(),
+          planId: plan._id.toString(),
+          planName: plan.name,
+        },
+      }),
+      User.findById(userId).select("name email mobile").lean(),
+    ]);
   } catch (err) {
     return {
       status: 502,
@@ -378,8 +382,6 @@ const createPaymentOrder = async (userId, planId) => {
     status: "created",
     expiresAt,
   });
-
-  const user = await User.findById(userId).select("name email mobile").lean();
 
   return {
     status: 200,

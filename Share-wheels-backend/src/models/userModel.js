@@ -27,6 +27,7 @@ const userSchema = new mongoose.Schema(
       license_image: { type: String, default: "" },
       rc_image: { type: String, default: "" },
       car_no: { type: String, default: "" },
+      owner_name: { type: String, default: "" },
       issue_date: { type: Date },
       expiry_date: { type: Date },
     },

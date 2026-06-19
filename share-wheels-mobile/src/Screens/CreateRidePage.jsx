@@ -24,6 +24,7 @@ import {
   showAppAlert,
 } from "../Utils/appAlert";
 import { useSuggestedRideFare } from "../hooks/useSuggestedRideFare";
+import { mapApiVehicleToProfileInfo } from "../Utils/vehicleProfileMap";
 
 const hasCompleteVehicle = (info) =>
   !!(info?.vehicleCompany?.trim() && info?.vehicleModel?.trim());
@@ -223,9 +224,33 @@ const CreateRidePage = () => {
     }
   };
 
-  const handleVehicleAdded = async () => {
+  const handleVehicleAdded = async (savedVehicle) => {
     priceTouchedRef.current = false;
-    await refreshProfile();
+
+    if (savedVehicle) {
+      const personalName = ProfileDetails?.data?.personalInfo?.name || "";
+      const nextVehicleInfo = mapApiVehicleToProfileInfo(savedVehicle, personalName);
+      SetProfileDetails((prev) => {
+        if (!prev?.data) {
+          return {
+            success: true,
+            data: {
+              personalInfo: { name: personalName },
+              vehicleInfo: nextVehicleInfo,
+            },
+          };
+        }
+        return {
+          ...prev,
+          data: {
+            ...prev.data,
+            vehicleInfo: nextVehicleInfo,
+          },
+        };
+      });
+    }
+
+    refreshProfile().catch(() => {});
     alertSuccess("Vehicle saved. You can create your ride now.");
   };
 

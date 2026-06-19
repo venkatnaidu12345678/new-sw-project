@@ -28,7 +28,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-/** Used by the mobile app to wake Render before FCM token registration. */
+/** Fast liveness check — used to wake Render without heavy Firebase probes. */
+app.get("/ping", (_req, res) => {
+  res.status(200).json({ ok: true });
+});
+
+/** Full diagnostics (Firebase auth probe, FCM status, Razorpay config). */
 app.get("/health", async (_req, res) => {
   const { isFirebaseReady, getFirebaseStatus } = require("./utils/firebaseAdmin");
   const {
@@ -44,10 +49,12 @@ app.get("/health", async (_req, res) => {
     authProbe = { ok: false, reason: error?.message || "probe_failed" };
   }
   const { isRazorpayConfigured } = require("./services/razorpayService");
+  const { isOcrConfigured } = require("./services/vehicleDocumentOcrService");
   res.status(200).json({
     ok: true,
     service: "share-wheels-backend",
     razorpayConfigured: isRazorpayConfigured(),
+    ocrConfigured: isOcrConfigured(),
     fcmPushEnabled: isFirebaseReady(),
     fcm,
     passwordReset: {

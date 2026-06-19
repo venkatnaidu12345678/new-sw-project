@@ -1,5 +1,5 @@
 import { formatRequestDate, formatSingleDate } from "../Utils";
-import { getPassengerFare } from "./fareUtils";
+import { getPassengerFare, getCourierFare } from "./fareUtils";
 import { tripStatusLabel } from "./participantTripStatus";
 
 const fmtDate = (value) => {
@@ -96,7 +96,7 @@ export const buildDriverCourierDetail = (item, rideFrom, rideTo) => {
         value: item?.isBoardingVerified ? "Verified" : "Pending",
       },
     ],
-    price: item?.amount_will || 0,
+    price: getCourierFare(item),
     priceLabel: "Amount",
   };
 };

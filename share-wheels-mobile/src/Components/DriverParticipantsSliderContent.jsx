@@ -405,7 +405,7 @@ const DriverParticipantsSliderContent = ({
               item?.userId?.email || "No email",
               `${item?.from || rideFrom || "—"} → ${item?.to || rideTo || "—"}`,
             ]}
-            fare={item?.amount_will || 0}
+            fare={getCourierFare(item)}
             fareLabel="Amount"
             verified={!!item?.isBoardingVerified}
             tripStatus={item?.status}

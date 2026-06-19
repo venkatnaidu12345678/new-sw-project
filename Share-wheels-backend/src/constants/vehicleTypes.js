@@ -3,12 +3,12 @@ const ALLOWED_VEHICLE_TYPES = ["bike", "auto", "car"];
 
 /** Map legacy stored values to a canonical type for fare lookup. */
 const LEGACY_VEHICLE_TYPE_ALIASES = {
+  scooter: "bike",
   hatchback: "car",
   sedan: "car",
   suv: "car",
   muv: "car",
   van: "car",
-  scooter: "bike",
 };
 
 const normalizeVehicleTypeKey = (value) =>
@@ -37,3 +37,4 @@ module.exports = {
   isAllowedVehicleType,
   vehicleTypeCandidates,
 };
+

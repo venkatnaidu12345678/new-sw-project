@@ -1,7 +1,8 @@
+import { Platform } from "react-native";
 import TextRecognition, {
   TextRecognitionScript,
 } from "@react-native-ml-kit/text-recognition";
-import { getImageUri, isRemoteImageUrl } from "./imageUpload";
+import { ensureLocalFileUri, getImageUri, isRemoteImageUrl } from "./imageUpload";
 
 const INDIAN_MAKERS = [
   "maruti suzuki",
@@ -47,7 +48,18 @@ const normalizeText = (text) =>
   String(text || "")
     .replace(/\r/g, "\n")
     .replace(/[|]/g, "I")
-    .replace(/[°]/g, "0");
+    .replace(/[°]/g, "0")
+    .replace(/[""]/g, '"')
+    .replace(/['']/g, "'");
+
+const OCR_DIGIT_MAP = { O: "0", I: "1", L: "1", S: "5", B: "8", Z: "2", Q: "0", D: "0", G: "6" };
+
+const fixOcrDigits = (value) =>
+  String(value || "")
+    .toUpperCase()
+    .split("")
+    .map((ch) => OCR_DIGIT_MAP[ch] || ch)
+    .join("");
 
 const compactText = (text) =>
   normalizeText(text).replace(/\s+/g, " ").trim().toUpperCase();
@@ -113,67 +125,178 @@ const formatIndianRegNo = (value) => {
   return raw;
 };
 
-const findIndianRegNumber = (text) => {
+const tryFixRegNumber = (value) => {
+  const direct = formatIndianRegNo(value);
+  if (direct.length >= 8 && /^[A-Z]{2}\d/.test(direct)) return direct;
+
+  const cleaned = cleanRegNumber(value);
+  const fixed = fixOcrDigits(cleaned);
+  const fromFixed = formatIndianRegNo(fixed);
+  if (fromFixed.length >= 8) return fromFixed;
+
+  const loose = cleaned.match(/^([A-Z]{2})([A-Z0-9]{1,2})([A-Z]{1,3})([A-Z0-9]{3,4})$/);
+  if (loose) {
+    const district = fixOcrDigits(loose[2]).replace(/[^0-9]/g, "");
+    const series = loose[3].replace(/[0-9]/g, "");
+    const serial = fixOcrDigits(loose[4]).replace(/[^0-9]/g, "").slice(-4).padStart(4, "0");
+    if (district && series && serial) {
+      const attempt = formatIndianRegNo(`${loose[1]}${district}${series}${serial}`);
+      if (attempt.length >= 8) return attempt;
+    }
+  }
+
+  return direct;
+};
+
+const scoreRegCandidate = (value) => {
+  const formatted = tryFixRegNumber(value);
+  if (!formatted || formatted.length < 8) return 0;
+  if (/^[A-Z]{2}\d{1,2}[A-Z]{1,3}\d{4}$/.test(formatted)) return 100;
+  if (/^\d{2}BH\d{4}[A-Z]{2}$/.test(formatted)) return 95;
+  return formatted.length >= 8 ? 50 : 0;
+};
+
+const collectRegCandidates = (text) => {
   const upper = compactText(text);
+  const candidates = new Set();
 
   const labeled = [
     /REG(?:ISTRATION)?\s*(?:NO|NUMBER)?[:\s]*([A-Z0-9\s\-]{6,20})/i,
     /REGN\.?\s*NO\.?[:\s]*([A-Z0-9\s\-]{6,20})/i,
     /VEHICLE\s*(?:NO|NUMBER)?[:\s]*([A-Z0-9\s\-]{6,20})/i,
     /RC\s*NO\.?[:\s]*([A-Z0-9\s\-]{6,20})/i,
+    /FOR\s*NO\.?[:\s]*([A-Z0-9\s\-]{6,20})/i,
   ];
 
   for (const re of labeled) {
     const match = upper.match(re);
-    if (match?.[1]) {
-      const formatted = formatIndianRegNo(match[1]);
-      if (formatted.length >= 6) return formatted;
+    if (match?.[1]) candidates.add(match[1]);
+  }
+
+  const patterns = [
+    /\b\d{2}BH\d{4}[A-Z]{2}\b/g,
+    /\b[A-Z]{2}\s?\d{1,2}\s?[A-Z]{1,3}\s?\d{3,4}\b/g,
+    /\b[A-Z]{2}\d{1,2}[A-Z]{1,3}\d{3,4}\b/g,
+    /\b[A-Z]{2}[-\s]?\d{1,2}[-\s]?[A-Z]{1,3}[-\s]?\d{3,4}\b/g,
+  ];
+
+  for (const re of patterns) {
+    const matches = upper.match(re);
+    if (matches) matches.forEach((m) => candidates.add(m));
+  }
+
+  for (const line of lineList(text)) {
+    const lineUpper = line.toUpperCase().replace(/[^A-Z0-9\s\-]/g, " ");
+    const lineMatches = lineUpper.match(
+      /\b[A-Z]{2}\s?\d{1,2}\s?[A-Z]{1,3}\s?\d{3,4}\b|\b\d{2}BH\d{4}[A-Z]{2}\b/g
+    );
+    if (lineMatches) lineMatches.forEach((m) => candidates.add(m));
+  }
+
+  return [...candidates];
+};
+
+const findIndianRegNumber = (text) => {
+  const candidates = collectRegCandidates(text);
+  let best = "";
+  let bestScore = 0;
+
+  for (const candidate of candidates) {
+    const score = scoreRegCandidate(candidate);
+    if (score > bestScore) {
+      bestScore = score;
+      best = tryFixRegNumber(candidate);
     }
   }
 
-  const candidates = upper.match(
-    /\b\d{2}BH\d{4}[A-Z]{2}\b|\b[A-Z]{2}\s?\d{1,2}\s?[A-Z]{1,3}\s?\d{4}\b/g
-  );
-  if (candidates?.length) {
-    const sorted = [...candidates].sort((a, b) => cleanRegNumber(b).length - cleanRegNumber(a).length);
-    return formatIndianRegNo(sorted[0]);
-  }
+  return best;
+};
 
+const cleanDlNumber = (value) =>
+  String(value || "")
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .replace(/[^A-Z0-9/\-]/g, "");
+
+const scoreDlCandidate = (value) => {
+  const cleaned = cleanDlNumber(value);
+  if (!cleaned || cleaned.length < 10) return 0;
+  if (/^DL\d{13,16}$/.test(cleaned)) return 100;
+  if (/^[A-Z]{2}\d{2}\d{4}\d{7,}$/.test(cleaned.replace(/\//g, ""))) return 95;
+  if (/^[A-Z]{2}\d{13,16}$/.test(cleaned)) return 90;
+  if (/^[A-Z]{2}[-/]?\d{2}[-/]?\d{11,13}$/.test(cleaned)) return 85;
+  return cleaned.length >= 12 ? 40 : 0;
+};
+
+const findValueOnNextLine = (lines, labelPatterns) => {
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const upper = line.toUpperCase();
+    if (!labelPatterns.some((p) => p.test(upper))) continue;
+
+    const sameLine = line.match(/[:\s]+([A-Z0-9][A-Z0-9\s/\-]{7,24})$/i);
+    if (sameLine?.[1]) return sameLine[1].trim();
+
+    const next = lines[i + 1];
+    if (next && /[A-Z0-9/\-]{10,}/i.test(next)) return next.trim();
+  }
   return "";
 };
 
 const findDrivingLicenseNumber = (text) => {
   const upper = compactText(text);
   const lines = lineList(text).map((l) => l.toUpperCase());
+  const candidates = new Set();
 
   const labeled = [
-    /(?:DL|DRIVING\s*LICEN[CS]E|LICEN[CS]E)\s*(?:NO|NUMBER|#)?[:\s]*([A-Z0-9\s\/\-\.]{8,24})/i,
-    /DL\s*NO\.?[:\s]*([A-Z0-9\s\/\-\.]{8,24})/i,
+    /(?:DL|DRIVING\s*LICEN[CS]E|LICEN[CS]E)\s*(?:NO|NUMBER|#)?[:\s]*([A-Z0-9\s/\-]{8,24})/i,
+    /DL\s*NO\.?[:\s]*([A-Z0-9\s/\-]{8,24})/i,
+    /LICEN[CS]E\s*NO\.?[:\s]*([A-Z0-9\s/\-]{8,24})/i,
   ];
 
   for (const re of labeled) {
     const match = upper.match(re);
-    if (match?.[1]) {
-      const cleaned = match[1].replace(/\s+/g, " ").trim();
-      if (cleaned.length >= 8) return cleaned;
-    }
+    if (match?.[1]) candidates.add(match[1]);
+  }
+
+  const fromLine = findValueOnNextLine(lineList(text), [
+    /DL\s*NO/,
+    /LICEN[CS]E\s*NO/,
+    /DRIVING\s*LICEN/,
+  ]);
+  if (fromLine) candidates.add(fromLine);
+
+  const patterns = [
+    /\bDL[-\s]?\d{13,16}\b/gi,
+    /\b[A-Z]{2}[-\s]?\d{2}[-\s]?\d{4}[-\s]?\d{7,}\b/g,
+    /\b[A-Z]{2}\d{13,16}\b/g,
+    /\b[A-Z]{2}[-/]?\d{2}[-/]?\d{11,13}\b/g,
+  ];
+
+  for (const re of patterns) {
+    const matches = upper.match(re);
+    if (matches) matches.forEach((m) => candidates.add(m));
   }
 
   for (const line of lines) {
-    if (/LICEN|LICENSE|DL\s*NO/i.test(line)) {
-      const tail = line.split(/[:\s]/).pop();
-      if (tail && /[A-Z0-9\/\-]{8,}/.test(tail)) return tail.replace(/\s+/g, "");
-    }
     const dlDelhi = line.match(/\b(DL[\s\-]?\d{10,16})\b/i);
-    if (dlDelhi) return dlDelhi[1].replace(/\s+/g, "");
-    const stateFmt = line.match(/\b([A-Z]{2}[\s\/\-]?\d{2}[\s\/\-]?\d{4}[\s\/\-]?\d{5,})\b/);
-    if (stateFmt) return stateFmt[1].replace(/\s+/g, "");
+    if (dlDelhi) candidates.add(dlDelhi[1]);
+    const stateFmt = line.match(/\b([A-Z]{2}[\s/\-]?\d{2}[\s/\-]?\d{4}[\s/\-]?\d{5,})\b/);
+    if (stateFmt) candidates.add(stateFmt[1]);
   }
 
-  const fallback = upper.match(/\b([A-Z]{2}[\s\-]?\d{2}[\s\-]?\d{11,15})\b/);
-  if (fallback) return fallback[1].replace(/\s+/g, "");
+  let best = "";
+  let bestScore = 0;
+  for (const candidate of candidates) {
+    const normalized = cleanDlNumber(fixOcrDigits(candidate));
+    const score = scoreDlCandidate(normalized);
+    if (score > bestScore) {
+      bestScore = score;
+      best = normalized;
+    }
+  }
 
-  return "";
+  return best;
 };
 
 const findMaker = (text) => {
@@ -227,7 +350,7 @@ const isLikelyPersonName = (value) => {
   if (name.length < 3 || name.length > 50) return false;
   if (/\d/.test(name)) return false;
   const words = name.split(" ").filter(Boolean);
-  return words.length >= 2 && words.length <= 5;
+  return words.length >= 1 && words.length <= 6;
 };
 
 const findPersonName = (text, labels) => {
@@ -237,10 +360,9 @@ const findPersonName = (text, labels) => {
   for (const label of labels) {
     const idx = upper.indexOf(label);
     if (idx === -1) continue;
-    const slice = normalizeText(text).slice(
-      normalizeText(text).toUpperCase().indexOf(label),
-      normalizeText(text).toUpperCase().indexOf(label) + 80
-    );
+    const raw = normalizeText(text);
+    const labelIdx = raw.toUpperCase().indexOf(label);
+    const slice = raw.slice(labelIdx, labelIdx + 100);
     const inline = slice.match(/[:\s]+([A-Za-z][A-Za-z\s.]{2,45})/);
     if (inline?.[1] && isLikelyPersonName(inline[1])) {
       return titleCase(cleanPersonName(inline[1]));
@@ -249,14 +371,28 @@ const findPersonName = (text, labels) => {
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
-    if (labels.some((l) => line.toUpperCase().includes(l))) {
+    const lineUpper = line.toUpperCase();
+    if (labels.some((l) => lineUpper.includes(l))) {
       const sameLine = line.match(/[:\s]+([A-Za-z][A-Za-z\s.]{2,45})$/);
       if (sameLine?.[1] && isLikelyPersonName(sameLine[1])) {
         return titleCase(cleanPersonName(sameLine[1]));
       }
-      const next = lines[i + 1];
-      if (next && isLikelyPersonName(next)) {
-        return titleCase(cleanPersonName(next));
+      for (let j = 1; j <= 2; j += 1) {
+        const next = lines[i + j];
+        if (next && isLikelyPersonName(next) && !/LICEN|REGIST|CERTIF|VALID|DATE|DL\s*NO/i.test(next)) {
+          return titleCase(cleanPersonName(next));
+        }
+      }
+    }
+  }
+
+  if (labels.includes("NAME") || labels.includes("HOLDER")) {
+    for (let i = 0; i < lines.length; i += 1) {
+      if (/^NAME$/i.test(lines[i].trim())) {
+        const next = lines[i + 1];
+        if (next && isLikelyPersonName(next)) {
+          return titleCase(cleanPersonName(next));
+        }
       }
     }
   }
@@ -332,12 +468,22 @@ const rcOnlyKeywords = (text) => {
 
 /** True when OCR text is clearly from an RC / registration certificate. */
 export const looksLikeRcBook = (text) => {
-  if (looksLikeDrivingLicense(text)) return false;
+  if (looksLikeDrivingLicense(text) && !strongRcMarkers(text)) return false;
   if (strongRcMarkers(text)) return true;
   if (rcOnlyKeywords(text)) return true;
+
   const regNo = findIndianRegNumber(text);
-  if (!regNo) return false;
-  return Boolean(findMaker(text)) && Boolean(findModel(text));
+  if (regNo && scoreRegCandidate(regNo) >= 90) return true;
+  if (
+    regNo &&
+    (findMaker(text) ||
+      findModel(text) ||
+      findPersonName(text, ["OWNER", "REGISTERED OWNER", "NAME OF OWNER"]))
+  ) {
+    return true;
+  }
+
+  return false;
 };
 
 export const isDateExpired = (isoDate) => {
@@ -375,12 +521,16 @@ const inferVehicleType = (text, vehicleTypeOptions = []) => {
 
 export const parseDrivingLicenseText = (text) => {
   const license_number = findDrivingLicenseNumber(text);
-  const driver_name = findPersonName(text, [
-    "NAME",
-    "HOLDER",
-    "DRIVER NAME",
-    "NAME OF HOLDER",
-  ]);
+  const driver_name =
+    findPersonName(text, [
+      "NAME",
+      "HOLDER",
+      "DRIVER NAME",
+      "NAME OF HOLDER",
+      "SON OF",
+      "DAUGHTER OF",
+      "WIFE OF",
+    ]) || findPersonName(text, ["NAME"]);
   const issue_date =
     findLabeledDate(text, ["DOI", "DATE OF ISSUE", "ISSUE DATE", "ISSUED ON"]) ||
     findDates(text)[0]?.iso ||
@@ -413,15 +563,6 @@ export const parseRcText = (text) => {
     car_no: vehicle_number,
     vehicle_number,
     rc_number: findRcDocumentNumber(text) || vehicle_number,
-    owner_name: findPersonName(text, [
-      "OWNER",
-      "REGISTERED OWNER",
-      "NAME OF OWNER",
-      "HOLDER",
-      "SON",
-      "DAUGHTER",
-      "WIFE",
-    ]),
     company: findMaker(text),
     model: findModel(text),
     type: inferVehicleType(text, []),
@@ -443,28 +584,87 @@ const mergeExtracted = (current, extracted) => {
   return next;
 };
 
-const recognizeWithScript = async (uri, script) => {
-  try {
-    const result = await TextRecognition.recognize(uri, script);
-    return String(result?.text || "").trim();
-  } catch {
-    return "";
+const buildOcrUriCandidates = (uri) => {
+  if (!uri) return [];
+  const candidates = new Set([uri]);
+  if (uri.startsWith("file://")) {
+    candidates.add(uri.replace("file://", ""));
+  } else if (uri.startsWith("/")) {
+    candidates.add(`file://${uri}`);
   }
+  if (Platform.OS === "android" && uri.startsWith("file://")) {
+    candidates.add(decodeURI(uri.replace("file://", "")));
+  }
+  return [...candidates];
+};
+
+const flattenRecognitionText = (result) => {
+  const chunks = new Set();
+  const add = (value) => {
+    const trimmed = String(value || "").trim();
+    if (trimmed) chunks.add(trimmed);
+  };
+
+  add(result?.text);
+
+  for (const block of result?.blocks || []) {
+    add(block?.text);
+    for (const line of block?.lines || []) {
+      add(line?.text);
+      for (const element of line?.elements || []) {
+        add(element?.text);
+      }
+    }
+  }
+
+  const lines = [...chunks];
+  return {
+    fullText: lines.join("\n"),
+    lineText: lines.join("\n"),
+  };
+};
+
+const recognizeBestEffort = async (uriCandidates, script) => {
+  let best = { fullText: "", lineText: "" };
+
+  for (const uri of uriCandidates) {
+    try {
+      const result = script
+        ? await TextRecognition.recognize(uri, script)
+        : await TextRecognition.recognize(uri);
+      const flat = flattenRecognitionText(result);
+      if (flat.fullText.length > best.fullText.length) {
+        best = flat;
+      }
+      if (best.fullText.length > 80) break;
+    } catch {
+      // try next URI variant
+    }
+  }
+
+  return best;
 };
 
 export const runOcrOnImage = async (image) => {
-  const uri = getImageUri(image);
+  const localImage = await ensureLocalFileUri(image);
+  const uri = getImageUri(localImage);
   if (!uri) throw new Error("No image to scan");
   if (isRemoteImageUrl(uri)) {
     throw new Error("OCR works on newly captured photos. Re-upload the document.");
   }
 
-  const latin = await recognizeWithScript(uri, TextRecognitionScript.LATIN);
-  const devanagari = await recognizeWithScript(
-    uri,
-    TextRecognitionScript.DEVANAGARI
+  const uriCandidates = buildOcrUriCandidates(uri);
+
+  const [latin, devanagari, defaultLatin] = await Promise.all([
+    recognizeBestEffort(uriCandidates, TextRecognitionScript.LATIN),
+    recognizeBestEffort(uriCandidates, TextRecognitionScript.DEVANAGARI),
+    recognizeBestEffort(uriCandidates, null),
+  ]);
+
+  const parts = [latin.fullText, devanagari.fullText, defaultLatin.fullText].filter(Boolean);
+  const text = [...new Set(parts.join("\n").split("\n").map((l) => l.trim()).filter(Boolean))].join(
+    "\n"
   );
-  const text = [latin, devanagari].filter(Boolean).join("\n").trim();
 
   if (!text) {
     throw new Error("No text found in image. Try a clearer, well-lit photo.");
@@ -491,7 +691,6 @@ export const verifyDrivingLicenseScan = async (image) => {
   const { text, fields } = await scanDrivingLicenseImage(image);
   const extracted = {
     license_number: fields.license_number || "",
-    driver_name: fields.driver_name || "",
     issue_date: fields.issue_date || "",
     expiry_date: fields.expiry_date || "",
   };
@@ -518,6 +717,14 @@ export const verifyDrivingLicenseScan = async (image) => {
     };
   }
 
+  if (scoreDlCandidate(extracted.license_number) < 40) {
+    return {
+      ok: false,
+      message: "Licence number not readable. Retake with better lighting and focus.",
+      extracted,
+    };
+  }
+
   return { ok: true, fields, extracted };
 };
 
@@ -528,7 +735,6 @@ export const verifyRcScan = async (image, vehicleTypeOptions = []) => {
   const extracted = {
     rc_number: fields.rc_number || vehicle_number,
     vehicle_number,
-    owner_name: fields.owner_name || "",
     company: fields.company || "",
     model: fields.model || "",
     car_no: vehicle_number,
@@ -542,17 +748,10 @@ export const verifyRcScan = async (image, vehicleTypeOptions = []) => {
       extracted,
     };
   }
-  if (looksLikeDrivingLicense(text)) {
+  if (looksLikeDrivingLicense(text) && !looksLikeRcBook(text)) {
     return {
       ok: false,
       message: "This looks like a driving licence. Upload your RC / registration certificate instead.",
-      extracted,
-    };
-  }
-  if (!looksLikeRcBook(text)) {
-    return {
-      ok: false,
-      message: "This does not look like an RC. Upload a clear photo of your registration certificate.",
       extracted,
     };
   }
@@ -560,6 +759,23 @@ export const verifyRcScan = async (image, vehicleTypeOptions = []) => {
     return {
       ok: false,
       message: "Registration number not found. Make sure the vehicle number is clearly visible.",
+      extracted,
+    };
+  }
+
+  if (scoreRegCandidate(extracted.vehicle_number) < 50) {
+    return {
+      ok: false,
+      message: "Registration number not readable. Retake with better lighting and focus.",
+      extracted,
+    };
+  }
+
+  const regLooksValid = scoreRegCandidate(extracted.vehicle_number) >= 90;
+  if (!looksLikeRcBook(text) && !regLooksValid) {
+    return {
+      ok: false,
+      message: "This does not look like an RC. Upload a clear photo of your registration certificate.",
       extracted,
     };
   }

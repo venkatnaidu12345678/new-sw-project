@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   ScrollView,
   Pressable,
   Dimensions,
+  unstable_batchedUpdates,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -25,16 +26,23 @@ import { getCreateRideTheme } from "../theme/createRideTheme";
 import { DS } from "../theme/designSystem";
 import { isRemoteImageUrl, pickDocumentImage, pickVehicleImage } from "../Utils/imageUpload";
 import {
-  applyExtractedFields,
   describeFilledFields,
-  verifyDrivingLicenseScan,
-  verifyRcScan,
 } from "../Utils/vehicleDocumentOcr";
+import { scanVehicleDocument } from "../Utils/vehicleDocumentScan";
 import { verifyVehicleImage } from "../Utils/vehicleImageVerify";
 import { useTheme } from "../context/ThemeContext";
+import {
+  EMPTY_VEHICLE_FORM,
+  EMPTY_EXTRACTED_DETAILS,
+  mapProfileToVehicleForm,
+  mapProfileToVehicleImages,
+  buildExtractedSnapshot,
+  applyScannedFields,
+  patchExtractedFromScan,
+} from "../Utils/vehicleProfileMap";
 
 const DOC_FIELDS = ["license_image", "rc_image", "car_image"];
-const REQUIRED_DOC_FIELDS = ["license_image", "rc_image", "car_image"];
+const IDENTITY_DOC_FIELDS = ["license_image", "rc_image"];
 const TOTAL_STEPS = 8;
 const DOC_STATUS = {
   IDLE: "idle",
@@ -51,27 +59,8 @@ const TABS = [
   { key: "details", label: "Vehicle info", icon: "car-sport-outline" },
 ];
 
-const EMPTY_FORM = {
-  company: "",
-  model: "",
-  type: "",
-  license_number: "",
-  driver_name: "",
-  owner_name: "",
-  rc_number: "",
-  issue_date: "",
-  expiry_date: "",
-  car_no: "",
-};
-
-const EMPTY_EXTRACTED = {
-  license_number: "",
-  driver_name: "",
-  expiry_date: "",
-  rc_number: "",
-  vehicle_number: "",
-  owner_name: "",
-};
+const EMPTY_FORM = { ...EMPTY_VEHICLE_FORM };
+const EMPTY_EXTRACTED = { ...EMPTY_EXTRACTED_DETAILS };
 
 const TYPE_ICONS = {
   bike: "bicycle-outline",
@@ -79,24 +68,8 @@ const TYPE_ICONS = {
   car: "car-sport-outline",
 };
 
-const mapProfileToForm = (info) => {
-  if (!info) return { ...EMPTY_FORM };
-  return {
-    company: info.vehicleCompany || "",
-    model: info.vehicleModel || "",
-    type: info.vehicleType || "",
-    license_number: info.licenseNumber || "",
-    car_no: info.carNo || "",
-    issue_date: info.issueDate ? String(info.issueDate).split("T")[0] : "",
-    expiry_date: info.expiryDate ? String(info.expiryDate).split("T")[0] : "",
-  };
-};
-
-const mapProfileToImages = (info) => ({
-  car_image: info?.carImage || null,
-  license_image: info?.licenseImage || null,
-  rc_image: info?.rcImage || null,
-});
+const mapProfileToForm = mapProfileToVehicleForm;
+const mapProfileToImages = mapProfileToVehicleImages;
 
 const formatDisplayDate = (iso) => {
   if (!iso) return "";
@@ -168,8 +141,10 @@ const UploadRow = ({
       activeOpacity={0.82}
       disabled={scanning}
     >
-      {previewUri && verified ? (
+      {previewUri && (verified || scanning) ? (
         <Image source={{ uri: previewUri }} style={uploadStyles.thumb} resizeMode="cover" />
+      ) : previewUri && failed ? (
+        <Image source={{ uri: previewUri }} style={[uploadStyles.thumb, uploadStyles.thumbFailed]} resizeMode="cover" />
       ) : (
         <View style={[uploadStyles.iconBox, { backgroundColor: iconBg }]}>
           <Icon name={icon} size={22} color={iconColor} />
@@ -291,27 +266,31 @@ const TypeChip = ({ label, value, selected, icon, onPress, colors, theme }) => (
   </TouchableOpacity>
 );
 
-const ExtractedDetailsCard = ({ extracted, colors }) => {
+const ExtractedDetailsCard = ({ extracted, colors, scanning = false }) => {
   const rows = [
     { label: "Licence number", value: extracted.license_number, primary: true },
     { label: "Registration number", value: extracted.vehicle_number, primary: true },
-    { label: "RC number", value: extracted.rc_number },
-    { label: "Owner name", value: extracted.owner_name },
-    { label: "Driver name", value: extracted.driver_name },
-    {
-      label: "Licence expiry",
-      value: extracted.expiry_date ? formatDisplayDate(extracted.expiry_date) : "",
-    },
   ].filter((r) => r.value);
 
-  if (rows.length === 0) return null;
+  if (rows.length === 0 && !scanning) return null;
 
   return (
     <View style={[extractStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <View style={extractStyles.head}>
-        <Icon name="checkmark-done-circle" size={18} color="#22C55E" />
-        <Text style={[extractStyles.title, { color: colors.text }]}>Extracted details</Text>
+        {scanning ? (
+          <ActivityIndicator size="small" color={colors.primary} />
+        ) : (
+          <Icon name="checkmark-done-circle" size={18} color="#22C55E" />
+        )}
+        <Text style={[extractStyles.title, { color: colors.text }]}>
+          {scanning ? "Extracting details…" : "Extracted details"}
+        </Text>
       </View>
+      {scanning && rows.length === 0 ? (
+        <Text style={[extractStyles.scanningHint, { color: colors.textMuted }]}>
+          Reading licence / RC text from your photo
+        </Text>
+      ) : null}
       {rows.map((row) => (
         <View key={row.label} style={[extractStyles.row, { borderBottomColor: colors.border }]}>
           <Text
@@ -384,8 +363,19 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
   });
   const [extracted, setExtracted] = useState({ ...EMPTY_EXTRACTED });
   const [toastMsg, setToastMsg] = useState("");
+  const modalOpenRef = useRef(false);
 
   const isUpdate = !!existingVehicle?.vehicleCompany;
+
+  const displayExtracted = useMemo(
+    () => buildExtractedSnapshot(form, extracted, existingVehicle),
+    [form, extracted, existingVehicle]
+  );
+
+  const isScanningDocs = useMemo(
+    () => DOC_FIELDS.some((field) => docStatus[field] === DOC_STATUS.SCANNING),
+    [docStatus]
+  );
 
   const initialDocStatus = useCallback((info) => {
     const verified = (url) =>
@@ -400,13 +390,20 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
   }, []);
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) {
+      modalOpenRef.current = false;
+      return;
+    }
+    if (modalOpenRef.current) return;
+
+    modalOpenRef.current = true;
+    const mappedForm = mapProfileToForm(existingVehicle);
     setTab("docs");
-    setForm(mapProfileToForm(existingVehicle));
+    setForm(mappedForm);
     setImages(mapProfileToImages(existingVehicle));
     setDocStatus(initialDocStatus(existingVehicle));
     setDocErrors({ license_image: "", rc_image: "", car_image: "" });
-    setExtracted({ ...EMPTY_EXTRACTED });
+    setExtracted(buildExtractedSnapshot(mappedForm, {}, existingVehicle));
     setShowIssuePicker(false);
     setShowExpiryPicker(false);
     setToastMsg("");
@@ -425,7 +422,14 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
     [docStatus]
   );
 
-  const docsVerified = REQUIRED_DOC_FIELDS.every((field) => isDocVerified(field));
+  const hasIdentityDocVerified = useMemo(
+    () => IDENTITY_DOC_FIELDS.some((field) => isDocVerified(field)),
+    [isDocVerified]
+  );
+
+  const carPhotoVerified = isDocVerified("car_image");
+
+  const canContinueToDetails = hasIdentityDocVerified;
 
   const vehicleTypeLabel = useMemo(() => {
     const match = vehicleTypes.find((o) => o.value === form.type);
@@ -445,15 +449,19 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
     return n;
   }, [form, isDocVerified]);
 
-  const mergeExtracted = (patch) => {
-    setExtracted((prev) => {
-      const next = { ...prev };
-      Object.entries(patch || {}).forEach(([key, value]) => {
-        if (String(value || "").trim()) next[key] = String(value).trim();
+  const applyScanToState = useCallback((result, documentType) => {
+    const ocrPatch = patchExtractedFromScan(result, documentType);
+    unstable_batchedUpdates(() => {
+      setExtracted((prev) => {
+        const next = { ...prev };
+        Object.entries(ocrPatch).forEach(([key, value]) => {
+          if (value) next[key] = value;
+        });
+        return next;
       });
-      return next;
+      setForm((prev) => applyScannedFields(prev, result, documentType));
     });
-  };
+  }, []);
 
   const setDocState = (field, status, error = "") => {
     setDocStatus((prev) => ({ ...prev, [field]: status }));
@@ -468,8 +476,10 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
         field === "car_image" ? await pickVehicleImage() : await pickDocumentImage();
       if (!asset) return;
 
+      setImages((prev) => ({ ...prev, [field]: asset }));
       setDocState(field, DOC_STATUS.SCANNING, "");
-      setImages((prev) => ({ ...prev, [field]: null }));
+
+      await new Promise((resolve) => requestAnimationFrame(resolve));
 
       try {
         if (field === "car_image") {
@@ -478,33 +488,26 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
             setDocState(field, DOC_STATUS.FAILED, vehicleResult.message);
             return;
           }
-          setImages((prev) => ({ ...prev, [field]: asset }));
           setDocState(field, DOC_STATUS.VERIFIED, "");
           setToastMsg("Vehicle photo verified");
           return;
         }
 
         const before = { ...form };
-        const result =
-          field === "license_image"
-            ? await verifyDrivingLicenseScan(asset)
-            : await verifyRcScan(asset, vehicleTypes);
+        const docType = field === "license_image" ? "license" : "rc";
+        const result = await scanVehicleDocument(docType, asset, vehicleTypes);
 
-        if (result.extracted) mergeExtracted(result.extracted);
+        applyScanToState(result, docType);
 
         if (!result.ok) {
           setDocState(field, DOC_STATUS.FAILED, result.message);
           return;
         }
 
-        setImages((prev) => ({ ...prev, [field]: asset }));
         setDocState(field, DOC_STATUS.VERIFIED, "");
-        setForm((prev) => applyExtractedFields(prev, result.fields || {}));
 
-        const filled = describeFilledFields(
-          before,
-          applyExtractedFields(before, result.fields || {})
-        );
+        const after = applyScannedFields(before, result, docType);
+        const filled = describeFilledFields(before, after);
         if (field === "license_image" && result.extracted?.license_number) {
           setToastMsg(`Licence verified: ${result.extracted.license_number}`);
         } else if (field === "rc_image" && result.extracted?.vehicle_number) {
@@ -527,8 +530,8 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
   };
 
   const trySetTab = (nextTab) => {
-    if (nextTab === "details" && !docsVerified) {
-      alertValidation("Verify driving licence, RC, and vehicle photo before continuing.");
+    if (nextTab === "details" && !canContinueToDetails) {
+      alertValidation("Verify at least your driving licence or RC photo before continuing.");
       return;
     }
     setTab(nextTab);
@@ -544,28 +547,33 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
   );
 
   const validate = () => {
-    if (!isDocVerified("license_image")) {
-      alertValidation("Verify your driving license photo first.");
+    if (!hasIdentityDocVerified) {
+      alertValidation("Verify at least your driving licence or RC photo.");
       setTab("docs");
       return false;
     }
-    if (!isDocVerified("rc_image")) {
-      alertValidation("Verify your RC (registration) photo.");
-      setTab("docs");
-      return false;
-    }
-    if (!isDocVerified("car_image")) {
+    if (!carPhotoVerified) {
       alertValidation("Upload and verify a clear vehicle photo.");
       setTab("docs");
       return false;
     }
-    if (!form.company?.trim() || !form.model?.trim() || !form.type?.trim() || !form.license_number?.trim()) {
-      alertValidation("Fill in company, model, type, and license number.");
+    if (!form.company?.trim() || !form.model?.trim() || !form.type?.trim()) {
+      alertValidation("Fill in company, model, and vehicle type.");
       setTab("details");
       return false;
     }
-    if (!form.car_no?.trim()) {
+    if (isDocVerified("license_image") && !form.license_number?.trim()) {
+      alertValidation("Enter your driving licence number.");
+      setTab("details");
+      return false;
+    }
+    if (isDocVerified("rc_image") && !form.car_no?.trim()) {
       alertValidation("Enter your vehicle registration number.");
+      setTab("details");
+      return false;
+    }
+    if (!form.car_no?.trim() && !form.license_number?.trim()) {
+      alertValidation("Enter licence number or registration number.");
       setTab("details");
       return false;
     }
@@ -605,12 +613,14 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
   };
 
   const canSave =
-    docsVerified &&
+    hasIdentityDocVerified &&
+    carPhotoVerified &&
     form.company?.trim() &&
     form.model?.trim() &&
     form.type?.trim() &&
-    form.license_number?.trim() &&
-    form.car_no?.trim();
+    (!isDocVerified("license_image") || form.license_number?.trim()) &&
+    (!isDocVerified("rc_image") || form.car_no?.trim()) &&
+    (form.license_number?.trim() || form.car_no?.trim());
 
   const gradColors = isDark
     ? ["#1E3A8A", "#312E81", "#1E1B4B"]
@@ -633,10 +643,10 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
         <TouchableOpacity
           onPress={() => trySetTab("details")}
           activeOpacity={0.9}
-          disabled={!docsVerified}
+          disabled={!canContinueToDetails}
         >
           <LinearGradient
-            colors={docsVerified ? gradColors : ["#94A3B8", "#94A3B8"]}
+            colors={canContinueToDetails ? gradColors : ["#94A3B8", "#94A3B8"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.cta}
@@ -736,7 +746,7 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
                       <View style={styles.smartText}>
                         <Text style={[styles.smartTitle, { color: colors.text }]}>Smart document scan</Text>
                         <Text style={[styles.smartSub, { color: colors.textMuted }]}>
-                          Licence, RC, and vehicle photo are verified before you continue
+                          Upload at least licence or RC — we extract numbers only. Add owner name manually.
                         </Text>
                       </View>
                     </View>
@@ -746,7 +756,7 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
                       iconColor="#2563EB"
                       iconBg={isDark ? "#1E3A8A44" : "#DBEAFE"}
                       title="Driving license"
-                      subtitle="Camera or gallery · licence number required"
+                      subtitle="Upload licence or RC (at least one) · extracts licence number"
                       image={images.license_image}
                       onPick={() => pickImage("license_image")}
                       status={docStatus.license_image}
@@ -758,7 +768,7 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
                       iconColor="#7C3AED"
                       iconBg={isDark ? "#4C1D9544" : "#EDE9FE"}
                       title="RC book"
-                      subtitle="Camera or gallery · registration no. required"
+                      subtitle="Upload licence or RC (at least one) · extracts registration number"
                       image={images.rc_image}
                       onPick={() => pickImage("rc_image")}
                       status={docStatus.rc_image}
@@ -778,13 +788,17 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
                       colors={colors}
                     />
 
-                    <ExtractedDetailsCard extracted={extracted} colors={colors} />
+                    <ExtractedDetailsCard
+                      extracted={displayExtracted}
+                      scanning={isScanningDocs}
+                      colors={colors}
+                    />
 
-                    {!docsVerified ? (
+                    {!canContinueToDetails ? (
                       <View style={[styles.verifyHint, { backgroundColor: colors.surfaceAlt }]}>
                         <Icon name="information-circle-outline" size={18} color={colors.textMuted} />
                         <Text style={[styles.verifyHintText, { color: colors.textMuted }]}>
-                          Continue after licence, RC, and vehicle photo are verified
+                          Verify at least your driving licence or RC, then add a vehicle photo
                         </Text>
                       </View>
                     ) : null}
@@ -835,7 +849,7 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
                         </View>
                       </View>
 
-                      <FormField label="Registration number" required colors={colors}>
+                      <FormField label="Registration number" required={isDocVerified("rc_image")} colors={colors}>
                         <View style={[styles.plateInput, { borderColor: colors.border, backgroundColor: colors.inputBg }]}>
                           <View style={styles.plateInputBadge}>
                             <Text style={styles.plateInputBadgeText}>IND</Text>
@@ -850,7 +864,11 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
                         </View>
                       </FormField>
 
-                      <FormField label="License number" required colors={colors}>
+                      <FormField
+                        label="License number"
+                        required={isDocVerified("license_image")}
+                        colors={colors}
+                      >
                         <AppTextInput
                           placeholder="DL-XX-XXXXXXX"
                           value={form.license_number}
@@ -858,22 +876,16 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
                           autoCapitalize="characters"
                         />
                       </FormField>
-                    </View>
 
-                    {(form.owner_name || form.driver_name) ? (
-                      <View style={[styles.formBlock, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                        {form.owner_name ? (
-                          <FormField label="Owner name (from RC)" colors={colors}>
-                            <AppTextInput value={form.owner_name} editable={false} />
-                          </FormField>
-                        ) : null}
-                        {form.driver_name ? (
-                          <FormField label="Driver name (from licence)" colors={colors}>
-                            <AppTextInput value={form.driver_name} editable={false} />
-                          </FormField>
-                        ) : null}
-                      </View>
-                    ) : null}
+                      <FormField label="Owner name" colors={colors}>
+                        <AppTextInput
+                          placeholder="Enter owner name (optional)"
+                          value={form.owner_name}
+                          onChangeText={(t) => updateForm("owner_name", t)}
+                          autoCapitalize="words"
+                        />
+                      </FormField>
+                    </View>
 
                     <Text style={[styles.sectionTitle, { color: colors.text }]}>Licence dates</Text>
                     <Text style={[styles.sectionSub, { color: colors.textMuted }]}>Optional</Text>
@@ -979,6 +991,7 @@ const uploadStyles = StyleSheet.create({
     justifyContent: "center",
   },
   thumb: { width: 52, height: 52, borderRadius: 14 },
+  thumbFailed: { opacity: 0.55 },
   textCol: { flex: 1, minWidth: 0 },
   title: { fontSize: 15, fontWeight: "700" },
   sub: { fontSize: 12, marginTop: 3, lineHeight: 17 },
@@ -1111,6 +1124,7 @@ const extractStyles = StyleSheet.create({
     marginBottom: 10,
   },
   title: { fontSize: 14, fontWeight: "700" },
+  scanningHint: { fontSize: 12, lineHeight: 17, marginBottom: 4 },
   row: {
     flexDirection: "row",
     justifyContent: "space-between",

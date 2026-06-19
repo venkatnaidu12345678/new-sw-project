@@ -810,6 +810,39 @@ export const updateMyCourierRequest = async (token, requestId, payload) => {
   return result;
 };
 
+/** Server-side Google Vision OCR for licence / RC documents. */
+export const scanVehicleDocumentApi = async (token, documentType, imageAsset) => {
+  if (!token) throw new Error("Authentication required");
+  if (!imageAsset?.uri) throw new Error("No image to scan");
+
+  const formData = new FormData();
+  formData.append("documentType", String(documentType || "").trim().toLowerCase());
+  appendImageFile(formData, "image", imageAsset);
+
+  const response = await fetch(`${baseUrl}${endPoints.scanVehicleDocumenturl}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  const data = await parseApiResponse(response);
+
+  if (!response.ok && data?.code !== "OCR_NOT_CONFIGURED") {
+    throw new Error(data?.message || "Document scan failed");
+  }
+
+  return {
+    ok: data?.ok === true,
+    message: data?.message || "",
+    extracted: data?.extracted || {},
+    fields: data?.fields || {},
+    source: data?.source || "backend",
+    code: data?.code,
+  };
+};
+
 export const AddVehicle = async (token, vehicleData, imageFiles = {}) => {
   try {
     const formData = new FormData();
@@ -819,6 +852,7 @@ export const AddVehicle = async (token, vehicleData, imageFiles = {}) => {
       "type",
       "license_number",
       "car_no",
+      "owner_name",
       "issue_date",
       "expiry_date",
     ];

@@ -16,6 +16,16 @@ const PICKER_OPTIONS = {
   selectionLimit: 1,
 };
 
+/** Higher resolution for licence / RC OCR */
+const DOCUMENT_PICKER_OPTIONS = {
+  mediaType: "photo",
+  quality: 1,
+  maxWidth: 2560,
+  maxHeight: 2560,
+  includeBase64: false,
+  selectionLimit: 1,
+};
+
 const inferMimeType = (asset) => {
   const raw = String(asset?.type || "").toLowerCase().trim();
   if (raw && raw !== "image" && raw !== "image/*") {
@@ -219,7 +229,10 @@ const processPickerResponse = async (response, fallbackName) => {
   return localAsset;
 };
 
-export const pickFromCamera = async (fallbackName = `photo-${Date.now()}.jpg`) => {
+export const pickFromCamera = async (
+  fallbackName = `photo-${Date.now()}.jpg`,
+  options = PICKER_OPTIONS
+) => {
   const granted = await requestCameraPermission();
   if (!granted) {
     throw new Error("Camera permission is required. Enable it in Settings → Apps → Share Wheels.");
@@ -227,36 +240,40 @@ export const pickFromCamera = async (fallbackName = `photo-${Date.now()}.jpg`) =
 
   const { launchCamera } = require("react-native-image-picker");
   const response = await launchCamera({
-    ...PICKER_OPTIONS,
+    ...options,
     cameraType: "back",
     saveToPhotos: false,
   });
   return processPickerResponse(response, fallbackName);
 };
 
-export const pickFromGallery = async (fallbackName = `photo-${Date.now()}.jpg`) => {
+export const pickFromGallery = async (
+  fallbackName = `photo-${Date.now()}.jpg`,
+  options = PICKER_OPTIONS
+) => {
   const { launchImageLibrary } = require("react-native-image-picker");
-  const response = await launchImageLibrary(PICKER_OPTIONS);
+  const response = await launchImageLibrary(options);
   return processPickerResponse(response, fallbackName);
 };
 
 /** Alert with Camera / Gallery — returns normalized local asset or null. */
 export const showImageSourcePicker = (
   fallbackName = `photo-${Date.now()}.jpg`,
-  title = "Select Image"
+  title = "Select Image",
+  pickerOptions = PICKER_OPTIONS
 ) =>
   new Promise((resolve, reject) => {
     Alert.alert(title, "Choose an option", [
       {
         text: "Camera",
         onPress: () => {
-          pickFromCamera(fallbackName).then(resolve).catch(reject);
+          pickFromCamera(fallbackName, pickerOptions).then(resolve).catch(reject);
         },
       },
       {
         text: "Gallery",
         onPress: () => {
-          pickFromGallery(fallbackName).then(resolve).catch(reject);
+          pickFromGallery(fallbackName, pickerOptions).then(resolve).catch(reject);
         },
       },
       {
@@ -274,4 +291,4 @@ export const pickVehicleImage = async () =>
   showImageSourcePicker(`vehicle-${Date.now()}.jpg`, "Vehicle photo");
 
 export const pickDocumentImage = async () =>
-  showImageSourcePicker(`document-${Date.now()}.jpg`, "Document photo");
+  showImageSourcePicker(`document-${Date.now()}.jpg`, "Document photo", DOCUMENT_PICKER_OPTIONS);

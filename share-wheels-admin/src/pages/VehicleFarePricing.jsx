@@ -369,6 +369,16 @@ function TierEditorCard({
   );
 }
 
+const VEHICLE_FARE_TYPES = ["bike", "auto", "car"];
+
+const canonicalFareType = (value) => {
+  const type = String(value || "").trim().toLowerCase();
+  if (VEHICLE_FARE_TYPES.includes(type)) return type;
+  if (type === "scooter") return "bike";
+  if (["hatchback", "sedan", "suv", "muv", "van"].includes(type)) return "car";
+  return type;
+};
+
 export default function VehicleFarePricing() {
   const [fares, setFares] = useState([]);
   const [vehicleTypes, setVehicleTypes] = useState([]);
@@ -390,12 +400,20 @@ export default function VehicleFarePricing() {
   useEffect(() => {
     load();
     getLookupTypes("vehicle_type")
-      .then((res) => setVehicleTypes(res.types || []))
+      .then((res) =>
+        setVehicleTypes(
+          (res.types || []).filter(
+            (t) =>
+              t.isActive !== false &&
+              VEHICLE_FARE_TYPES.includes(String(t.value || "").toLowerCase())
+          )
+        )
+      )
       .catch(() => {});
   }, []);
 
   const configuredTypes = useMemo(
-    () => new Set(fares.map((f) => String(f.vehicleType || "").toLowerCase())),
+    () => new Set(fares.map((f) => canonicalFareType(f.vehicleType))),
     [fares]
   );
 
@@ -593,7 +611,7 @@ export default function VehicleFarePricing() {
           type="button"
           className={btnClass("primary", "sm")}
           onClick={openCreate}
-          disabled={!vehicleTypes.length}
+          disabled={!availableVehicleTypes.length}
         >
           + Add fares
         </button>
@@ -632,7 +650,7 @@ export default function VehicleFarePricing() {
               type="button"
               className={`${btnClass("primary")} mt-6`}
               onClick={openCreate}
-              disabled={!vehicleTypes.length}
+              disabled={!availableVehicleTypes.length}
             >
               Create first fare rule
             </button>
