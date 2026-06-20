@@ -682,7 +682,7 @@ const recordEnroutePick = async (userId) => {
   }
 };
 
-/** Driver IDs with a non-expired active subscription (paid or free). */
+/** Driver IDs with active subscription and remaining enroute picks (enroute pickup flows). */
 const getActiveSubscribedDriverIds = async (driverIds) => {
   const unique = [
     ...new Set(
@@ -719,59 +719,51 @@ const getActiveSubscribedDriverIds = async (driverIds) => {
   return eligible;
 };
 
-/**
- * Drivers eligible for related-ride discovery: active paid/free subscription,
- * or auto-provisioned active free plan when the platform free plan is on.
- */
-const getEligibleRelatedRideDriverIds = async (driverIds) => {
-  const eligible = await getActiveSubscribedDriverIds(driverIds);
-  const unique = [
+const normalizeDriverIds = (driverIds) =>
+  [
     ...new Set(
       (driverIds || [])
         .map((id) => id?._id?.toString?.() || id?.toString?.() || String(id || ""))
         .filter((id) => mongoose.Types.ObjectId.isValid(id))
     ),
   ];
-  const missing = unique.filter((id) => !eligible.has(id));
-  if (!missing.length) return eligible;
 
-  const freePlan = await getDefaultPlan();
-  if (!freePlan?.isActive) return eligible;
+/**
+ * Drivers eligible for related-ride discovery (My Request matching rides).
+ * Includes paid and free subscriptions while status is active and before expiresAt.
+ * Does not require remaining enroute picks — only an active subscription window.
+ */
+const getEligibleRelatedRideDriverIds = async (driverIds) => {
+  const unique = normalizeDriverIds(driverIds);
+  if (!unique.length) return new Set();
 
-  await Promise.all(
-    missing.map(async (driverId) => {
-      try {
-        const usedFree = await userHasUsedFreePlan(driverId);
-        if (usedFree) return;
+  const now = new Date();
+  const objectIds = unique.map((id) => new mongoose.Types.ObjectId(id));
 
-        const subscription = await resolveDriverSubscription(driverId, {
-          autoProvisionFree: true,
-        });
-        const now = new Date();
-        const snapshot = subscription?.planSnapshot || {};
-        if (
-          !subscription ||
-          subscription.status !== "active" ||
-          subscription.expiresAt <= now
-        ) {
-          return;
-        }
-
-        if (snapshot.unlimitedPicks) {
-          eligible.add(String(driverId));
-          return;
-        }
-
-        const limit = snapshot.enroutePickLimit ?? 0;
-        const used = subscription.picksUsed ?? 0;
-        if (used < limit) {
-          eligible.add(String(driverId));
-        }
-      } catch {
-        /* ignore per-driver provisioning errors */
-      }
-    })
+  await UserSubscription.updateMany(
+    {
+      userId: { $in: objectIds },
+      status: "active",
+      expiresAt: { $lte: now },
+    },
+    { $set: { status: "expired" } }
   );
+
+  const activeSubs = await UserSubscription.find({
+    userId: { $in: objectIds },
+    status: "active",
+    expiresAt: { $gt: now },
+  })
+    .select("userId planId")
+    .populate("planId", "isActive")
+    .lean();
+
+  const eligible = new Set();
+  for (const row of activeSubs) {
+    const planRef = row.planId;
+    if (planRef && planRef.isActive === false) continue;
+    eligible.add(String(row.userId));
+  }
 
   return eligible;
 };

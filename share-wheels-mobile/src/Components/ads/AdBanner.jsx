@@ -8,10 +8,12 @@ import {
   Linking,
 } from "react-native";
 import { LAYOUT, scale } from "../../theme/layout";
+import { AD_BANNER_HEIGHT } from "./adCarouselLayout";
 import { recordAdClick, recordAdImpression } from "../../ApiService/adsApiService";
 
-const AdBanner = ({ ad, style, compact = false }) => {
+const AdBanner = ({ ad, style, compact = false, variant = "default" }) => {
   const [imgError, setImgError] = useState(false);
+  const isCarousel = variant === "carousel";
 
   useEffect(() => {
     if (ad?._id) recordAdImpression(ad._id);
@@ -29,24 +31,40 @@ const AdBanner = ({ ad, style, compact = false }) => {
     <TouchableOpacity
       activeOpacity={0.9}
       onPress={open}
-      style={[styles.wrap, compact && styles.wrapCompact, style]}
+      style={[
+        styles.wrap,
+        isCarousel && styles.wrapCarousel,
+        compact && !isCarousel && styles.wrapCompact,
+        style,
+      ]}
     >
       {!imgError ? (
         <Image
           source={{ uri: ad.mediaUrl }}
-          style={[styles.image, compact && styles.imageCompact]}
-          resizeMode="cover"
+          style={[
+            styles.image,
+            isCarousel && styles.imageCarousel,
+            compact && !isCarousel && styles.imageCompact,
+          ]}
+          resizeMode={isCarousel ? "contain" : "cover"}
           onError={() => setImgError(true)}
         />
       ) : (
-        <View style={[styles.image, compact && styles.imageCompact, styles.fallback]}>
+        <View
+          style={[
+            styles.image,
+            isCarousel && styles.imageCarousel,
+            compact && !isCarousel && styles.imageCompact,
+            styles.fallback,
+          ]}
+        >
           <Text style={styles.fallbackText}>{ad.title || "Sponsored"}</Text>
         </View>
       )}
       <View style={styles.badge}>
         <Text style={styles.badgeText}>Ad</Text>
       </View>
-      {!compact && ad.title ? (
+      {!compact && !isCarousel && ad.title ? (
         <Text style={styles.title} numberOfLines={1}>
           {ad.title}
         </Text>
@@ -64,6 +82,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#E2E8F0",
     marginVertical: LAYOUT.spacing.sm,
   },
+  wrapCarousel: {
+    width: "100%",
+    height: AD_BANNER_HEIGHT,
+    marginVertical: 0,
+    alignSelf: "stretch",
+    backgroundColor: "#0F172A",
+  },
   wrapCompact: {
     marginVertical: 4,
     borderRadius: 10,
@@ -71,6 +96,11 @@ const styles = StyleSheet.create({
   image: {
     width: "100%",
     height: scale(100),
+  },
+  imageCarousel: {
+    width: "100%",
+    height: AD_BANNER_HEIGHT,
+    backgroundColor: "#0F172A",
   },
   imageCompact: {
     height: scale(72),
@@ -83,6 +113,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
+    zIndex: 2,
   },
   badgeText: {
     color: "#fff",

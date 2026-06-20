@@ -65,6 +65,8 @@ const AuthNavigator = () => {
   const [refresh, setRefresh] = useState(0);
   const [userData, setUserData] = useState(null);
   const [refreshUpcomingRides, setRefreshUpcomingrides] = useState(true);
+  const [pendingHighlightRideId, setPendingHighlightRideId] = useState(null);
+  const [pendingHighlightLabel, setPendingHighlightLabel] = useState(null);
   const [ProfileDetails, SetProfileDetails] = useState(null);
 
   useAppSocketConnection(isAuthenticated);
@@ -174,6 +176,10 @@ const AuthNavigator = () => {
         setRefresh,
         refreshUpcomingRides,
         setRefreshUpcomingrides,
+        pendingHighlightRideId,
+        setPendingHighlightRideId,
+        pendingHighlightLabel,
+        setPendingHighlightLabel,
         ProfileDetails,
         SetProfileDetails,
         logout,

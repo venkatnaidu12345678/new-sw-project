@@ -4,14 +4,18 @@ import { useAds } from "../../context/AdsContext";
 import AdCarousel from "./AdCarousel";
 import AdBanner from "./AdBanner";
 import AdVideo from "./AdVideo";
+import AdVideoPlaylist from "./AdVideoPlaylist";
 import AdNative from "./AdNative";
 import { isVideoAd } from "../../Utils/adMedia";
 import { AdPlacementSkeleton } from "../ui/Skeleton";
 
+/** home_video accepts only type=video with a real video URL — never banners or native. */
 const filterAdsForPlacement = (ads, placement) =>
   (ads || []).filter((a) => {
     if (!a?.mediaUrl) return false;
-    if (placement === "home_video") return isVideoAd(a);
+    if (placement === "home_video") {
+      return a.type === "video" && isVideoAd(a);
+    }
     if (a.type === "video") return isVideoAd(a);
     return a.type !== "video";
   });
@@ -43,6 +47,16 @@ const AdPlacement = ({ placement, style, containerStyle, showDebug }) => {
 
   const valid = filterAdsForPlacement(ads, placement);
   if (!valid.length) return null;
+
+  if (placement === "home_video") {
+    return (
+      <AdVideoPlaylist
+        ads={valid}
+        style={style}
+        containerStyle={containerStyle}
+      />
+    );
+  }
 
   if (valid.length > 1) {
     return (

@@ -11,7 +11,14 @@ import { LAYOUT, scale } from "../../theme/layout";
 import { recordAdClick, recordAdImpression } from "../../ApiService/adsApiService";
 import { isVideoMediaUrl } from "../../Utils/adMedia";
 
-const buildVideoHtml = (videoUrl) => `<!DOCTYPE html>
+const buildVideoHtml = (videoUrl, { loop = false, notifyOnEnd = false } = {}) => {
+  const safeUrl = videoUrl.replace(/"/g, "&quot;");
+  const loopAttr = loop ? "loop" : "";
+  const endHandler = notifyOnEnd
+    ? `onended="if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage('ended');}"`
+    : "";
+
+  return `<!DOCTYPE html>
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
@@ -26,31 +33,47 @@ const buildVideoHtml = (videoUrl) => `<!DOCTYPE html>
 </head>
 <body>
   <video
-    src="${videoUrl.replace(/"/g, "&quot;")}"
+    src="${safeUrl}"
     autoplay
     muted
-    loop
+    ${loopAttr}
     playsinline
     webkit-playsinline
     preload="auto"
+    ${endHandler}
   ></video>
 </body>
 </html>`;
+};
 
 /**
  * In-app muted autoplay video ad (no poster-as-video fallback).
  */
-const AdVideo = ({ ad, style, compact = false, isActive = true }) => {
+const AdVideo = ({
+  ad,
+  style,
+  compact = false,
+  isActive = true,
+  loop = true,
+  onEnded,
+}) => {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (ad?._id) recordAdImpression(ad._id);
-  }, [ad?._id]);
+    if (ad?._id && isActive) recordAdImpression(ad._id);
+  }, [ad?._id, isActive]);
 
   const videoUrl = ad?.mediaUrl?.trim();
   if (!videoUrl || !isVideoMediaUrl(videoUrl)) return null;
 
-  const html = useMemo(() => buildVideoHtml(videoUrl), [videoUrl]);
+  const html = useMemo(
+    () =>
+      buildVideoHtml(videoUrl, {
+        loop,
+        notifyOnEnd: !!onEnded && !loop,
+      }),
+    [videoUrl, loop, onEnded]
+  );
 
   const open = async () => {
     if (ad._id) await recordAdClick(ad._id);
@@ -76,6 +99,9 @@ const AdVideo = ({ ad, style, compact = false, isActive = true }) => {
           javaScriptEnabled
           domStorageEnabled
           onLoadEnd={() => setReady(true)}
+          onMessage={(event) => {
+            if (event.nativeEvent.data === "ended") onEnded?.();
+          }}
         />
       ) : (
         <View style={[styles.webview, styles.paused, { height }]} />

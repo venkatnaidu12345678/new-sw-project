@@ -365,9 +365,13 @@ export const SearchBarSkeleton = () => (
 export const AdPlacementSkeleton = ({ variant = "banner" }) => (
   <ShimmerProvider>
     <GlassBone
-      height={variant === "video" ? 180 : 80}
+      height={variant === "video" ? 180 : undefined}
+      style={
+        variant === "banner"
+          ? { marginVertical: 8, width: "100%", aspectRatio: 2.4 }
+          : { marginVertical: 8 }
+      }
       borderRadius={14}
-      style={{ marginVertical: 8 }}
     />
   </ShimmerProvider>
 );

@@ -22,10 +22,13 @@ module.exports = {
       (req.file?.mimetype?.startsWith("video/") ? "video" : "image");
     return handle(res, () => adService.uploadAdMedia(req.file, mediaType));
   },
-  getMeta: async (_req, res) =>
-    res.status(200).json({
+  getMeta: async (_req, res) => {
+    const { PLACEMENT_RULES } = require("../utils/adPlacementRules");
+    return res.status(200).json({
       success: true,
       types: adService.AD_TYPES,
       placements: adService.AD_PLACEMENTS,
-    }),
+      placementRules: PLACEMENT_RULES,
+    });
+  },
 };

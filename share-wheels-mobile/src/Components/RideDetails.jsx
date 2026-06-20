@@ -39,6 +39,10 @@ import { formatDisplayTime } from "../Utils/dateUtils";
 import { LAYOUT } from "../theme/layout";
 import { profileData } from "../Navigation/AuthNavigator";
 import {
+  bookingHighlightLabel,
+  goToDashboardWithRideHighlight,
+} from "../Utils/navigateToDashboardHighlight";
+import {
   refUserId,
   getPassengerBookingBlockReason,
   getCourierBookingBlockReason,
@@ -53,7 +57,12 @@ const RideDetails = ({ navigation, route }) => {
   const standalonePassengerRideId = route.params?.standalonePassengerRideId;
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { ProfileDetails } = profileData();
+  const {
+    ProfileDetails,
+    setRefreshUpcomingrides,
+    setPendingHighlightRideId,
+    setPendingHighlightLabel,
+  } = profileData();
 
   const [rideInfo, setRideInfo] = useState(initialRide);
   const [detailsLoading, setDetailsLoading] = useState(false);
@@ -256,7 +265,14 @@ const RideDetails = ({ navigation, route }) => {
             {
               text: "OK",
               onPress: () =>
-                navigation.navigate("Navigator", { screen: "Home" }),
+                goToDashboardWithRideHighlight({
+                  navigation,
+                  rideId: ride._id,
+                  label: bookingHighlightLabel(response.bookingStatus),
+                  setRefreshUpcomingrides,
+                  setPendingHighlightRideId,
+                  setPendingHighlightLabel,
+                }),
             },
           ],
           { cancelable: false }
@@ -341,7 +357,14 @@ const RideDetails = ({ navigation, route }) => {
             {
               text: "OK",
               onPress: () =>
-                navigation.navigate("Navigator", { screen: "Home" }),
+                goToDashboardWithRideHighlight({
+                  navigation,
+                  rideId: ride._id,
+                  label: bookingHighlightLabel(response.bookingStatus),
+                  setRefreshUpcomingrides,
+                  setPendingHighlightRideId,
+                  setPendingHighlightLabel,
+                }),
             },
           ],
           { cancelable: false }

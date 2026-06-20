@@ -57,12 +57,33 @@ const sortUpcomingByPriority = (rides = []) =>
     return aTime - bTime;
   });
 
+const moveRideToFront = (rides = [], rideId) => {
+  if (!rideId) return rides;
+  const targetId = String(rideId);
+  const index = rides.findIndex(
+    (ride) => String(ride?._id || ride?.id) === targetId
+  );
+  if (index <= 0) return rides;
+  const ordered = [...rides];
+  const [match] = ordered.splice(index, 1);
+  return [match, ...ordered];
+};
+
 const DashboardPage = () => {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { refreshUpcomingRides, ProfileDetails, setRefresh } = profileData();
+  const { refreshUpcomingRides, ProfileDetails, setRefresh, pendingHighlightRideId, setPendingHighlightRideId, pendingHighlightLabel, setPendingHighlightLabel } =
+    profileData();
+
+  const [highlightRideId, setHighlightRideId] = useState(null);
+  const [highlightLabel, setHighlightLabel] = useState(null);
+  const highlightRideIdRef = useRef(null);
+  const pendingHighlightRideIdRef = useRef(pendingHighlightRideId);
+  pendingHighlightRideIdRef.current = pendingHighlightRideId;
+  const pendingHighlightLabelRef = useRef(pendingHighlightLabel);
+  pendingHighlightLabelRef.current = pendingHighlightLabel;
 
   const [fromValue, setFromValue] = useState("");
   const [toValue, setToValue] = useState("");
@@ -101,7 +122,7 @@ const DashboardPage = () => {
   const { searchPlaces, resolvePlace, reload: reloadLocations } =
     useLocationSuggestions();
 
-  const fetchUpcomingRides = useCallback(async ({ isRefresh = false } = {}) => {
+  const fetchUpcomingRides = useCallback(async ({ isRefresh = false, highlightId } = {}) => {
     try {
       if (isRefresh) setRefreshingUpcoming(true);
       else setLoadingUpcoming(true);
@@ -114,7 +135,9 @@ const DashboardPage = () => {
           ["pending", "started"].includes(ride?.status)
         )
       );
-      setRides(upcomingOnly);
+      const activeHighlightId =
+        highlightId || highlightRideIdRef.current || null;
+      setRides(moveRideToFront(upcomingOnly, activeHighlightId));
       setErrorMsg("");
     } catch (err) {
       console.log("Error fetching upcoming rides:", err.message);
@@ -134,11 +157,65 @@ const DashboardPage = () => {
 
   useFocusEffect(
     useCallback(() => {
-      fetchUpcomingRides();
+      let nextHighlightId = null;
+      const pendingId = pendingHighlightRideIdRef.current;
+      const pendingLabel = pendingHighlightLabelRef.current;
+      if (pendingId) {
+        nextHighlightId = String(pendingId);
+        highlightRideIdRef.current = nextHighlightId;
+        setHighlightRideId(nextHighlightId);
+        setHighlightLabel(pendingLabel || "Your new ride");
+        setPendingHighlightRideId(null);
+        setPendingHighlightLabel(null);
+      }
+      fetchUpcomingRides({ highlightId: nextHighlightId });
       refreshAds();
       reloadLocations(true);
-    }, [fetchUpcomingRides, refreshUpcomingRides, refreshAds, reloadLocations])
+    }, [
+      fetchUpcomingRides,
+      refreshUpcomingRides,
+      refreshAds,
+      reloadLocations,
+      setPendingHighlightRideId,
+      setPendingHighlightLabel,
+    ])
   );
+
+  useEffect(() => {
+    if (!highlightRideId || loadingUpcoming || rides.length === 0) return undefined;
+
+    const index = rides.findIndex(
+      (ride) => String(ride?._id || ride?.id) === highlightRideId
+    );
+    if (index < 0) return undefined;
+
+    const scrollTimer = setTimeout(() => {
+      collapseFilters();
+      try {
+        listRef.current?.scrollToIndex({
+          index,
+          animated: true,
+          viewPosition: 0.15,
+        });
+      } catch {
+        listRef.current?.scrollToOffset({
+          offset: Math.max(0, upcomingSectionScrollOffsetRef.current),
+          animated: true,
+        });
+      }
+    }, 350);
+
+    const clearTimer = setTimeout(() => {
+      setHighlightRideId(null);
+      setHighlightLabel(null);
+      highlightRideIdRef.current = null;
+    }, 5000);
+
+    return () => {
+      clearTimeout(scrollTimer);
+      clearTimeout(clearTimer);
+    };
+  }, [highlightRideId, loadingUpcoming, rides]);
 
   useEffect(() => {
     const scrollToUpcoming = () =>
@@ -339,9 +416,15 @@ const DashboardPage = () => {
   const dropdownTop = activeField === "FROM" ? 70 : 142;
 
   const renderRide = ({ item, index }) => {
+    const isHighlighted =
+      !!highlightRideId &&
+      String(item?._id || item?.id) === highlightRideId;
+
     const card = (
       <UpcomingRide
         data={item}
+        highlighted={isHighlighted}
+        highlightLabel={isHighlighted ? highlightLabel : undefined}
         onPress={() => {
           dismissSuggestions();
           handleRidePress(item);

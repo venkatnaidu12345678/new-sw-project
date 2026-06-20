@@ -56,6 +56,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LAYOUT, getScrollBottomPadding } from "../theme/layout";
 import { useTheme } from "../context/ThemeContext";
 import { useThemedStyles } from "../theme/useThemedStyles";
+import { profileData } from "../Navigation/AuthNavigator";
+import {
+  bookingHighlightLabel,
+  goToDashboardWithRideHighlight,
+} from "../Utils/navigateToDashboardHighlight";
 
 const getRoleTheme = (c) => ({
   Passenger: {
@@ -166,6 +171,11 @@ const MyRequest = () => {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const {
+    setRefreshUpcomingrides,
+    setPendingHighlightRideId,
+    setPendingHighlightLabel,
+  } = profileData();
   const ROLE_THEME = getRoleTheme(colors);
   const [activeTab, setActiveTab] = useState("Passenger");
   const [passengerRides, setPassengerRides] = useState([]);
@@ -443,12 +453,28 @@ const MyRequest = () => {
             );
           }
         }
-        Alert.alert(
-          response.bookingStatus === "confirmed" ? "Booking confirmed" : "Request sent",
-          response.message || "Your seat request was sent to the driver."
-        );
+        const title =
+          response.bookingStatus === "confirmed" ? "Booking confirmed" : "Request sent";
         await fetchActiveTabRequests();
         closeSheet();
+        Alert.alert(
+          title,
+          response.message || "Your seat request was sent to the driver.",
+          [
+            {
+              text: "OK",
+              onPress: () =>
+                goToDashboardWithRideHighlight({
+                  navigation,
+                  rideId: ride._id,
+                  label: bookingHighlightLabel(response.bookingStatus),
+                  setRefreshUpcomingrides,
+                  setPendingHighlightRideId,
+                  setPendingHighlightLabel,
+                }),
+            },
+          ]
+        );
       } else {
         Alert.alert(
           "Request failed",
@@ -516,12 +542,28 @@ const MyRequest = () => {
             );
           }
         }
-        Alert.alert(
-          response.bookingStatus === "confirmed" ? "Booking confirmed" : "Request sent",
-          response.message || "Courier request sent to the driver."
-        );
+        const title =
+          response.bookingStatus === "confirmed" ? "Booking confirmed" : "Request sent";
         await fetchActiveTabRequests();
         closeSheet();
+        Alert.alert(
+          title,
+          response.message || "Courier request sent to the driver.",
+          [
+            {
+              text: "OK",
+              onPress: () =>
+                goToDashboardWithRideHighlight({
+                  navigation,
+                  rideId: ride._id,
+                  label: bookingHighlightLabel(response.bookingStatus),
+                  setRefreshUpcomingrides,
+                  setPendingHighlightRideId,
+                  setPendingHighlightLabel,
+                }),
+            },
+          ]
+        );
       } else {
         Alert.alert(
           "Request failed",

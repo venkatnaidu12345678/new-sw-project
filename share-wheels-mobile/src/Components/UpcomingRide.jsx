@@ -66,7 +66,7 @@ const MetaChip = ({ icon, label }) => {
   );
 };
 
-const UpcomingRide = ({ data, onPress }) => {
+const UpcomingRide = ({ data, onPress, highlighted = false, highlightLabel = "Your new ride" }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { ProfileDetails } = profileData() || {};
@@ -130,10 +130,16 @@ const UpcomingRide = ({ data, onPress }) => {
           ? { bg: colors.primaryMuted, text: colors.primaryText }
           : { bg: colors.surface, text: colors.textMuted };
 
-  const cardBorderColor = isAwaitingDriver ? colors.errorText : theme.border;
-  const accentColors = isAwaitingDriver
-    ? [colors.errorText, colors.errorBorder]
-    : theme.accent;
+  const cardBorderColor = highlighted
+    ? colors.primary
+    : isAwaitingDriver
+      ? colors.errorText
+      : theme.border;
+  const accentColors = highlighted
+    ? [colors.primary, colors.primaryText]
+    : isAwaitingDriver
+      ? [colors.errorText, colors.errorBorder]
+      : theme.accent;
   const cardBgColors = isAwaitingDriver
     ? [colors.errorBg, colors.surface, theme.bg[theme.bg.length - 1]]
     : theme.bg;
@@ -149,6 +155,7 @@ const UpcomingRide = ({ data, onPress }) => {
         styles.cardOuter,
         { borderColor: cardBorderColor },
         isAwaitingDriver && styles.cardOuterAwaiting,
+        highlighted && styles.cardOuterHighlighted,
       ]}
     >
       <LinearGradient
@@ -163,6 +170,15 @@ const UpcomingRide = ({ data, onPress }) => {
           end={{ x: 1, y: 0 }}
           style={[styles.topAccent, isAwaitingDriver && styles.topAccentAwaiting]}
         />
+
+        {highlighted ? (
+          <View style={[styles.newRideBanner, { backgroundColor: colors.primaryMuted }]}>
+            <Icon name="sparkles" size={14} color={colors.primaryText} />
+            <Text style={[styles.newRideBannerText, { color: colors.primaryText }]}>
+              {highlightLabel}
+            </Text>
+          </View>
+        ) : null}
 
         {isAwaitingDriver ? (
           <View style={[styles.awaitingBanner, { backgroundColor: colors.errorBg }]}>
@@ -279,6 +295,13 @@ const createStyles = (c) =>
     shadowRadius: 8,
     elevation: 3,
   },
+  cardOuterHighlighted: {
+    borderWidth: 2.5,
+    shadowColor: c.primary,
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    elevation: 5,
+  },
   cardGradient: {
     borderRadius: LAYOUT.radius.md - 1,
     overflow: "hidden",
@@ -304,6 +327,21 @@ const createStyles = (c) =>
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 0.2,
+  },
+  newRideBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: c.primary,
+  },
+  newRideBannerText: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.3,
   },
   cardInner: {
     paddingHorizontal: 10,

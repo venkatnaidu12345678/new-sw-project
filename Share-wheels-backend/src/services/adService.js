@@ -2,6 +2,10 @@ const mongoose = require("mongoose");
 const Ad = require("../models/adModel");
 const { AD_TYPES, AD_PLACEMENTS } = require("../models/adModel");
 const { uploadImageBuffer, uploadVideoBuffer, resolveFolder } = require("../config/cloudinary");
+const {
+  isAdVisibleOnMobile,
+  validateAdFields,
+} = require("../utils/adPlacementRules");
 
 const parseScheduleDate = (value) => {
   if (!value) return null;
@@ -29,9 +33,11 @@ const listActiveAds = async (query = {}) => {
 
   const active = ads.filter((ad) => isScheduledActive(ad, now));
 
+  const visible = active.filter(isAdVisibleOnMobile);
+
   return {
     status: 200,
-    body: { success: true, count: active.length, ads: active },
+    body: { success: true, count: visible.length, ads: visible },
   };
 };
 
@@ -70,6 +76,11 @@ const createAd = async (adminId, body) => {
   }
   if (!mediaUrl?.trim()) {
     return { status: 400, body: { success: false, message: "mediaUrl is required" } };
+  }
+
+  const validationError = validateAdFields({ type, placement, mediaUrl });
+  if (validationError) {
+    return { status: 400, body: { success: false, message: validationError.message } };
   }
 
   const ad = await Ad.create({
@@ -126,6 +137,19 @@ const updateAd = async (id, body) => {
     update.endsAt = update.endsAt ? parseScheduleDate(update.endsAt) : null;
   }
   if (update.priority !== undefined) update.priority = Number(update.priority) || 0;
+
+  const existing = await Ad.findById(id).lean();
+  if (!existing) return { status: 404, body: { success: false, message: "Ad not found" } };
+
+  const merged = {
+    type: update.type ?? existing.type,
+    placement: update.placement ?? existing.placement,
+    mediaUrl: update.mediaUrl ?? existing.mediaUrl,
+  };
+  const validationError = validateAdFields(merged);
+  if (validationError) {
+    return { status: 400, body: { success: false, message: validationError.message } };
+  }
 
   const ad = await Ad.findByIdAndUpdate(id, update, { returnDocument: "after", runValidators: true });
   if (!ad) return { status: 404, body: { success: false, message: "Ad not found" } };

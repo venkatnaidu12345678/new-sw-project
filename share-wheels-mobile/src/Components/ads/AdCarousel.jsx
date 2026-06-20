@@ -1,34 +1,32 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { View, StyleSheet, Dimensions } from "react-native";
+import { View, StyleSheet } from "react-native";
 import PagerView from "react-native-pager-view";
 import AdBanner from "./AdBanner";
 import AdVideo from "./AdVideo";
 import AdNative from "./AdNative";
-import { LAYOUT, scale } from "../../theme/layout";
+import { LAYOUT } from "../../theme/layout";
 import { isVideoAd } from "../../Utils/adMedia";
+import { getCarouselSlideHeight } from "./adCarouselLayout";
 
-const { width: SCREEN_W } = Dimensions.get("window");
 const AUTO_ADVANCE_MS = 6000;
-const HEIGHT_VIDEO = scale(188);
-const HEIGHT_COMPACT = scale(80);
 
-const renderSlide = (ad, style, { isActive, compact }) => {
+const renderSlide = (ad, style, { isActive, variant }) => {
   if (isVideoAd(ad)) {
     return (
       <AdVideo
         ad={ad}
         style={style}
-        compact={compact}
+        compact={false}
         isActive={isActive}
       />
     );
   }
   switch (ad.type) {
     case "native":
-      return <AdNative ad={ad} style={style} compact={compact} />;
+      return <AdNative ad={ad} style={style} compact={variant !== "carousel"} />;
     case "banner":
     default:
-      return <AdBanner ad={ad} style={style} compact={compact} />;
+      return <AdBanner ad={ad} style={style} variant={variant} />;
   }
 };
 
@@ -42,8 +40,9 @@ const AdCarousel = ({ ads = [], style, containerStyle }) => {
   });
 
   const currentAd = validAds[page];
-  const pagerHeight =
-    currentAd && isVideoAd(currentAd) ? HEIGHT_VIDEO : HEIGHT_COMPACT;
+  const pagerHeight = currentAd
+    ? getCarouselSlideHeight(currentAd, isVideoAd)
+    : getCarouselSlideHeight({ type: "banner" }, isVideoAd);
 
   const goNext = useCallback(() => {
     if (validAds.length <= 1) return;
@@ -63,10 +62,10 @@ const AdCarousel = ({ ads = [], style, containerStyle }) => {
   if (!validAds.length) return null;
 
   if (validAds.length === 1) {
-    const compact = !isVideoAd(validAds[0]);
+    const slideHeight = getCarouselSlideHeight(validAds[0], isVideoAd);
     return (
-      <View style={[containerStyle, { height: compact ? HEIGHT_COMPACT : HEIGHT_VIDEO }]}>
-        {renderSlide(validAds[0], style, { isActive: true, compact })}
+      <View style={[styles.singleWrap, containerStyle, { height: slideHeight }]}>
+        {renderSlide(validAds[0], style, { isActive: true, variant: "carousel" })}
       </View>
     );
   }
@@ -79,17 +78,14 @@ const AdCarousel = ({ ads = [], style, containerStyle }) => {
         initialPage={0}
         onPageSelected={(e) => setPage(e.nativeEvent.position)}
       >
-        {validAds.map((ad, index) => {
-          const compact = !isVideoAd(ad);
-          return (
-            <View key={ad._id} style={styles.page}>
-              {renderSlide(ad, [style, styles.slide], {
-                isActive: page === index,
-                compact,
-              })}
-            </View>
-          );
-        })}
+        {validAds.map((ad, index) => (
+          <View key={ad._id} style={[styles.page, { height: pagerHeight }]}>
+            {renderSlide(ad, [style, styles.slide], {
+              isActive: page === index,
+              variant: "carousel",
+            })}
+          </View>
+        ))}
       </PagerView>
       <View style={styles.dots}>
         {validAds.map((ad, i) => (
@@ -107,18 +103,27 @@ export default AdCarousel;
 
 const styles = StyleSheet.create({
   wrap: {
-    width: SCREEN_W - LAYOUT.spacing.screen * 2,
-    alignSelf: "center",
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  singleWrap: {
+    width: "100%",
+    alignSelf: "stretch",
+    overflow: "hidden",
   },
   pager: {
     width: "100%",
   },
   page: {
-    flex: 1,
+    width: "100%",
+    overflow: "hidden",
     justifyContent: "center",
+    alignItems: "stretch",
   },
   slide: {
     marginVertical: 0,
+    flex: 1,
+    alignSelf: "stretch",
   },
   dots: {
     flexDirection: "row",

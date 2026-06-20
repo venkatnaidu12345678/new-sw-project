@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   getAds,
   getAdsMeta,
@@ -17,15 +17,15 @@ import { usePagination } from "../hooks/usePagination";
 import IconActionButton, { TableActions } from "../components/ui/IconActionButton";
 import { IconEdit, IconPause, IconPlay, IconTrash } from "../components/ui/icons";
 import { Alert, btnClass, inputClass, Table, Th, Td } from "../components/ui/primitives";
-
-const PLACEMENT_LABELS = {
-  home_banner: "Home - Banner",
-  home_video: "Home - Video",
-  home_native: "Home - Native card",
-  search_results: "Search results",
-  ride_history: "Ride history",
-  profile: "Profile",
-};
+import AdMediaPreview from "../components/ads/AdMediaPreview";
+import {
+  PLACEMENT_LABELS,
+  PLACEMENT_RULES,
+  defaultTypeForPlacement,
+  getAllowedTypesForPlacement,
+  isAdVisibleOnMobile,
+  validateAdForm,
+} from "../utils/adRules";
 
 const emptyForm = {
   type: "banner",
@@ -42,14 +42,9 @@ const emptyForm = {
   endsAt: "",
 };
 
-const isLikelyVideoUrl = (url = "") =>
-  /\.(mp4|mov|webm|m4v|m3u8)(\?|#|$)/i.test(url) ||
-  url.includes("/video/upload/") ||
-  url.includes("resource_type=video");
-
 export default function Ads() {
   const [ads, setAds] = useState([]);
-  const [meta, setMeta] = useState({ types: [], placements: [] });
+  const [meta, setMeta] = useState({ types: [], placements: [], placementRules: PLACEMENT_RULES });
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -59,6 +54,13 @@ export default function Ads() {
   const [error, setError] = useState("");
   const [filterPlacement, setFilterPlacement] = useState("");
   const [search, setSearch] = useState("");
+
+  const placementRules = meta.placementRules || PLACEMENT_RULES;
+  const allowedTypes = useMemo(
+    () => getAllowedTypesForPlacement(form.placement),
+    [form.placement]
+  );
+  const placementHint = placementRules[form.placement]?.label || "";
 
   const load = () => {
     setLoading(true);
@@ -70,7 +72,15 @@ export default function Ads() {
   };
 
   useEffect(() => {
-    getAdsMeta().then(setMeta).catch(() => {});
+    getAdsMeta()
+      .then((res) =>
+        setMeta({
+          types: res.types || [],
+          placements: res.placements || Object.keys(PLACEMENT_LABELS),
+          placementRules: res.placementRules || PLACEMENT_RULES,
+        })
+      )
+      .catch(() => {});
     load();
   }, []);
 
@@ -91,6 +101,15 @@ export default function Ads() {
 
   const setField = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
+  const handlePlacementChange = (placement) => {
+    const nextType = defaultTypeForPlacement(placement);
+    setForm((f) => ({
+      ...f,
+      placement,
+      type: getAllowedTypesForPlacement(placement).includes(f.type) ? f.type : nextType,
+    }));
+  };
+
   const handleUpload = async (e, mediaType) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -100,6 +119,10 @@ export default function Ads() {
       const res = await uploadAdMedia(file, mediaType);
       setField("mediaUrl", res.url);
       if (res.posterUrl) setField("posterUrl", res.posterUrl);
+      if (mediaType === "video") setField("type", "video");
+      if (mediaType === "image" && form.placement === "home_video") {
+        setError("Home video placement requires a video file, not an image.");
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -137,6 +160,7 @@ export default function Ads() {
     setModalOpen(false);
     setEditingId(null);
     setForm(emptyForm);
+    setError("");
   };
 
   const handleSubmit = async (e) => {
@@ -145,10 +169,9 @@ export default function Ads() {
       setError("Upload or paste a media URL");
       return;
     }
-    if (form.type === "video" && !isLikelyVideoUrl(form.mediaUrl.trim())) {
-      setError(
-        "For video ads, mediaUrl must be a real video URL (mp4/webm/Cloudinary video)."
-      );
+    const validationMsg = validateAdForm(form);
+    if (validationMsg) {
+      setError(validationMsg);
       return;
     }
     setSaving(true);
@@ -203,9 +226,17 @@ export default function Ads() {
     return colors[type] || "bg-slate-100 text-slate-700 ring-slate-200";
   };
 
+  const canUploadImage = form.placement !== "home_video";
+  const canUploadVideo =
+    form.placement === "home_video" || allowedTypes.includes("video");
+
   return (
     <AdminPageShell>
-      <PageHeader compact title="Ads Manager" subtitle="Banner, native, and video placements for the mobile app">
+      <PageHeader
+        compact
+        title="Ads Manager"
+        subtitle="Manage mobile placements — banners (2.4:1 carousel), home video playlist, and native cards"
+      >
         <button type="button" className={btnClass("primary", "sm")} onClick={openCreate}>
           Create ad
         </button>
@@ -218,10 +249,16 @@ export default function Ads() {
           placeholder="Search title, type, placement…"
           onDebouncedChange={setSearch}
         />
-        <select className={inputClass("max-w-xs")} value={filterPlacement} onChange={(e) => setFilterPlacement(e.target.value)}>
+        <select
+          className={inputClass("max-w-xs")}
+          value={filterPlacement}
+          onChange={(e) => setFilterPlacement(e.target.value)}
+        >
           <option value="">All placements</option>
           {Object.entries(PLACEMENT_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
+            <option key={k} value={k}>
+              {v}
+            </option>
           ))}
         </select>
         <button type="button" className={btnClass("secondary", "sm")} onClick={load}>
@@ -241,6 +278,7 @@ export default function Ads() {
                   <Th sticky>Title</Th>
                   <Th sticky>Type</Th>
                   <Th sticky>Placement</Th>
+                  <Th sticky>App</Th>
                   <Th sticky>Priority</Th>
                   <Th sticky>Status</Th>
                   <Th sticky>Views / Clicks</Th>
@@ -250,140 +288,296 @@ export default function Ads() {
               <tbody className="divide-y divide-slate-100 bg-white">
                 {totalItems === 0 ? (
                   <tr>
-                    <Td colSpan={8} className="py-10 text-center text-slate-500">
+                    <Td colSpan={9} className="py-10 text-center text-slate-500">
                       No ads match your filters.
                     </Td>
                   </tr>
                 ) : (
-                  paginatedItems.map((ad) => (
-                <tr key={ad._id} className="hover:bg-slate-50/80">
-                  <Td>
-                    {ad.mediaUrl ? (
-                      ad.type === "video" ? (
-                        <video src={ad.mediaUrl} className="h-14 w-24 rounded-lg object-cover" muted />
-                      ) : (
-                        <img src={ad.mediaUrl} alt="" className="h-14 w-24 rounded-lg object-cover" />
-                      )
-                    ) : (
-                      <span className="text-slate-400">—</span>
-                    )}
-                  </Td>
-                  <Td>
-                    <div className="font-semibold text-slate-800">{ad.title || "Untitled"}</div>
-                    {ad.description ? <div className="text-xs text-slate-500">{ad.description}</div> : null}
-                  </Td>
-                  <Td>
-                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ring-1 ring-inset ${typeBadge(ad.type)}`}>
-                      {ad.type}
-                    </span>
-                  </Td>
-                  <Td>{PLACEMENT_LABELS[ad.placement] || ad.placement}</Td>
-                  <Td>{ad.priority ?? 0}</Td>
-                  <Td>
-                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold ring-1 ring-inset ${ad.isActive ? "bg-emerald-100 text-emerald-800 ring-emerald-200" : "bg-slate-100 text-slate-600 ring-slate-200"}`}>
-                      {ad.isActive ? "Active" : "Paused"}
-                    </span>
-                  </Td>
-                  <Td>{ad.impressions || 0} / {ad.clicks || 0}</Td>
-                  <Td>
-                    <TableActions>
-                      <IconActionButton icon={IconEdit} label="Edit ad" onClick={() => startEdit(ad)} />
-                      <IconActionButton
-                        icon={ad.isActive ? IconPause : IconPlay}
-                        label={ad.isActive ? "Pause ad" : "Activate ad"}
-                        variant="ghost"
-                        onClick={() => toggleActive(ad)}
-                      />
-                      <IconActionButton
-                        icon={IconTrash}
-                        label="Delete ad"
-                        variant="danger"
-                        onClick={() => handleDelete(ad._id)}
-                      />
-                    </TableActions>
-                  </Td>
-                </tr>
-              ))
+                  paginatedItems.map((ad) => {
+                    const visible = isAdVisibleOnMobile(ad);
+                    return (
+                      <tr key={ad._id} className="hover:bg-slate-50/80">
+                        <Td>
+                          {ad.mediaUrl ? (
+                            <AdMediaPreview ad={ad} size="thumb" />
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </Td>
+                        <Td>
+                          <div className="font-semibold text-slate-800">{ad.title || "Untitled"}</div>
+                          {ad.description ? (
+                            <div className="text-xs text-slate-500">{ad.description}</div>
+                          ) : null}
+                        </Td>
+                        <Td>
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ring-1 ring-inset ${typeBadge(ad.type)}`}
+                          >
+                            {ad.type}
+                          </span>
+                        </Td>
+                        <Td>{PLACEMENT_LABELS[ad.placement] || ad.placement}</Td>
+                        <Td>
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold ring-1 ring-inset ${
+                              visible
+                                ? "bg-emerald-100 text-emerald-800 ring-emerald-200"
+                                : "bg-amber-100 text-amber-800 ring-amber-200"
+                            }`}
+                            title={
+                              visible
+                                ? "Will appear in the mobile app"
+                                : "Hidden on mobile — fix type, media, or placement"
+                            }
+                          >
+                            {visible ? "Visible" : "Hidden"}
+                          </span>
+                        </Td>
+                        <Td>{ad.priority ?? 0}</Td>
+                        <Td>
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold ring-1 ring-inset ${
+                              ad.isActive
+                                ? "bg-emerald-100 text-emerald-800 ring-emerald-200"
+                                : "bg-slate-100 text-slate-600 ring-slate-200"
+                            }`}
+                          >
+                            {ad.isActive ? "Active" : "Paused"}
+                          </span>
+                        </Td>
+                        <Td>
+                          {ad.impressions || 0} / {ad.clicks || 0}
+                        </Td>
+                        <Td>
+                          <TableActions>
+                            <IconActionButton icon={IconEdit} label="Edit ad" onClick={() => startEdit(ad)} />
+                            <IconActionButton
+                              icon={ad.isActive ? IconPause : IconPlay}
+                              label={ad.isActive ? "Pause ad" : "Activate ad"}
+                              variant="ghost"
+                              onClick={() => toggleActive(ad)}
+                            />
+                            <IconActionButton
+                              icon={IconTrash}
+                              label="Delete ad"
+                              variant="danger"
+                              onClick={() => handleDelete(ad._id)}
+                            />
+                          </TableActions>
+                        </Td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </Table>
-            <Pagination page={page} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} onPageChange={setPage} />
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              pageSize={pageSize}
+              onPageChange={setPage}
+            />
           </>
         )}
       </AdminTablePanel>
 
       {modalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={closeModal} role="presentation">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"
+          onClick={closeModal}
+          role="presentation"
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
             <div className="mb-4 flex items-start justify-between gap-4">
-              <h2 className="text-xl font-bold text-slate-900">{editingId ? "Edit ad" : "Create new ad"}</h2>
-              <button type="button" className={btnClass("ghost", "sm")} onClick={closeModal}>Close</button>
+              <h2 className="text-xl font-bold text-slate-900">
+                {editingId ? "Edit ad" : "Create new ad"}
+              </h2>
+              <button type="button" className={btnClass("ghost", "sm")} onClick={closeModal}>
+                Close
+              </button>
             </div>
             {error ? <Alert className="mb-4">{error}</Alert> : null}
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block text-sm">
-                  <span className="mb-1 block font-semibold text-slate-700">Type</span>
-                  <select className={inputClass()} value={form.type} onChange={(e) => setField("type", e.target.value)}>
-                    {(meta.types || ["banner", "video", "native"]).map((t) => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block text-sm">
-                  <span className="mb-1 block font-semibold text-slate-700">Placement</span>
-                  <select className={inputClass()} value={form.placement} onChange={(e) => setField("placement", e.target.value)}>
-                    {(meta.placements || Object.keys(PLACEMENT_LABELS)).map((p) => (
-                      <option key={p} value={p}>{PLACEMENT_LABELS[p] || p}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
+              <label className="block text-sm">
+                <span className="mb-1 block font-semibold text-slate-700">Placement</span>
+                <select
+                  className={inputClass()}
+                  value={form.placement}
+                  onChange={(e) => handlePlacementChange(e.target.value)}
+                >
+                  {(meta.placements || Object.keys(PLACEMENT_LABELS)).map((p) => (
+                    <option key={p} value={p}>
+                      {PLACEMENT_LABELS[p] || p}
+                    </option>
+                  ))}
+                </select>
+                {placementHint ? (
+                  <p className="mt-1.5 text-xs leading-relaxed text-slate-500">{placementHint}</p>
+                ) : null}
+              </label>
+
+              <label className="block text-sm">
+                <span className="mb-1 block font-semibold text-slate-700">Type</span>
+                <select
+                  className={inputClass()}
+                  value={form.type}
+                  onChange={(e) => setField("type", e.target.value)}
+                >
+                  {allowedTypes.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <label className="block text-sm">
                 <span className="mb-1 block font-semibold text-slate-700">Title</span>
-                <input className={inputClass()} value={form.title} onChange={(e) => setField("title", e.target.value)} placeholder="Ad title" />
+                <input
+                  className={inputClass()}
+                  value={form.title}
+                  onChange={(e) => setField("title", e.target.value)}
+                  placeholder="Ad title"
+                />
               </label>
               <label className="block text-sm">
                 <span className="mb-1 block font-semibold text-slate-700">Description</span>
-                <input className={inputClass()} value={form.description} onChange={(e) => setField("description", e.target.value)} placeholder="Short description" />
+                <input
+                  className={inputClass()}
+                  value={form.description}
+                  onChange={(e) => setField("description", e.target.value)}
+                  placeholder="Short description (native ads)"
+                />
               </label>
               <label className="block text-sm">
                 <span className="mb-1 block font-semibold text-slate-700">Media URL *</span>
-                <input className={inputClass()} value={form.mediaUrl} onChange={(e) => setField("mediaUrl", e.target.value)} placeholder="https://..." />
+                <input
+                  className={inputClass()}
+                  value={form.mediaUrl}
+                  onChange={(e) => setField("mediaUrl", e.target.value)}
+                  placeholder={
+                    form.placement === "home_video"
+                      ? "https://…/video.mp4 or Cloudinary video URL"
+                      : "https://… image URL"
+                  }
+                />
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <label className={`${btnClass("secondary", "sm")} cursor-pointer`}>
-                    {uploading ? "Uploading..." : "Upload image"}
-                    <input type="file" accept="image/*" hidden onChange={(e) => handleUpload(e, "image")} />
-                  </label>
-                  {form.type === "video" ? (
+                  {canUploadImage ? (
                     <label className={`${btnClass("secondary", "sm")} cursor-pointer`}>
-                      Upload video
-                      <input type="file" accept="video/*" hidden onChange={(e) => handleUpload(e, "video")} />
+                      {uploading ? "Uploading..." : "Upload image"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        onChange={(e) => handleUpload(e, "image")}
+                      />
+                    </label>
+                  ) : null}
+                  {canUploadVideo ? (
+                    <label className={`${btnClass("secondary", "sm")} cursor-pointer`}>
+                      {uploading ? "Uploading..." : "Upload video"}
+                      <input
+                        type="file"
+                        accept="video/*"
+                        hidden
+                        onChange={(e) => handleUpload(e, "video")}
+                      />
                     </label>
                   ) : null}
                 </div>
               </label>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block text-sm">
+                  <span className="mb-1 block font-semibold text-slate-700">CTA label</span>
+                  <input
+                    className={inputClass()}
+                    value={form.ctaLabel}
+                    onChange={(e) => setField("ctaLabel", e.target.value)}
+                  />
+                </label>
+                <label className="block text-sm">
+                  <span className="mb-1 block font-semibold text-slate-700">CTA URL</span>
+                  <input
+                    className={inputClass()}
+                    value={form.ctaUrl}
+                    onChange={(e) => setField("ctaUrl", e.target.value)}
+                    placeholder="https://"
+                  />
+                </label>
+              </div>
+
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block text-sm">
                   <span className="mb-1 block font-semibold text-slate-700">Priority</span>
-                  <input className={inputClass()} type="number" value={form.priority} onChange={(e) => setField("priority", e.target.value)} />
+                  <input
+                    className={inputClass()}
+                    type="number"
+                    value={form.priority}
+                    onChange={(e) => setField("priority", e.target.value)}
+                  />
+                  <p className="mt-1 text-xs text-slate-500">
+                    Higher priority shows first. Home video ads play in priority order.
+                  </p>
                 </label>
                 <label className="flex items-center gap-2 pt-8 text-sm font-semibold text-slate-700">
-                  <input type="checkbox" checked={form.isActive} onChange={(e) => setField("isActive", e.target.checked)} className="h-4 w-4 rounded" />
+                  <input
+                    type="checkbox"
+                    checked={form.isActive}
+                    onChange={(e) => setField("isActive", e.target.checked)}
+                    className="h-4 w-4 rounded"
+                  />
                   Active
                 </label>
               </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block text-sm">
+                  <span className="mb-1 block font-semibold text-slate-700">Starts at</span>
+                  <input
+                    className={inputClass()}
+                    type="datetime-local"
+                    value={form.startsAt}
+                    onChange={(e) => setField("startsAt", e.target.value)}
+                  />
+                </label>
+                <label className="block text-sm">
+                  <span className="mb-1 block font-semibold text-slate-700">Ends at</span>
+                  <input
+                    className={inputClass()}
+                    type="datetime-local"
+                    value={form.endsAt}
+                    onChange={(e) => setField("endsAt", e.target.value)}
+                  />
+                </label>
+              </div>
+
               {form.mediaUrl ? (
-                <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-                  {form.type === "video" ? (
-                    <video src={form.mediaUrl} poster={form.posterUrl || undefined} className="max-h-48 w-full object-contain" muted autoPlay loop playsInline />
-                  ) : (
-                    <img src={form.mediaUrl} alt="Preview" className="max-h-48 w-full object-contain" />
-                  )}
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Mobile preview
+                  </p>
+                  <AdMediaPreview ad={form} size="modal" />
+                  {!isAdVisibleOnMobile(form) ? (
+                    <p className="mt-2 text-xs text-amber-700">
+                      This combination will not appear in the app — check type, media URL, and
+                      placement.
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
+
               <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-                <button type="button" className={btnClass("secondary")} onClick={closeModal}>Cancel</button>
+                <button type="button" className={btnClass("secondary")} onClick={closeModal}>
+                  Cancel
+                </button>
                 <button type="submit" className={btnClass("primary")} disabled={saving}>
                   {saving ? "Saving..." : editingId ? "Update ad" : "Create ad"}
                 </button>

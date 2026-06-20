@@ -24,7 +24,7 @@ import {
   showAppAlert,
 } from "../Utils/appAlert";
 import { useSuggestedRideFare } from "../hooks/useSuggestedRideFare";
-import { mapApiVehicleToProfileInfo } from "../Utils/vehicleProfileMap";
+import { goToDashboardWithRideHighlight } from "../Utils/navigateToDashboardHighlight";
 
 const hasCompleteVehicle = (info) =>
   !!(info?.vehicleCompany?.trim() && info?.vehicleModel?.trim());
@@ -34,8 +34,13 @@ const CreateRidePage = () => {
   const { colors } = useTheme();
   const CR = getCreateRideTheme(colors);
   const formRef = useRef(null);
-  const { setRefreshUpcomingrides, ProfileDetails, SetProfileDetails } =
-    profileData();
+  const {
+    setRefreshUpcomingrides,
+    setPendingHighlightRideId,
+    setPendingHighlightLabel,
+    ProfileDetails,
+    SetProfileDetails,
+  } = profileData();
 
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -190,18 +195,27 @@ const CreateRidePage = () => {
       const response = await createRideApi(token, payload);
 
       if (response?.success) {
+        const newRideId =
+          response?.data?.ride?._id ||
+          response?.data?.ride?.id ||
+          response?.data?._id ||
+          null;
+
+        const goToDashboard = () => {
+          goToDashboardWithRideHighlight({
+            navigation,
+            rideId: newRideId,
+            label: "Your new ride",
+            setRefreshUpcomingrides,
+            setPendingHighlightRideId,
+            setPendingHighlightLabel,
+          });
+        };
+
         showAppAlert(
           "Ride published",
           "Your ride is live. Passengers can now find and join it.",
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                setRefreshUpcomingrides((prev) => !prev);
-                navigation.navigate("Navigator", { screen: "Home" });
-              },
-            },
-          ],
+          [{ text: "OK", onPress: goToDashboard }],
           "success"
         );
       } else {
