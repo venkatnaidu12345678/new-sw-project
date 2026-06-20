@@ -165,8 +165,8 @@ const CreateRidePage = () => {
       return;
     }
 
+    setLoading(true);
     try {
-      setLoading(true);
       const token = await AsyncStorage.getItem("token");
       if (!token) {
         alertError("User not authenticated", "Sign in required");
@@ -343,6 +343,7 @@ const CreateRidePage = () => {
       {!routeMapFullscreen ? (
         <FixedButton
           title="Publish ride"
+          loadingTitle="Publishing…"
           onPress={handlePress}
           loading={loading}
           disabled={loading}

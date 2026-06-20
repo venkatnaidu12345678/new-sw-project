@@ -46,12 +46,117 @@ const serializeParticipant = (p) => {
   };
 };
 
-/** Normalize GET /chat/tracking API body for the map. */
+const locationUpdatedAtMs = (loc) => {
+  if (!loc?.updatedAt) return 0;
+  const t = new Date(loc.updatedAt).getTime();
+  return Number.isFinite(t) ? t : 0;
+};
+
+const pickNewerPoint = (left, right) => {
+  const leftPt = toPoint(left);
+  const rightPt = toPoint(right);
+  if (!leftPt && !rightPt) return null;
+  if (!leftPt) return rightPt;
+  if (!rightPt) return leftPt;
+  const leftAt = locationUpdatedAtMs(left) || locationUpdatedAtMs(leftPt);
+  const rightAt = locationUpdatedAtMs(right) || locationUpdatedAtMs(rightPt);
+  return rightAt >= leftAt ? rightPt : leftPt;
+};
+
+const pickNewerParticipant = (left, right) => {
+  if (!left) return right ? serializeParticipant(right) : null;
+  if (!right) return serializeParticipant(left);
+  const nextPt = pickNewerPoint(left, right);
+  return serializeParticipant({
+    ...left,
+    ...right,
+    ...(nextPt || {}),
+    lat: nextPt?.lat ?? right.lat ?? left.lat,
+    lng: nextPt?.lng ?? right.lng ?? left.lng,
+    updatedAt:
+      locationUpdatedAtMs(right) >= locationUpdatedAtMs(left)
+        ? right.updatedAt ?? left.updatedAt
+        : left.updatedAt ?? right.updatedAt,
+  });
+};
+
+/** Merge GET /tracking poll (or snapshot) into existing map state without dropping GPS. */
+export const mergeTrackingFromPoll = (prev, incoming) => {
+  if (!incoming) return prev;
+  const next = normalizeTrackingApi(incoming);
+  if (!next) return prev;
+  if (!prev) return next;
+
+  const prevLt = prev.liveTracking || {};
+  const nextLt = next.liveTracking || {};
+
+  const driverPoint = pickNewerPoint(prevLt.driverLocation, nextLt.driverLocation);
+  const driverLocation = driverPoint
+    ? {
+        ...driverPoint,
+        updatedAt:
+          locationUpdatedAtMs(nextLt.driverLocation) >=
+          locationUpdatedAtMs(prevLt.driverLocation)
+            ? nextLt.driverLocation?.updatedAt ?? prevLt.driverLocation?.updatedAt
+            : prevLt.driverLocation?.updatedAt ?? nextLt.driverLocation?.updatedAt,
+      }
+    : prevLt.driverLocation || nextLt.driverLocation || null;
+
+  const byKey = new Map();
+  (prevLt.participantLocations || []).forEach((p) => {
+    const key = `${participantKey(p)}:${normalizeRole(p.role)}`;
+    if (key) byKey.set(key, serializeParticipant(p));
+  });
+  (nextLt.participantLocations || []).forEach((p) => {
+    const key = `${participantKey(p)}:${normalizeRole(p.role)}`;
+    if (!key) return;
+    byKey.set(key, pickNewerParticipant(byKey.get(key), p));
+  });
+
+  const prevHist = prevLt.locationHistory || [];
+  const nextHist = nextLt.locationHistory || [];
+  const locationHistory = nextHist.length >= prevHist.length ? nextHist : prevHist;
+
+  return {
+    ...prev,
+    ...next,
+    from: next.from ?? prev.from,
+    to: next.to ?? prev.to,
+    status: next.status ?? prev.status,
+    fromCoords: next.fromCoords ?? prev.fromCoords,
+    toCoords: next.toCoords ?? prev.toCoords,
+    routePolyline: next.routePolyline || prev.routePolyline,
+    stopovers: next.stopovers?.length ? next.stopovers : prev.stopovers,
+    passengers: next.passengers?.length ? next.passengers : prev.passengers,
+    couriers: next.couriers?.length ? next.couriers : prev.couriers,
+    myUserId: next.myUserId || prev.myUserId,
+    liveTracking: {
+      ...prevLt,
+      ...nextLt,
+      driverLocation,
+      participantLocations: Array.from(byKey.values()),
+      locationHistory,
+    },
+  };
+};
+
+/** Normalize GET /chat/tracking API body (or socket payload) for the map. */
 export const normalizeTrackingApi = (apiBody) => {
   if (!apiBody) return null;
   const lt = apiBody.liveTracking || {};
-  const participants = (lt.participantLocations || []).map(serializeParticipant);
-  const driverLocation = toPoint(lt.driverLocation);
+  const participantSource =
+    (Array.isArray(lt.participantLocations) && lt.participantLocations.length
+      ? lt.participantLocations
+      : null) ||
+    (Array.isArray(apiBody.participantLocations) ? apiBody.participantLocations : []);
+  const participants = participantSource.map(serializeParticipant);
+  const driverLocation = toPoint(lt.driverLocation || apiBody.driverLocation);
+  const locationHistory =
+    (Array.isArray(lt.locationHistory) && lt.locationHistory.length
+      ? lt.locationHistory
+      : null) ||
+    (Array.isArray(apiBody.path) ? apiBody.path : []) ||
+    [];
 
   return {
     success: apiBody.success,
@@ -70,10 +175,14 @@ export const normalizeTrackingApi = (apiBody) => {
     liveTracking: {
       ...lt,
       driverLocation: driverLocation
-        ? { ...driverLocation, updatedAt: lt.driverLocation?.updatedAt }
+        ? {
+            ...driverLocation,
+            updatedAt:
+              lt.driverLocation?.updatedAt ?? apiBody.driverLocation?.updatedAt,
+          }
         : null,
       participantLocations: participants,
-      locationHistory: lt.locationHistory || [],
+      locationHistory,
     },
   };
 };
@@ -107,9 +216,7 @@ export const mergeSocketLocation = (prev, payload) => {
   }
 
   if (Array.isArray(payload.participantLocations)) {
-    if (payload.participantLocations.length === 0) {
-      participants = [];
-    } else {
+    if (payload.participantLocations.length > 0) {
       const byId = new Map();
       participants.forEach((p) => {
         const k = participantKey(p);

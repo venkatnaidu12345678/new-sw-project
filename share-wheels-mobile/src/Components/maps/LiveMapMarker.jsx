@@ -1,6 +1,4 @@
 import React, { useEffect, useRef } from "react";
-import { Platform } from "react-native";
-
 const MIN_MOVE_DEG_SQ = 1e-10;
 const ANIM_MS = 550;
 
@@ -24,11 +22,7 @@ const LiveMapMarker = ({
     const prev = prevCoordRef.current;
     const ref = markerRef.current;
 
-    if (
-      Platform.OS !== "android" &&
-      prev &&
-      ref?.animateMarkerToCoordinate
-    ) {
+    if (prev && ref?.animateMarkerToCoordinate) {
       const dLat = next.latitude - prev.latitude;
       const dLng = next.longitude - prev.longitude;
       if (dLat * dLat + dLng * dLng > MIN_MOVE_DEG_SQ) {

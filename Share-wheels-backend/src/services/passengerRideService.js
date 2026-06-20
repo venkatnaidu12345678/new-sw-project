@@ -111,22 +111,6 @@ const pickPassenger = async (user, { passenger_rideId, rideId }) => {
   }
 
   return withRidePickLock(rideId, async () => {
-  const entitlement = await driverSubscriptionService.assertCanPickEnroute(
-    user._id,
-    rideId
-  );
-  if (!entitlement.ok) {
-    return {
-      status: entitlement.status || 403,
-      body: {
-        success: false,
-        message: entitlement.message,
-        code: entitlement.code,
-        subscription: entitlement.subscription || null,
-      },
-    };
-  }
-
   const passengerRide = await PassengerRide.findById(passenger_rideId);
   if (!passengerRide) {
     return {
@@ -138,7 +122,9 @@ const pickPassenger = async (user, { passenger_rideId, rideId }) => {
       },
     };
   }
-  if (passengerRide.creator.toString() === user._id.toString()) return { status: 400, body: { message: "You cannot pick your own request" } };
+  if (passengerRide.creator.toString() === user._id.toString()) {
+    return { status: 400, body: { message: "You cannot pick your own request" } };
+  }
   if (passengerRide.status === "expired") {
     return { status: 400, body: { message: "This passenger request has expired" } };
   }
@@ -161,6 +147,22 @@ const pickPassenger = async (user, { passenger_rideId, rideId }) => {
         success: false,
         message: LOCKED_TO_OTHER_DRIVER_MESSAGE,
         code: "ALREADY_PICKED",
+      },
+    };
+  }
+
+  const entitlement = await driverSubscriptionService.assertCanPickEnroute(
+    user._id,
+    rideId
+  );
+  if (!entitlement.ok) {
+    return {
+      status: entitlement.status || 403,
+      body: {
+        success: false,
+        message: entitlement.message,
+        code: entitlement.code,
+        subscription: entitlement.subscription || null,
       },
     };
   }

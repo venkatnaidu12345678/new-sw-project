@@ -625,8 +625,6 @@ const sendPassengerRequest = async (
 
   const requestPerSeat = await resolvePassengerRequestPerSeatAmount(userId, {
     standalonePassengerRideId,
-    requestedFrom,
-    requestedTo,
     amount_will,
   });
 
@@ -774,10 +772,10 @@ const validateSegmentOnRideCorridor = async (ride, from, to) => {
   return { from: fromLabel, to: toLabel };
 };
 
-/** Use passenger/courier request offer — never admin tier math when a standalone request exists. */
+/** Use passenger/courier request offer only when explicitly linked in the booking payload. */
 const resolvePassengerRequestPerSeatAmount = async (
   userId,
-  { standalonePassengerRideId, requestedFrom, requestedTo, amount_will } = {}
+  { standalonePassengerRideId, amount_will } = {}
 ) => {
   const fromBody = parseAmount(amount_will);
   if (fromBody != null && fromBody > 0) return fromBody;
@@ -792,37 +790,10 @@ const resolvePassengerRequestPerSeatAmount = async (
     const passengerRide = await PassengerRide.findById(standalonePassengerRideId)
       .select("amount_will creator")
       .lean();
-    const amount = amountFromDoc(passengerRide);
-    if (amount) return amount;
+    return amountFromDoc(passengerRide);
   }
 
-  const from = normalizeRouteLabel(requestedFrom);
-  const to = normalizeRouteLabel(requestedTo);
-  if (from && to) {
-    const passengerRide = await PassengerRide.findOne({
-      creator: userId,
-      status: "pending",
-      from,
-      to,
-      $or: [{ assigned_to: { $exists: false } }, { "assigned_to.rideId": null }],
-    })
-      .sort({ updatedAt: -1 })
-      .select("amount_will creator")
-      .lean();
-    const amount = amountFromDoc(passengerRide);
-    if (amount) return amount;
-  }
-
-  const openRequest = await PassengerRide.findOne({
-    creator: userId,
-    status: "pending",
-    $or: [{ assigned_to: { $exists: false } }, { "assigned_to.rideId": null }],
-  })
-    .sort({ updatedAt: -1 })
-    .select("amount_will creator")
-    .lean();
-
-  return amountFromDoc(openRequest);
+  return null;
 };
 
 const findLinkedPassengerRideSegment = async (userId, rideId) => {

@@ -10,16 +10,18 @@ import {
 import {
   normalizeRideId,
   normalizeTrackingApi,
-  mergeSocketLocation,
+  mergeTrackingFromPoll,
   applyLocalGps,
   countOnMap,
   filterTrackingForViewer,
 } from "../liveTracking/liveTrackingState";
+import { getRideTracking } from "../ApiService/chatApiServices";
 import { subscribeGpsUpdates, subscribeLocationWatch } from "../Utils/gpsService";
 import { hasLocationPermission } from "../Utils/locationPermissions";
 import { getPublishingRideId } from "../liveTracking/liveLocationPublisher";
 
 const LOCAL_GPS_THROTTLE_MS = 500;
+const TRACKING_POLL_MS = 3000;
 
 const coordKey = (n) => Number(n).toFixed(6);
 
@@ -52,7 +54,7 @@ const trackingFingerprint = (tracking) => {
 };
 
 /**
- * Live map state: socket-only (snapshot + locationUpdate + local GPS).
+ * Live map state: socket updates + GET /tracking poll every 3s + local GPS.
  */
 export function useLiveRideMap({
   rideId,
@@ -72,6 +74,7 @@ export function useLiveRideMap({
   const lastLocalGpsAt = useRef(0);
   const trackingFpRef = useRef("");
   const snapshotReceivedRef = useRef(false);
+  const pollInFlightRef = useRef(false);
 
   useEffect(() => {
     if (tokenProp) setToken(tokenProp);
@@ -123,23 +126,21 @@ export function useLiveRideMap({
   );
 
   const applySnapshot = useCallback(
-    (snapshot) => {
-      if (!snapshot || normalizeRideId(snapshot.rideId) !== rid) return;
-      const normalized = normalizeTrackingApi(snapshot);
-      if (!normalized) return;
+    (snapshot, { fromPoll = false } = {}) => {
+      if (!snapshot) return;
+      const snapRideId = normalizeRideId(snapshot.rideId) || rid;
+      if (snapRideId !== rid) return;
+
       snapshotReceivedRef.current = true;
       setSnapshotReceived(true);
-      setSocketLive(true);
+      if (!fromPoll) setSocketLive(true);
+
       setTrackingIfChanged((prev) => {
-        if (!prev) return normalized;
-        return mergeSocketLocation(normalized, {
-          rideId: rid,
-          ...snapshot,
-          path:
-            snapshot.liveTracking?.locationHistory ||
-            snapshot.path ||
-            [],
-        });
+        const payload = { ...snapshot, rideId: rid };
+        if (fromPoll || prev) {
+          return mergeTrackingFromPoll(prev, payload);
+        }
+        return normalizeTrackingApi(payload);
       });
     },
     [rid, setTrackingIfChanged]
@@ -151,11 +152,28 @@ export function useLiveRideMap({
     if (body) applySnapshot(body);
   }, [rid, token, applySnapshot]);
 
+  const pollTrackingApi = useCallback(async () => {
+    if (!rid || !token || pollInFlightRef.current) return;
+    pollInFlightRef.current = true;
+    try {
+      const body = await getRideTracking(token, rid);
+      if (body && body.success !== false) {
+        applySnapshot({ ...body, rideId: rid }, { fromPoll: true });
+      }
+    } catch (e) {
+      if (__DEV__) console.warn("[live-map] poll:", e?.message);
+    } finally {
+      pollInFlightRef.current = false;
+    }
+  }, [rid, token, applySnapshot]);
+
   const onSocketPayload = useCallback(
     (payload) => {
       if (normalizeRideId(payload?.rideId) !== rid) return;
       setSocketLive(true);
-      setTrackingIfChanged((prev) => mergeSocketLocation(prev, payload));
+      setTrackingIfChanged((prev) =>
+        mergeTrackingFromPoll(prev, { ...payload, rideId: rid })
+      );
     },
     [rid, setTrackingIfChanged]
   );
@@ -256,6 +274,14 @@ export function useLiveRideMap({
   ]);
 
   useEffect(() => {
+    if (!enabled || !rid || !token) return undefined;
+
+    pollTrackingApi();
+    const interval = setInterval(pollTrackingApi, TRACKING_POLL_MS);
+    return () => clearInterval(interval);
+  }, [enabled, rid, token, pollTrackingApi]);
+
+  useEffect(() => {
     if (!enabled) return undefined;
     let active = true;
     let unsubCache = () => {};
@@ -327,7 +353,7 @@ export function useLiveRideMap({
       parts.push(`${counts.passengers} passenger${counts.passengers > 1 ? "s" : ""}`);
     if (counts.couriers)
       parts.push(`${counts.couriers} courier${counts.couriers > 1 ? "s" : ""}`);
-    const live = socketLive ? " · live" : "";
+    const live = socketLive ? " · live" : " · updating";
     return `${parts.join(", ")} on map${live}`;
   }, [enabled, permission, counts, localGps, socketLive, myRole]);
 

@@ -622,24 +622,6 @@ const pickCourier = async (user, { rideId, courierId }) => {
   }
 
   return withRidePickLock(rideId, async () => {
-  const entitlement = await driverSubscriptionService.assertCanPickEnroute(
-    user._id,
-    rideId
-  );
-  if (!entitlement.ok) {
-    return {
-      status: entitlement.status || 403,
-      body: {
-        success: false,
-        message: entitlement.message,
-        code: entitlement.code,
-        subscription: entitlement.subscription || null,
-      },
-    };
-  }
-
-  let ride = await Ride.findById(rideId);
-  if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
   const courier = await Courier.findById(courierId);
   if (!courier) {
     return {
@@ -674,6 +656,25 @@ const pickCourier = async (user, { rideId, courierId }) => {
       },
     };
   }
+
+  const entitlement = await driverSubscriptionService.assertCanPickEnroute(
+    user._id,
+    rideId
+  );
+  if (!entitlement.ok) {
+    return {
+      status: entitlement.status || 403,
+      body: {
+        success: false,
+        message: entitlement.message,
+        code: entitlement.code,
+        subscription: entitlement.subscription || null,
+      },
+    };
+  }
+
+  let ride = await Ride.findById(rideId);
+  if (!ride) return { status: 404, body: { success: false, message: "Ride not found" } };
 
   if (ride.creator.toString() !== user._id.toString()) {
     return { status: 403, body: { success: false, message: "Unauthorized" } };

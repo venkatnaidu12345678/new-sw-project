@@ -24,6 +24,7 @@ import {
   getEnrouteSiblingNote,
   ENROUTE_ALREADY_PICKED_MESSAGE,
   isEnrouteRequestUnavailableError,
+  isEnrouteSubscriptionError,
 } from "../Utils/enrouteRequestUtils";
 import { useEnrouteRequests } from "../hooks/useEnrouteRequests";
 
@@ -495,12 +496,12 @@ const EnRoutePassengers = ({
             "Cannot pick",
             response?.message || "This user is already on your ride."
           );
-        } else if (response?.code && onSubscriptionRequired) {
-          onSubscriptionRequired(response);
         } else if (isEnrouteRequestUnavailableError(response)) {
           removeItem?.(item.id);
           onRefresh?.();
           Alert.alert("Already picked", ENROUTE_ALREADY_PICKED_MESSAGE);
+        } else if (isEnrouteSubscriptionError(response) && onSubscriptionRequired) {
+          onSubscriptionRequired(response);
         } else {
           Alert.alert("Error", response?.message || "Failed");
         }

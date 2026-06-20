@@ -57,6 +57,7 @@ const RideLiveMap = () => {
   const [myName, setMyName] = useState(null);
   const [selectedParticipantId, setSelectedParticipantId] = useState(focusParticipantId);
   const [mapFullscreen, setMapFullscreen] = useState(false);
+  const [routeFitNonce, setRouteFitNonce] = useState(0);
 
   const isStarted = rideStatus === "started" || rideStatus === "Started";
 
@@ -91,7 +92,7 @@ const RideLiveMap = () => {
     return () => sub.remove();
   }, [mapFullscreen]);
 
-  const { tracking, permission, loading: trackingLoading } = useLiveRideMap({
+  const { tracking, permission, loading: trackingLoading, statusHint } = useLiveRideMap({
     rideId,
     token,
     enabled: isStarted && !!token && !!rideId,
@@ -123,8 +124,7 @@ const RideLiveMap = () => {
       to: tracking?.to,
       stopovers: tracking?.stopovers || [],
     },
-    savedRoutePolyline,
-    { socketOnly: true }
+    savedRoutePolyline
   );
 
   const effectiveRole = myRole || tracking?.role;
@@ -147,6 +147,13 @@ const RideLiveMap = () => {
     () => findParticipantRouteByKey(participantRoutes, selectedParticipantId),
     [participantRoutes, selectedParticipantId]
   );
+
+  const isDefaultRideView = isDriver && isStarted && !selectedParticipantId;
+
+  const selectDefaultRideView = () => {
+    setSelectedParticipantId(null);
+    setRouteFitNonce((n) => n + 1);
+  };
 
   const driverLocation = tracking?.liveTracking?.driverLocation;
 
@@ -260,7 +267,7 @@ const RideLiveMap = () => {
           loading={mapLoading}
           loadingText="Loading map…"
           showMyLocation={isStarted && permission}
-          gpsStatusText={mapGpsHint}
+          gpsStatusText={mapGpsHint || statusHint}
           fullscreenTitle={rideTitle || "Live map"}
           isFullscreen={mapFullscreen}
           onFullscreenChange={setMapFullscreen}
@@ -273,25 +280,67 @@ const RideLiveMap = () => {
             isDriver && selectedParticipant ? driverLegPath : []
           }
           participantEndpointMarkers={
-            isDriver && !selectedParticipant ? rideEndpointMarkers : []
+            isDriver && isStarted && !selectedParticipantId ? rideEndpointMarkers : []
           }
           navigationTargetMarker={
             isDriver && selectedParticipant ? navigationTargetMarker : null
           }
-          participantNavActive={isDriver && !!selectedParticipant}
+          participantNavActive={isDriver && isStarted && !!selectedParticipant}
           driverControls={isDriver && isStarted}
-          driverPickOnly={isDriver && isStarted}
+          driverPickOnly={isDriver && isStarted && !!selectedParticipant}
+          defaultRideView={isDefaultRideView}
+          routeFitNonce={routeFitNonce}
         />
       </View>
 
       {!mapFullscreen ? (
       <View style={styles.footer}>
-        {isDriver && isStarted && participantRoutes.length > 0 ? (
+        {isDriver && isStarted ? (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.participantChips}
           >
+            <TouchableOpacity
+              style={[
+                styles.participantChip,
+                isDefaultRideView && styles.participantChipActive,
+                isDefaultRideView && { borderColor: colors.primary },
+              ]}
+              onPress={selectDefaultRideView}
+              activeOpacity={0.85}
+            >
+              <View
+                style={[
+                  styles.participantChipIconWrap,
+                  {
+                    backgroundColor: isDefaultRideView ? colors.primary : colors.surfaceAlt,
+                  },
+                ]}
+              >
+                <Icon
+                  name="map"
+                  size={14}
+                  color={isDefaultRideView ? "#FFFFFF" : colors.textMuted}
+                />
+              </View>
+              <Text
+                style={[
+                  styles.participantChipText,
+                  isDefaultRideView && { color: colors.primary },
+                ]}
+                numberOfLines={1}
+              >
+                Default
+              </Text>
+              {isDefaultRideView && routeLoading ? (
+                <ActivityIndicator
+                  size="small"
+                  color={colors.primary}
+                  style={styles.chipSpinner}
+                />
+              ) : null}
+            </TouchableOpacity>
             {participantRoutes.map((row) => {
               const active = String(selectedParticipantId) === String(row.id);
               const theme = MAP_PIN_THEME[row.role] || MAP_PIN_THEME.passenger;

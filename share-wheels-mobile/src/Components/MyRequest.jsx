@@ -23,6 +23,7 @@ import carIcon from "../assets/caricon1.png";
 import BackButton from "../Components/BackButton";
 /* COMPONENTS */
 import RequestDetailPopover from "./ui/RequestDetailPopover";
+import RelatedRideDetailPopover from "./ui/RelatedRideDetailPopover";
 import RequestRelatedRidesSheet from "./ui/RequestRelatedRidesSheet";
 import { buildMyRequestDetail } from "../Utils/driverParticipantDetails";
 import { formatDisplayTime } from "../Utils/dateUtils";
@@ -190,6 +191,8 @@ const MyRequest = () => {
   const [popoverLoading, setPopoverLoading] = useState(false);
   const [joiningRideId, setJoiningRideId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [relatedRidePopoverVisible, setRelatedRidePopoverVisible] = useState(false);
+  const [relatedRidePreview, setRelatedRidePreview] = useState(null);
 
   const tabs = ["Passenger", "Courier"];
   const activeIndex = tabs.indexOf(activeTab);
@@ -398,28 +401,20 @@ const MyRequest = () => {
 
   const closeSheet = () => {
     setSheetVisible(false);
+    setRelatedRidePopoverVisible(false);
+    setRelatedRidePreview(null);
     setSelectedRide(null);
     setJoiningRideId(null);
   };
 
+  const closeRelatedRidePopover = () => {
+    setRelatedRidePopoverVisible(false);
+    setRelatedRidePreview(null);
+  };
+
   const handleViewRide = (ride) => {
-    setPopoverVisible(false);
-    setSheetVisible(false);
-    const segFrom = selectedRide?.from || selectedRide?.raw?.from;
-    const segTo = selectedRide?.to || selectedRide?.raw?.to;
-    setSelectedRide(null);
-    navigation.navigate("RideDetails", {
-      ride,
-      ...(segFrom && segTo ? { searchSegment: { from: segFrom, to: segTo } } : {}),
-      requestOfferPerSeat:
-        selectedRide?.raw?.amount ??
-        selectedRide?.raw?.amount_will ??
-        null,
-      standalonePassengerRideId:
-        selectedRide?.raw?.requestId ??
-        selectedRide?.id ??
-        null,
-    });
+    setRelatedRidePreview(ride);
+    setRelatedRidePopoverVisible(true);
   };
 
   const handleJoinPassenger = async (ride, requestItem) => {
@@ -650,6 +645,11 @@ const MyRequest = () => {
         },
       ]
     );
+  };
+
+  const handleJoinFromRelatedRidePopover = (ride) => {
+    closeRelatedRidePopover();
+    handleJoinRide(ride);
   };
 
   const handleJoinRide = (ride) => {
@@ -903,6 +903,17 @@ const MyRequest = () => {
         onClose={closeSheet}
         onViewRide={handleViewRide}
         onJoinRide={handleJoinRide}
+      />
+
+      <RelatedRideDetailPopover
+        visible={relatedRidePopoverVisible}
+        ride={relatedRidePreview}
+        requestContext={selectedRide}
+        joiningRideId={joiningRideId}
+        onClose={closeRelatedRidePopover}
+        onJoinRide={
+          selectedRide?.requestKind === "ride_join" ? undefined : handleJoinFromRelatedRidePopover
+        }
       />
       </AnimatedLoad>
     </ScreenContainer>

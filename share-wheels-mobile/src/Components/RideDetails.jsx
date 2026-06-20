@@ -53,8 +53,6 @@ import {
 const RideDetails = ({ navigation, route }) => {
   const initialRide = route.params?.ride;
   const contextSegment = route.params?.searchSegment;
-  const requestOfferPerSeat = route.params?.requestOfferPerSeat;
-  const standalonePassengerRideId = route.params?.standalonePassengerRideId;
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const {
@@ -144,9 +142,7 @@ const RideDetails = ({ navigation, route }) => {
   }, [ride, bookingSegment, contextSegment?.from, contextSegment?.to]);
 
   const { perSeatFare: seatFare, segmentKm, fullRouteKm, fareHint: segmentFareHint, loading: segmentFareLoading } =
-    usePassengerSegmentFare(ride, displayBookingSegment, 1, {
-      fixedPerSeatFare: requestOfferPerSeat,
-    });
+    usePassengerSegmentFare(ride, displayBookingSegment, 1);
 
   const passengerBlockReason = useMemo(
     () => getPassengerBookingBlockReason(ride, myUserId, { isOwnRide }),
@@ -241,12 +237,6 @@ const RideDetails = ({ navigation, route }) => {
       if (bookingSeg?.from && bookingSeg?.to) {
         payload.from = bookingSeg.from;
         payload.to = bookingSeg.to;
-      }
-      if (standalonePassengerRideId) {
-        payload.standalonePassengerRideId = standalonePassengerRideId;
-      }
-      if (requestOfferPerSeat) {
-        payload.amount_will = requestOfferPerSeat;
       }
       const response = await passengerSendRequestApi(token, payload);
 
@@ -689,8 +679,13 @@ const RideDetails = ({ navigation, route }) => {
         quickReserve={quickReserve}
         blockReason={passengerBlockReason}
         booking={bookingPassenger}
-        segment={bookingSegment}
+        segment={displayBookingSegment}
         hideSegmentPicker={hasContextSegment || showSegmentPicker}
+        perSeatFare={seatFare}
+        segmentKm={segmentKm}
+        fullRouteKm={fullRouteKm}
+        fareHint={segmentFareHint}
+        fareLoading={segmentFareLoading}
         onBook={handleBookPassenger}
       />
 

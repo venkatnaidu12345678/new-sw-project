@@ -155,7 +155,7 @@ export default function LiveTracking() {
       <PageHeader
         compact
         title="Live ride tracking"
-        subtitle="Real-time via WebSocket — route lines in blue"
+        subtitle="Live GPS every 3s — WebSocket + API, smooth map updates"
       />
       <div className="mb-2 flex shrink-0 flex-wrap items-center gap-3 text-xs font-semibold text-slate-600">
         <span
@@ -267,6 +267,8 @@ export default function LiveTracking() {
             plannedPath={plannedPath}
             gpsPath={gpsPath}
             fitSessionKey={selectedId || ""}
+            loading={loading && rides.length === 0}
+            loadingMessage="Loading live map…"
           />
         </div>
       </div>

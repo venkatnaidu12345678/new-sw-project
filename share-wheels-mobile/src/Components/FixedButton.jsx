@@ -13,6 +13,7 @@ import { useThemedStyles } from "../theme/useThemedStyles";
 
 const FixedButton = ({
   title = "Next",
+  loadingTitle,
   onPress,
   disabled = false,
   loading = false,
@@ -22,17 +23,21 @@ const FixedButton = ({
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const bottom = bottomInset ?? insets.bottom + DS.spacing.md;
+  const isDisabled = disabled && !loading;
 
   return (
     <View style={[styles.fixedButtonContainer, { paddingBottom: bottom }]}>
       <TouchableOpacity
-        style={[styles.button, (disabled || loading) && styles.buttonDisabled]}
+        style={[styles.button, isDisabled && styles.buttonDisabled]}
         onPress={onPress}
         disabled={disabled || loading || !onPress}
         activeOpacity={0.85}
       >
         {loading ? (
-          <ActivityIndicator color={colors.inverseText} />
+          <View style={styles.loadingRow}>
+            <ActivityIndicator color={colors.inverseText} size="small" />
+            <Text style={styles.buttonText}>{loadingTitle || title}</Text>
+          </View>
         ) : (
           <Text style={styles.buttonText}>{title}</Text>
         )}
@@ -66,6 +71,12 @@ const createStyles = (c) =>
     },
     buttonDisabled: {
       opacity: 0.5,
+    },
+    loadingRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 10,
     },
     buttonText: {
       color: c.inverseText,

@@ -163,6 +163,17 @@ export const isEnrouteRequestUnavailableError = (response) => {
   );
 };
 
+const ENROUTE_SUBSCRIPTION_ERROR_CODES = new Set([
+  "PICK_LIMIT_REACHED",
+  "SUBSCRIPTION_EXPIRED",
+  "NO_PLAN",
+]);
+
+export const isEnrouteSubscriptionError = (response) => {
+  const code = String(response?.code || "").toUpperCase();
+  return ENROUTE_SUBSCRIPTION_ERROR_CODES.has(code);
+};
+
 export const shouldRemoveEnrouteRow = (row, payload) => {
   if (!payload || !row) return false;
 

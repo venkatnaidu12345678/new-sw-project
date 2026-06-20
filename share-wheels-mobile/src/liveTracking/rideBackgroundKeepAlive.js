@@ -2,10 +2,14 @@ import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { connectAppSocket, getAppSocket } from "../services/appSocket";
 import { getActiveRideTracking } from "../Utils/activeRideTracking";
-import { acquireGpsInstant, getCachedCoords } from "../Utils/gpsService";
-import { publishLocationOnce } from "./liveLocationPublisher";
+import { acquireGpsInstant, acquireGpsPrecise, getCachedCoords } from "../Utils/gpsService";
+import {
+  publishLocationOnce,
+  startLiveLocationPublishing,
+  getPublishingRideId,
+} from "./liveLocationPublisher";
 
-const HEARTBEAT_MS = 12000;
+const HEARTBEAT_MS = 3000;
 
 let installed = false;
 let heartbeatId = null;
@@ -19,17 +23,26 @@ const publishCachedForActiveRide = async () => {
   const token = await AsyncStorage.getItem("token");
   if (!token) return;
 
-  const coords = getCachedCoords();
-  if (coords) {
-    publishLocationOnce(rideId, token, coords.latitude, coords.longitude);
+  if (!getPublishingRideId()) {
+    await startLiveLocationPublishing({ rideId, token });
+  }
+
+  const cached = getCachedCoords();
+  const stale =
+    !cached?.acquiredAt || Date.now() - cached.acquiredAt > 8000;
+
+  if (cached && !stale) {
+    publishLocationOnce(rideId, token, cached.latitude, cached.longitude);
     return;
   }
 
   try {
-    const fix = await acquireGpsInstant();
+    const fix = stale ? await acquireGpsPrecise() : await acquireGpsInstant();
     publishLocationOnce(rideId, token, fix.latitude, fix.longitude);
   } catch {
-    /* GPS unavailable — socket heartbeat still runs */
+    if (cached) {
+      publishLocationOnce(rideId, token, cached.latitude, cached.longitude);
+    }
   }
 };
 

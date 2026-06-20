@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -11,7 +11,6 @@ import Icon from "react-native-vector-icons/Ionicons";
 import FormPopoverShell from "./FormPopoverShell";
 import RideCorridorSegmentPicker from "./RideCorridorSegmentPicker";
 import { defaultCorridorSegment, corridorHasSegments } from "../../Utils/rideCorridorUtils";
-import { usePassengerSegmentFare } from "../../hooks/usePassengerSegmentFare";
 import { useTheme } from "../../context/ThemeContext";
 import { useThemedStyles } from "../../theme/useThemedStyles";
 
@@ -25,6 +24,11 @@ const BookSeatPopover = ({
   booking,
   segment: externalSegment,
   hideSegmentPicker = false,
+  perSeatFare = 0,
+  segmentKm,
+  fullRouteKm,
+  fareHint = "",
+  fareLoading = false,
   onBook,
 }) => {
   const { colors } = useTheme();
@@ -40,8 +44,13 @@ const BookSeatPopover = ({
     ? internalSegment
     : (externalSegment ?? internalSegment);
 
-  const { perSeatFare, segmentKm, fullRouteKm, fareHint, loading: fareLoading } =
-    usePassengerSegmentFare(ride, activeSegment, seats);
+  const resolvedPerSeat = Math.round(Number(perSeatFare) || 0);
+  const totalFare = useMemo(
+    () => resolvedPerSeat * Math.max(1, seats),
+    [resolvedPerSeat, seats]
+  );
+  const displayFareHint =
+    fareHint && !/offer price/i.test(fareHint) ? fareHint : "";
 
   useEffect(() => {
     if (visible) {
@@ -56,8 +65,8 @@ const BookSeatPopover = ({
     if (maxSeats > 0 && seats > maxSeats) setSeats(maxSeats);
   }, [maxSeats, seats]);
 
-  const totalFare = perSeatFare * seats;
-  const canBook = !blockReason && maxSeats >= 1 && !booking && !fareLoading;
+  const canBook =
+    !blockReason && maxSeats >= 1 && !booking && !fareLoading && resolvedPerSeat > 0;
 
   return (
     <FormPopoverShell visible={visible} onClose={onClose} disabledClose={booking}>
@@ -150,10 +159,10 @@ const BookSeatPopover = ({
                 </Text>
               ) : null}
               <Text style={styles.fareLine}>
-                ₹{perSeatFare}/seat × {seats} = ₹{totalFare}
+                ₹{resolvedPerSeat}/seat × {seats} = ₹{totalFare}
               </Text>
-              {fareHint ? (
-                <Text style={styles.fareHintText}>{fareHint}</Text>
+              {displayFareHint ? (
+                <Text style={styles.fareHintText}>{displayFareHint}</Text>
               ) : null}
             </>
           )}
@@ -169,7 +178,9 @@ const BookSeatPopover = ({
             <ActivityIndicator color={colors.inverseText} />
           ) : (
             <Text style={styles.primaryBtnText}>
-              {quickReserve ? "Confirm booking" : "Send request"}
+              {quickReserve
+                ? `Confirm booking · ₹${totalFare}`
+                : `Send request · ₹${totalFare}`}
             </Text>
           )}
         </TouchableOpacity>

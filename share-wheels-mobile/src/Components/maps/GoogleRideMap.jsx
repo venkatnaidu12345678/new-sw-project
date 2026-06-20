@@ -103,6 +103,8 @@ const GoogleRideMap = ({
   participantNavActive = false,
   driverControls = false,
   driverPickOnly = false,
+  defaultRideView = false,
+  routeFitNonce = 0,
   isFullscreen: isFullscreenControlled,
   onFullscreenChange,
   loading = false,
@@ -114,7 +116,7 @@ const GoogleRideMap = ({
   const [internalFullscreen, setInternalFullscreen] = useState(false);
   const isFullscreen = isFullscreenControlled ?? internalFullscreen;
   const [is3DMode, setIs3DMode] = useState(false);
-  const [showRoutes, setShowRoutes] = useState(true);
+  const [showRoutes, setShowRoutes] = useState(() => !!driverControls);
   const [myGpsCoord, setMyGpsCoord] = useState(null);
   const prev3DModeRef = useRef(false);
   const did3DInitialFocusRef = useRef(false);
@@ -166,14 +168,43 @@ const GoogleRideMap = ({
   /** Native GPS dot when not using the custom driver arrow. */
   const showNativeMyLocation = !!showMyLocation && !showDriverArrow;
 
+  const bootstrapCoords = useMemo(() => {
+    const coords = [];
+    if (fromCoords?.lat != null && fromCoords?.lng != null) {
+      coords.push({ latitude: fromCoords.lat, longitude: fromCoords.lng });
+    }
+    if (toCoords?.lat != null && toCoords?.lng != null) {
+      coords.push({ latitude: toCoords.lat, longitude: toCoords.lng });
+    }
+    (Array.isArray(stopovers) ? stopovers : []).forEach((s) => {
+      const lat = Number(s?.lat ?? s?.latitude);
+      const lng = Number(s?.lng ?? s?.longitude);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        coords.push({ latitude: lat, longitude: lng });
+      }
+    });
+    return coords;
+  }, [fromCoords, toCoords, stopovers]);
+
   const plannedPath = useMemo(
     () => (Array.isArray(plannedRoute) ? plannedRoute.filter(Boolean) : []),
     [plannedRoute]
   );
 
-  /** Driver mode: hide GPS trail only; still show planned from→to + stopovers. */
+  const displayPlannedPath = useMemo(() => {
+    if (plannedPath.length > 1) return plannedPath;
+    if (defaultRideView && bootstrapCoords.length >= 2) {
+      return bootstrapCoords.map((c) => ({
+        latitude: c.latitude,
+        longitude: c.longitude,
+      }));
+    }
+    return [];
+  }, [plannedPath, defaultRideView, bootstrapCoords]);
+
+  /** Default ride view: full from→to blue route; participant nav hides it. */
   const showPlannedRideRoute =
-    showRoutes && !participantNavActive && plannedPath.length > 1;
+    showRoutes && !participantNavActive && displayPlannedPath.length > 1;
   const showGpsTrail = showRoutes && !driverPickOnly && path.length > 1;
 
   const participantPath = useMemo(
@@ -252,24 +283,6 @@ const GoogleRideMap = ({
     }
     return 0;
   }, [tracking, driverPoint, resolveHeadingTowardRoute]);
-
-  const bootstrapCoords = useMemo(() => {
-    const coords = [];
-    if (fromCoords?.lat != null && fromCoords?.lng != null) {
-      coords.push({ latitude: fromCoords.lat, longitude: fromCoords.lng });
-    }
-    if (toCoords?.lat != null && toCoords?.lng != null) {
-      coords.push({ latitude: toCoords.lat, longitude: toCoords.lng });
-    }
-    (Array.isArray(stopovers) ? stopovers : []).forEach((s) => {
-      const lat = Number(s?.lat ?? s?.latitude);
-      const lng = Number(s?.lng ?? s?.longitude);
-      if (Number.isFinite(lat) && Number.isFinite(lng)) {
-        coords.push({ latitude: lat, longitude: lng });
-      }
-    });
-    return coords;
-  }, [fromCoords, toCoords, stopovers]);
 
   useEffect(() => {
     if (!showDriverArrow) return undefined;
@@ -475,10 +488,6 @@ const GoogleRideMap = ({
     return () => clearTimeout(timer);
   }, [is3DMode, mapReady, selfCoord, selfHeading, focus3DOnce]);
 
-  useEffect(() => {
-    if (loading) setMapReady(false);
-  }, [loading]);
-
   const handleMapReady = useCallback(() => {
     setMapReady(true);
   }, []);
@@ -519,6 +528,53 @@ const GoogleRideMap = ({
   const toggleRouteDisplay = useCallback(() => {
     setShowRoutes((prev) => !prev);
   }, []);
+
+  const canShowRideRoute =
+    bootstrapCoords.length >= 2 || plannedPath.length > 1;
+
+  const showRideRouteView = useCallback(() => {
+    setShowRoutes(true);
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    const pathCoords =
+      displayPlannedPath.length > 1
+        ? validMapCoords(displayPlannedPath)
+        : validMapCoords(bootstrapCoords);
+    if (pathCoords.length === 0) return;
+
+    try {
+      if (map.fitToCoordinates) {
+        map.fitToCoordinates(pathCoords, {
+          edgePadding: { top: 56, right: 36, bottom: 72, left: 36 },
+          animated: true,
+        });
+        return;
+      }
+      if (map.animateToRegion) {
+        map.animateToRegion(regionForCoordinates(pathCoords), 400);
+      }
+    } catch {
+      /* ignore map fit errors */
+    }
+  }, [bootstrapCoords, displayPlannedPath, mapReady]);
+
+  useEffect(() => {
+    if (defaultRideView) setShowRoutes(true);
+  }, [defaultRideView]);
+
+  useEffect(() => {
+    if (!mapReady || !defaultRideView) return;
+    const delay = routeFitNonce > 0 ? 80 : 360;
+    const timer = setTimeout(showRideRouteView, delay);
+    return () => clearTimeout(timer);
+  }, [
+    routeFitNonce,
+    defaultRideView,
+    mapReady,
+    showRideRouteView,
+    displayPlannedPath.length,
+  ]);
 
   const statusMessage = gpsStatusText || null;
 
@@ -568,32 +624,6 @@ const GoogleRideMap = ({
   const boxStyle = fill
     ? [styles.wrapFill, style]
     : [{ height }, style];
-
-  if (loading) {
-    return (
-      <View style={wrapStyle} collapsable={false}>
-        {isFullscreen ? (
-          <View style={styles.fullscreenHeader}>
-            <Pressable
-              onPress={closeFullscreen}
-              style={styles.fullscreenHeaderBtn}
-              hitSlop={10}
-              accessibilityLabel="Exit fullscreen map"
-            >
-              <Icon name="chevron-down" size={26} color={colors.text} />
-            </Pressable>
-            <Text style={styles.fullscreenTitle} numberOfLines={1}>
-              {fullscreenTitle}
-            </Text>
-            <View style={styles.fullscreenHeaderSpacer} />
-          </View>
-        ) : null}
-        <View style={[styles.placeholder, styles.dataLoader, ...boxStyle]}>
-          <ActivityIndicator color={colors.primary} size="large" />
-        </View>
-      </View>
-    );
-  }
 
   const { MapView, Marker, Polyline, PROVIDER_GOOGLE } = maps;
   const initialRegion = initialRegionRef.current || DEFAULT_MAP_CENTER;
@@ -681,10 +711,10 @@ const GoogleRideMap = ({
       moveOnMarkerPress={false}
       cacheEnabled={Platform.OS === "ios"}
     >
-      {showPlannedRideRoute && safePlannedPath.length > 1 ? (
+      {showPlannedRideRoute && validMapCoords(displayPlannedPath).length > 1 ? (
         <>
           <Polyline
-            coordinates={safePlannedPath}
+            coordinates={validMapCoords(displayPlannedPath)}
             strokeColor={MAP_LINE_THEME.planned.outline}
             strokeWidth={MAP_LINE_THEME.planned.outlineWidth}
             geodesic
@@ -692,7 +722,7 @@ const GoogleRideMap = ({
             lineJoin="round"
           />
           <Polyline
-            coordinates={safePlannedPath}
+            coordinates={validMapCoords(displayPlannedPath)}
             strokeColor={MAP_LINE_THEME.planned.stroke}
             strokeWidth={MAP_LINE_THEME.planned.width}
             geodesic
@@ -853,16 +883,36 @@ const GoogleRideMap = ({
     );
   };
 
+  const renderRouteButton = () =>
+    canShowRideRoute && mapReady && !loading ? (
+      <Pressable
+        style={[styles.mapFab, styles.routeFab, showRoutes && styles.mapFabActive]}
+        onPress={showRideRouteView}
+        accessibilityLabel="Show ride route from start to destination"
+        hitSlop={6}
+      >
+        <Icon
+          name={showRoutes ? "map" : "map-outline"}
+          size={22}
+          color={showRoutes ? colors.primary : colors.text}
+        />
+      </Pressable>
+    ) : null;
+
   const renderMapChrome = ({ containerStyle, mapStyle, showExpand }) => (
     <View style={containerStyle}>
       {renderStatusBanner()}
       {renderMapView(mapStyle)}
-      {!mapReady ? (
+      {!mapReady || loading ? (
         <View style={styles.mapBootOverlay} pointerEvents="none">
           <ActivityIndicator color={colors.primary} size="large" />
+          {loadingText ? (
+            <Text style={styles.placeholderText}>{loadingText}</Text>
+          ) : null}
         </View>
       ) : null}
       {renderDriverControls()}
+      {renderRouteButton()}
       {showExpand && allowFullscreen ? (
         <Pressable
           style={styles.fullscreenBtn}
@@ -1043,6 +1093,12 @@ const createStyles = (c) =>
     mapFabActive: {
       borderColor: c.primary,
       backgroundColor: c.primaryMuted || c.surface,
+    },
+    routeFab: {
+      position: "absolute",
+      bottom: 12,
+      left: 12,
+      zIndex: 25,
     },
     fullscreenBtn: {
       position: "absolute",

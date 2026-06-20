@@ -8,6 +8,24 @@ import {
 import SmoothTrackingMarker from "./SmoothTrackingMarker";
 
 const LIVE_ROLES = new Set(["driver", "passenger", "courier"]);
+const ROUTE_ROLES = new Set(["route-from", "route-to", "stopover"]);
+
+const fitMapToPoints = (map, points = []) => {
+  const valid = points.filter(
+    (p) => Number.isFinite(p.lat) && Number.isFinite(p.lng)
+  );
+  if (!map || !valid.length) return;
+
+  if (valid.length === 1) {
+    map.setCenter(valid[0]);
+    map.setZoom(14);
+    return;
+  }
+
+  const bounds = new window.google.maps.LatLngBounds();
+  valid.forEach((p) => bounds.extend(p));
+  map.fitBounds(bounds, 48);
+};
 
 const MAP_API_KEY = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "").trim();
 
@@ -73,46 +91,70 @@ const MapLegend = () => (
   </div>
 );
 
-function FitBoundsHandler({ markers, plannedPath, map, fitSessionKey }) {
+function FitBoundsHandler({ markers, map, fitSessionKey }) {
   const fittedSessionRef = useRef(null);
 
   useEffect(() => {
     if (!map || !fitSessionKey) return;
     if (fittedSessionRef.current === fitSessionKey) return;
 
-    const structural = [
-      ...markers.map((m) => ({ lat: m.lat, lng: m.lng })),
-      ...(plannedPath.length > 1
-        ? [plannedPath[0], plannedPath[plannedPath.length - 1]]
-        : []),
-    ].filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+    const livePoints = markers
+      .filter((m) => LIVE_ROLES.has(m.role))
+      .map((m) => ({ lat: m.lat, lng: m.lng }));
 
-    if (!structural.length) return;
+    if (!livePoints.length) return;
 
     fittedSessionRef.current = fitSessionKey;
-
-    if (structural.length === 1) {
-      map.setCenter(structural[0]);
-      map.setZoom(14);
-      return;
-    }
-
-    const bounds = new window.google.maps.LatLngBounds();
-    structural.forEach((p) => bounds.extend(p));
-    map.fitBounds(bounds, 48);
-  }, [map, fitSessionKey, markers, plannedPath]);
+    fitMapToPoints(map, livePoints);
+  }, [map, fitSessionKey, markers]);
 
   return null;
 }
+
+function RouteFitHandler({ map, markers, plannedPath, routeFitKey, showRideRoute }) {
+  useEffect(() => {
+    if (!map || !routeFitKey || !showRideRoute) return;
+
+    const routePoints = [
+      ...(plannedPath.length > 1 ? plannedPath : []),
+      ...markers
+        .filter((m) => ROUTE_ROLES.has(m.role))
+        .map((m) => ({ lat: m.lat, lng: m.lng })),
+    ];
+
+    fitMapToPoints(map, routePoints);
+  }, [map, routeFitKey, markers, plannedPath, showRideRoute]);
+
+  return null;
+}
+
+const RouteFabIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+    <path
+      fill="currentColor"
+      d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"
+    />
+    <path
+      fill="currentColor"
+      d="M4 20.5c0 .83.67 1.5 1.5 1.5h13c.83 0 1.5-.67 1.5-1.5v-1H4v1z"
+      opacity="0.35"
+    />
+  </svg>
+);
 
 export default function GoogleTrackingMap({
   markers = [],
   plannedPath = [],
   gpsPath = [],
   fitSessionKey = "",
+  loading = false,
+  loadingMessage = "Loading map…",
 }) {
   const [map, setMap] = useState(null);
+  const [mapReady, setMapReady] = useState(false);
   const [authBlocked, setAuthBlocked] = useState(false);
+  const [showRideRoute, setShowRideRoute] = useState(false);
+  const [routeFitKey, setRouteFitKey] = useState(0);
 
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: MAP_API_KEY,
@@ -127,6 +169,31 @@ export default function GoogleTrackingMap({
       window.gm_authFailure = previous;
     };
   }, []);
+
+  useEffect(() => {
+    if (!fitSessionKey) {
+      setShowRideRoute(false);
+      setRouteFitKey(0);
+      return;
+    }
+    setShowRideRoute(true);
+    setRouteFitKey((key) => key + 1);
+  }, [fitSessionKey]);
+
+  const hasRideRoute =
+    plannedPath.length > 1 ||
+    markers.some((m) => ROUTE_ROLES.has(m.role));
+
+  const visibleMarkers = showRideRoute
+    ? markers
+    : markers.filter((m) => LIVE_ROLES.has(m.role));
+
+  const visiblePlannedPath = showRideRoute ? plannedPath : [];
+
+  const handleShowRideRoute = () => {
+    setShowRideRoute(true);
+    setRouteFitKey((key) => key + 1);
+  };
 
   if (!MAP_API_KEY) {
     return (
@@ -150,11 +217,19 @@ export default function GoogleTrackingMap({
 
   if (!isLoaded) {
     return (
-      <div className="flex h-full items-center justify-center bg-slate-50 text-sm text-slate-500">
-        Loading Google Maps…
+      <div className="relative flex h-full items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-3 text-sm text-slate-500">
+          <span className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-brand-600" />
+          <span>{loadingMessage}</span>
+        </div>
       </div>
     );
   }
+
+  const handleMapLoad = (instance) => {
+    setMap(instance);
+    setMapReady(true);
+  };
 
   return (
     <div className="relative h-full w-full">
@@ -162,7 +237,7 @@ export default function GoogleTrackingMap({
         mapContainerStyle={MAP_CONTAINER_STYLE}
         center={DEFAULT_CENTER}
         zoom={13}
-        onLoad={setMap}
+        onLoad={handleMapLoad}
         options={{
           mapTypeControl: false,
           streetViewControl: false,
@@ -173,13 +248,15 @@ export default function GoogleTrackingMap({
           ],
         }}
       >
-        <FitBoundsHandler
+        <FitBoundsHandler markers={markers} map={map} fitSessionKey={fitSessionKey} />
+        <RouteFitHandler
+          map={map}
           markers={markers}
           plannedPath={plannedPath}
-          map={map}
-          fitSessionKey={fitSessionKey}
+          routeFitKey={routeFitKey}
+          showRideRoute={showRideRoute}
         />
-        {markers.map((m) => {
+        {visibleMarkers.map((m) => {
           const icon = buildRoleMarkerIcon(m.role, window.google);
           const title = `${m.label} (${m.role})`;
           const zIndex =
@@ -212,10 +289,10 @@ export default function GoogleTrackingMap({
             />
           );
         })}
-        {plannedPath.length > 1 ? (
+        {visiblePlannedPath.length > 1 ? (
           <>
             <Polyline
-              path={plannedPath}
+              path={visiblePlannedPath}
               options={{
                 strokeColor: ADMIN_LINE_THEME.plannedOutline.color,
                 strokeWeight: ADMIN_LINE_THEME.plannedOutline.weight,
@@ -224,7 +301,7 @@ export default function GoogleTrackingMap({
               }}
             />
             <Polyline
-              path={plannedPath}
+              path={visiblePlannedPath}
               options={{
                 strokeColor: ADMIN_LINE_THEME.planned.color,
                 strokeWeight: ADMIN_LINE_THEME.planned.weight,
@@ -257,6 +334,30 @@ export default function GoogleTrackingMap({
           </>
         ) : null}
       </GoogleMap>
+      {!mapReady || loading ? (
+        <div
+          className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-white/70 backdrop-blur-[1px]"
+          aria-hidden={!loading && mapReady}
+        >
+          <span className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-brand-600" />
+          <span className="text-sm font-medium text-slate-600">{loadingMessage}</span>
+        </div>
+      ) : null}
+      {mapReady && hasRideRoute ? (
+        <button
+          type="button"
+          onClick={handleShowRideRoute}
+          title="Show ride route (from → to)"
+          aria-label="Show ride route from start to destination"
+          className={`absolute bottom-3 right-3 z-10 flex h-11 w-11 items-center justify-center rounded-full border bg-white shadow-lg transition hover:bg-slate-50 ${
+            showRideRoute
+              ? "border-brand-600 text-brand-600"
+              : "border-slate-200 text-slate-700"
+          }`}
+        >
+          <RouteFabIcon />
+        </button>
+      ) : null}
       <MapLegend />
     </div>
   );
