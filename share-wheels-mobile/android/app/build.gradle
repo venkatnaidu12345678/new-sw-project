@@ -89,8 +89,8 @@ android {
         applicationId "com.sharewheels.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 4
-        versionName "3.1"
+        versionCode 5
+        versionName "4.1"
         manifestPlaceholders = [usesCleartextTraffic: "true"]
         resValue "string", "GOOGLE_MAPS_API_KEY", (project.env.get("GOOGLE_MAPS_API_KEY") ?: "")
     }
