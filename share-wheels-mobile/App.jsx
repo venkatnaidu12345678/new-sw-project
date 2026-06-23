@@ -10,6 +10,7 @@ import {
 import { NavigationContainer } from "@react-navigation/native";
 
 import AuthNavigator from "./src/Navigation/AuthNavigator";
+import AppErrorBoundary from "./src/Components/AppErrorBoundary";
 import { AdsProvider } from "./src/context/AdsContext";
 import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
 import { AppAlertProvider } from "./src/context/AppAlertContext";
@@ -171,14 +172,16 @@ function AppShell() {
 
 export default function App() {
   return (
-    <SafeAreaProvider
-      initialMetrics={initialWindowMetrics}
-      style={[styles.mainContainer, { backgroundColor: SPLASH_LAUNCH_BACKGROUND }]}
-    >
-      <ThemeProvider>
-        <AppShell />
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <AppErrorBoundary>
+      <SafeAreaProvider
+        initialMetrics={initialWindowMetrics}
+        style={[styles.mainContainer, { backgroundColor: SPLASH_LAUNCH_BACKGROUND }]}
+      >
+        <ThemeProvider>
+          <AppShell />
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </AppErrorBoundary>
   );
 }
 

@@ -38,6 +38,10 @@ import { useAppSocketConnection } from "../hooks/useAppSocket";
 import { syncFcmTokenWithBackend } from "../Notifications/registerToken";
 import { AUTH_COLORS } from "../theme/authTheme";
 import { useTheme } from "../context/ThemeContext";
+import {
+  syncCrashlyticsUser,
+  clearCrashlyticsUser,
+} from "../services/crashlytics";
 
 const Stack = createNativeStackNavigator();
 const ProfileContext = createContext(null);
@@ -149,6 +153,14 @@ const AuthNavigator = () => {
   useEffect(() => {
     checkAuth();
   }, [refresh]);
+
+  useEffect(() => {
+    if (ProfileDetails) {
+      syncCrashlyticsUser(ProfileDetails).catch(() => {});
+    } else if (!isAuthenticated) {
+      clearCrashlyticsUser().catch(() => {});
+    }
+  }, [ProfileDetails, isAuthenticated]);
 
   const logout = async () => {
     await clearAuthSession();

@@ -142,9 +142,11 @@ dependencies {
     implementation platform("com.google.firebase:firebase-bom:32.1.0")
     implementation "com.google.firebase:firebase-messaging"
     implementation "com.google.firebase:firebase-auth"
+    implementation "com.google.firebase:firebase-crashlytics"
 }
 
 apply plugin: "com.google.gms.google-services"
+apply plugin: "com.google.firebase.crashlytics"
 
 /** Warn when Firebase SHA fingerprints are not linked (causes FIS_AUTH_ERROR / no FCM token). */
 tasks.register("verifyFirebaseShaConfig") {

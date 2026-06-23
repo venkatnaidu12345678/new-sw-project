@@ -1,7 +1,12 @@
 import { parseApiResponse } from "./parseApiResponse";
 import { getApiErrorMessage } from "./apiErrors";
+import { reportError } from "../services/crashlytics";
 
 const DEFAULT_TIMEOUT_MS = 20000;
+
+function apiPathFromUrl(url) {
+  return String(url).replace(/^https?:\/\/[^/]+/, "").split("?")[0].slice(0, 80);
+}
 
 /**
  * JSON fetch with timeout and consistent error parsing.
@@ -33,6 +38,13 @@ export async function apiRequest(url, options = {}) {
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
   } catch (err) {
+    if (err?.name !== "AbortError") {
+      reportError(err, {
+        scope: "apiRequest",
+        path: apiPathFromUrl(url),
+        method,
+      }).catch(() => {});
+    }
     if (err?.name === "AbortError") {
       throw new Error(
         "Request timed out. Check that the backend is running and LOCAL_API_URL in .env matches your PC IP (same Wi‑Fi as the phone)."
@@ -57,6 +69,14 @@ export async function apiRequest(url, options = {}) {
     );
     if (data?.code) error.code = data.code;
     error.status = response.status;
+    if (response.status >= 500) {
+      reportError(error, {
+        scope: "apiRequest",
+        path: apiPathFromUrl(url),
+        method,
+        status: response.status,
+      }).catch(() => {});
+    }
     throw error;
   }
 
