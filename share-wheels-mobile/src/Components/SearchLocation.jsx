@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   View,
   TextInput,
@@ -7,6 +7,7 @@ import {
   Text,
   Animated,
   Pressable,
+  ScrollView,
 } from "react-native";
 
 import Icon from "react-native-vector-icons/Ionicons";
@@ -44,7 +45,8 @@ const SearchLocation = ({
   handleSearch,
   onFocus,
   onBlur,
-  onDismissSuggestions,
+  onSelectionStart,
+  onSelectionEnd,
   activeField,
   fromSelected = false,
   toSelected = false,
@@ -52,6 +54,34 @@ const SearchLocation = ({
   const { input, colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [errors, setErrors] = useState({});
+  const selectingRef = useRef(false);
+
+  const beginSelection = () => {
+    selectingRef.current = true;
+    onSelectionStart?.();
+  };
+
+  const endSelection = () => {
+    selectingRef.current = false;
+    onSelectionEnd?.();
+  };
+
+  const handleBlur = () => {
+    setTimeout(() => {
+      if (selectingRef.current) return;
+      onBlur?.();
+    }, 160);
+  };
+
+  const handleSelectSuggestion = async (item, field) => {
+    beginSelection();
+    try {
+      await selectLocation(item, field);
+      setErrors((prev) => ({ ...prev, from: "", to: "" }));
+    } finally {
+      endSelection();
+    }
+  };
 
   const onSearchPress = () => {
     const validationErrors = validateForm({
@@ -93,27 +123,31 @@ const SearchLocation = ({
             Searching places…
           </Text>
         ) : null}
-        {suggestions.map((item, index) => (
-          <Pressable
-            key={`${field}-${getSuggestionKey(item, index)}`}
-            style={({ pressed }) => [
-              styles.suggestion,
-              pressed && styles.suggestionPressed,
-            ]}
-            onPress={() => {
-              selectLocation(item);
-              setErrors((prev) => ({ ...prev, from: "", to: "" }));
-              onDismissSuggestions?.();
-            }}
-          >
-            <Text style={styles.suggestionText}>{getSuggestionLabel(item)}</Text>
-            {item?.description ? (
-              <Text style={styles.suggestionSubtext} numberOfLines={1}>
-                {item.description}
-              </Text>
-            ) : null}
-          </Pressable>
-        ))}
+        <ScrollView
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="always"
+          keyboardDismissMode="none"
+          style={styles.dropdownScroll}
+        >
+          {suggestions.map((item, index) => (
+            <Pressable
+              key={`${field}-${getSuggestionKey(item, index)}`}
+              style={({ pressed }) => [
+                styles.suggestion,
+                pressed && styles.suggestionPressed,
+              ]}
+              onPressIn={beginSelection}
+              onPress={() => handleSelectSuggestion(item, field)}
+            >
+              <Text style={styles.suggestionText}>{getSuggestionLabel(item)}</Text>
+              {item?.description ? (
+                <Text style={styles.suggestionSubtext} numberOfLines={1}>
+                  {item.description}
+                </Text>
+              ) : null}
+            </Pressable>
+          ))}
+        </ScrollView>
       </View>
     );
   };
@@ -132,12 +166,12 @@ const SearchLocation = ({
             setErrors((prev) => ({ ...prev, from: "", to: "" }));
           }}
           onFocus={() => onFocus?.("FROM")}
-          onBlur={() => onBlur?.()}
+          onBlur={handleBlur}
           style={styles.input}
         />
         <Icon name="radio-button-on" size={18} color={colors.primary} />
       </GradientField>
-      {errors.from && <Text style={styles.error}>{errors.from}</Text>}
+      {errors.from ? <Text style={styles.error}>{errors.from}</Text> : null}
       {renderSuggestions("FROM")}
 
       <GradientField variant="to">
@@ -170,15 +204,15 @@ const SearchLocation = ({
             }
             onFocus?.("TO");
           }}
-          onBlur={() => onBlur?.()}
+          onBlur={handleBlur}
           style={[styles.input, !fromSelected && styles.inputDisabled]}
         />
         <Icon name="radio-button-on" size={18} color={colors.successText} />
       </GradientField>
-      {errors.to && <Text style={styles.error}>{errors.to}</Text>}
+      {errors.to ? <Text style={styles.error}>{errors.to}</Text> : null}
       {renderSuggestions("TO")}
 
-      {showFilters && (
+      {showFilters ? (
         <Animated.View
           style={{
             overflow: "hidden",
@@ -197,9 +231,9 @@ const SearchLocation = ({
               <Icon name="calendar-outline" size={20} color={colors.warningText} />
             </TouchableOpacity>
           </GradientField>
-          {errors.date && <Text style={styles.error}>{errors.date}</Text>}
+          {errors.date ? <Text style={styles.error}>{errors.date}</Text> : null}
 
-          {showDate && (
+          {showDate ? (
             <DateTimePicker
               value={date || new Date()}
               mode="date"
@@ -217,7 +251,7 @@ const SearchLocation = ({
                 }
               }}
             />
-          )}
+          ) : null}
 
           <TouchableOpacity style={styles.searchButtonWrap} onPress={onSearchPress}>
             <LinearGradient
@@ -230,7 +264,7 @@ const SearchLocation = ({
             </LinearGradient>
           </TouchableOpacity>
         </Animated.View>
-      )}
+      ) : null}
     </View>
   );
 };
@@ -239,83 +273,86 @@ export default SearchLocation;
 
 const createStyles = (c) =>
   StyleSheet.create({
-  container: {
-    marginVertical: 10,
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    color: c.text,
-  },
-  inputDisabled: {
-    opacity: 0.55,
-  },
-  dateTap: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: 48,
-  },
-  dateText: {
-    flex: 1,
-    fontSize: 15,
-    color: c.text,
-  },
-  searchButtonWrap: {
-    marginTop: LAYOUT.spacing.sm,
-    borderRadius: LAYOUT.radius.md,
-    overflow: "hidden",
-  },
-  searchGradient: {
-    paddingVertical: LAYOUT.spacing.md,
-    alignItems: "center",
-    borderRadius: LAYOUT.radius.md,
-  },
-  searchText: {
-    color: c.inverseText,
-    fontSize: LAYOUT.font.body,
-    fontWeight: "700",
-  },
-  inlineDropdown: {
-    backgroundColor: c.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    maxHeight: 200,
-    marginBottom: 8,
-    elevation: 8,
-    zIndex: 60,
-    shadowColor: c.shadow,
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    overflow: "hidden",
-  },
-  suggestion: {
-    padding: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: c.border,
-  },
-  suggestionPressed: {
-    backgroundColor: c.primaryMuted,
-  },
-  suggestionText: {
-    fontSize: 15,
-    color: c.text,
-    fontWeight: "600",
-  },
-  suggestionSubtext: {
-    fontSize: 12,
-    color: c.textMuted,
-    marginTop: 2,
-  },
-  loadingSuggestion: {
-    fontWeight: "500",
-    padding: 14,
-  },
-  error: {
-    color: c.errorText,
-    fontSize: 12,
-    marginBottom: 8,
-    marginLeft: 4,
-  },
-});
+    container: {
+      marginVertical: 10,
+    },
+    input: {
+      flex: 1,
+      fontSize: 15,
+      color: c.text,
+    },
+    inputDisabled: {
+      opacity: 0.55,
+    },
+    dateTap: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      minHeight: 48,
+    },
+    dateText: {
+      flex: 1,
+      fontSize: 15,
+      color: c.text,
+    },
+    searchButtonWrap: {
+      marginTop: LAYOUT.spacing.sm,
+      borderRadius: LAYOUT.radius.md,
+      overflow: "hidden",
+    },
+    searchGradient: {
+      paddingVertical: LAYOUT.spacing.md,
+      alignItems: "center",
+      borderRadius: LAYOUT.radius.md,
+    },
+    searchText: {
+      color: c.inverseText,
+      fontSize: LAYOUT.font.body,
+      fontWeight: "700",
+    },
+    inlineDropdown: {
+      backgroundColor: c.surface,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: c.border,
+      maxHeight: 200,
+      marginBottom: 8,
+      elevation: 8,
+      zIndex: 60,
+      shadowColor: c.shadow,
+      shadowOpacity: 0.12,
+      shadowRadius: 8,
+      overflow: "hidden",
+    },
+    dropdownScroll: {
+      maxHeight: 200,
+    },
+    suggestion: {
+      padding: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    suggestionPressed: {
+      backgroundColor: c.primaryMuted,
+    },
+    suggestionText: {
+      fontSize: 15,
+      color: c.text,
+      fontWeight: "600",
+    },
+    suggestionSubtext: {
+      fontSize: 12,
+      color: c.textMuted,
+      marginTop: 2,
+    },
+    loadingSuggestion: {
+      fontWeight: "500",
+      padding: 14,
+    },
+    error: {
+      color: c.errorText,
+      fontSize: 12,
+      marginBottom: 8,
+      marginLeft: 4,
+    },
+  });

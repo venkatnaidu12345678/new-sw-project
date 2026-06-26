@@ -25,6 +25,21 @@ const normalizeAllowedVehicleType = (value) => {
 
 const isAllowedVehicleType = (value) => !!normalizeAllowedVehicleType(value);
 
+/** Legacy passenger requests without vehicle_type still match any ride. */
+const passengerVehicleTypeMatchesRide = (passengerVehicleType, rideVehicleType) => {
+  const passenger = normalizeAllowedVehicleType(passengerVehicleType);
+  const ride = normalizeAllowedVehicleType(rideVehicleType);
+  if (!passenger) return true;
+  if (!ride) return true;
+  return passenger === ride;
+};
+
+const getMaxSeatsForVehicleType = (vehicleType) => {
+  const type = normalizeAllowedVehicleType(vehicleType);
+  if (type === "bike") return 1;
+  return 6;
+};
+
 const vehicleTypeCandidates = (vehicleType) => {
   const canonical = normalizeAllowedVehicleType(vehicleType);
   return canonical ? [canonical] : [];
@@ -35,6 +50,8 @@ module.exports = {
   LEGACY_VEHICLE_TYPE_ALIASES,
   normalizeAllowedVehicleType,
   isAllowedVehicleType,
+  passengerVehicleTypeMatchesRide,
+  getMaxSeatsForVehicleType,
   vehicleTypeCandidates,
 };
-
+

@@ -11,7 +11,7 @@ import FixedButton from "../Components/FixedButton";
 
 import { createRideApi, userProfile } from "../ApiService/ridesApiServices";
 import { profileData } from "../Navigation/AuthNavigator";
-import { validatePrice, validateSeats } from "../Utils";
+import { validatePrice, validateSeats, getMaxSeatsForVehicleType } from "../Utils";
 import { assertScheduledStartInFuture } from "../Utils/rideSchedule";
 import { DS } from "../theme/designSystem";
 import { getCreateRideTheme } from "../theme/createRideTheme";
@@ -119,13 +119,28 @@ const CreateRidePage = () => {
 
   useEffect(() => {
     priceTouchedRef.current = false;
-    setRideData((prev) =>
-      prev.ride_amount ? { ...prev, ride_amount: "" } : prev
-    );
+    setRideData((prev) => {
+      const next = { ...prev };
+      if (prev.ride_amount) next.ride_amount = "";
+      const maxSeats = getMaxSeatsForVehicleType(vehicleTypeKey);
+      if (parseInt(prev.availableSeats || "1", 10) > maxSeats) {
+        next.availableSeats = String(maxSeats);
+      }
+      return next;
+    });
   }, [vehicleTypeKey]);
 
   const updateRideData = (field, value) => {
     if (field === "ride_amount") return;
+    if (field === "availableSeats") {
+      const maxSeats = getMaxSeatsForVehicleType(vehicleTypeKey);
+      const parsed = parseInt(value, 10);
+      const next = Number.isNaN(parsed)
+        ? "1"
+        : String(Math.max(1, Math.min(parsed, maxSeats)));
+      setRideData((prev) => ({ ...prev, availableSeats: next }));
+      return;
+    }
     setRideData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -146,7 +161,7 @@ const CreateRidePage = () => {
     if (!rideData.startTime) {
       return "Please select a departure time";
     }
-    const seatsErr = validateSeats(rideData.availableSeats);
+    const seatsErr = validateSeats(rideData.availableSeats, vehicleTypeKey);
     if (seatsErr) return seatsErr;
     const priceErr = validatePrice(rideData.ride_amount);
     if (priceErr) return priceErr;
@@ -198,7 +213,10 @@ const CreateRidePage = () => {
         toCoords: toCoordsPayload(toCoords, rideData.to.trim()),
         date: rideData.date,
         startTime: rideData.startTime,
-        availableSeats: Number(rideData.availableSeats) || 1,
+        availableSeats: Math.min(
+          Number(rideData.availableSeats) || 1,
+          getMaxSeatsForVehicleType(vehicleTypeKey)
+        ),
         ride_amount: Number(rideData.ride_amount),
         AlternatePhoneNumber: rideData.AlternatePhoneNumber?.trim() || undefined,
         CanCarryCourier: rideData.CanCarryCourier,

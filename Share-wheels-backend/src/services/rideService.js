@@ -31,7 +31,7 @@ const {
   emitRideRequestUpdated,
 } = require("../utils/socketEmit");
 const { toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
-const { normalizeAllowedVehicleType } = require("../constants/vehicleTypes");
+const { normalizeAllowedVehicleType, getMaxSeatsForVehicleType } = require("../constants/vehicleTypes");
 const {
   closeStandaloneRequestsAfterJoin,
   linkStandalonePassengersForRideRequest,
@@ -229,6 +229,20 @@ const createRide = async (user, payload) => {
   const normalizedRideType = String(rideType || "long").trim().toLowerCase();
   const storedRideType = normalizedRideType === "local" ? "local" : "long";
 
+  const seatCount = Number(availableSeats) || 1;
+  const maxSeats = getMaxSeatsForVehicleType(vehicle.type);
+  if (seatCount > maxSeats) {
+    return {
+      status: 400,
+      body: {
+        error:
+          normalizeAllowedVehicleType(vehicle.type) === "bike"
+            ? "Bikes can only offer 1 seat"
+            : `Maximum ${maxSeats} seats allowed for this vehicle`,
+      },
+    };
+  }
+
   const ride = await Ride.create({
     creator: user._id,
     from,
@@ -240,7 +254,7 @@ const createRide = async (user, payload) => {
     ...(storedRouteMeters ? { routeDistanceMeters: storedRouteMeters } : {}),
     selectedRouteIndex: routeIndex,
     stopovers: normalizedStopovers,
-    availableSeats: availableSeats || 1,
+    availableSeats: seatCount,
     date: rideDate,
     AlternatePhoneNumber: AlternatePhoneNumber ? String(AlternatePhoneNumber) : undefined,
     startTime: normalizedStartTime,
@@ -1643,6 +1657,7 @@ const findMatchingRidesForRequest = async ({
   userId,
   courierOnly = false,
   excludeRideId = null,
+  vehicleType = null,
 }) => {
   await expireStalePendingRides();
 
@@ -1688,7 +1703,14 @@ const findMatchingRidesForRequest = async ({
   );
   const matchedRides = matchResults.filter((row) => row.matches).map((row) => row.ride);
 
-  const subscribedRides = await filterRidesByDriverSubscription(matchedRides);
+  const requestedVehicleType = normalizeAllowedVehicleType(vehicleType);
+  const vehicleFilteredRides = requestedVehicleType
+    ? matchedRides.filter(
+        (ride) => resolveMatchingRideVehicle(ride).type === requestedVehicleType
+      )
+    : matchedRides;
+
+  const subscribedRides = await filterRidesByDriverSubscription(vehicleFilteredRides);
 
   return subscribedRides.slice(0, 10).map((r) => serializeMatchingRide(r, userId));
 };
@@ -1734,6 +1756,7 @@ const buildMyPassengerRequests = async (user) => {
       to: p.to,
       date: p.date,
       date_end: p.date_end,
+      vehicle_type: p.vehicle_type || "",
       seats: p.seats_needed,
       amount: p.amount_will,
       luggage: p.luggage_included,
@@ -1758,6 +1781,7 @@ const buildMyPassengerRequests = async (user) => {
         date: req.date,
         dateEnd: req.date_end,
         userId,
+        vehicleType: req.vehicle_type,
       });
       const linkedRideId = req.lockedRideId || null;
       const linkedRide = linkedRideId
@@ -1978,6 +2002,27 @@ const updateMyPassengerRequest = async (user, requestId, body = {}) => {
     return { status: 400, body: { success: false, message: "Valid amount_will is required" } };
   }
 
+  const normalizedVehicleType = normalizeAllowedVehicleType(body.vehicle_type ?? doc.vehicle_type);
+  if (!normalizedVehicleType) {
+    return {
+      status: 400,
+      body: { success: false, message: "vehicle_type is required (bike, auto, or car)" },
+    };
+  }
+  const maxSeats = getMaxSeatsForVehicleType(normalizedVehicleType);
+  if (seats > maxSeats) {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message:
+          normalizedVehicleType === "bike"
+            ? "Bikes can only request 1 seat"
+            : `Maximum ${maxSeats} seats allowed for this vehicle type`,
+      },
+    };
+  }
+
   const prev = {
     from: doc.from,
     to: doc.to,
@@ -1989,6 +2034,7 @@ const updateMyPassengerRequest = async (user, requestId, body = {}) => {
 
   doc.from = from;
   doc.to = to;
+  doc.vehicle_type = normalizedVehicleType;
   doc.seats_needed = seats;
   doc.amount_will = amount;
   doc.ride_need_date = startDate;

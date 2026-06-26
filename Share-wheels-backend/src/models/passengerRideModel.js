@@ -11,6 +11,7 @@ const passengerRideSchema = new mongoose.Schema(
     passenger_rideId: { type: String, required: true, unique: true },
     ...routeFields,
     ride_need_date: { type: String },
+    vehicle_type: { type: String, default: "" },
     seats_needed: { type: Number, required: true, min: 1 },
     amount_will: amountWillField,
     luggage_included: { type: Boolean, default: false },

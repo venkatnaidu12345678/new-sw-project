@@ -1,4 +1,5 @@
 import { formatDisplayTime } from "./Utils/dateUtils";
+import { normalizeVehicleType } from "./hooks/useLookupOptions";
 
 /* ---------------- IMAGE UTILS ---------------- */
 
@@ -268,10 +269,16 @@ export const validateDate = (date) => {
 };
 /* ---------------- FIELD VALIDATORS ---------------- */
 
-export const validateSeats = (value) => {
+export const getMaxSeatsForVehicleType = (vehicleType) => {
+  const type = normalizeVehicleType(vehicleType);
+  if (type === "bike") return 1;
+  return 6;
+};
+
+export const validateSeats = (value, vehicleType) => {
   if (!value) return "Seats are required";
 
-  const seats = parseInt(value);
+  const seats = parseInt(value, 10);
 
   if (isNaN(seats)) {
     return "Seats must be a number";
@@ -281,8 +288,16 @@ export const validateSeats = (value) => {
     return "At least 1 seat is required";
   }
 
-  if (seats > 6) {
-    return "Maximum 6 seats allowed"; // optional limit
+  const maxSeats =
+    vehicleType != null && String(vehicleType).trim() !== ""
+      ? getMaxSeatsForVehicleType(vehicleType)
+      : 6;
+
+  if (seats > maxSeats) {
+    if (normalizeVehicleType(vehicleType) === "bike") {
+      return "Bikes can only offer 1 seat";
+    }
+    return `Maximum ${maxSeats} seats allowed`;
   }
 
   return "";

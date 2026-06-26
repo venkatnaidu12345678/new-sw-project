@@ -6,11 +6,15 @@ import {
   StyleSheet,
   ActivityIndicator,
   Image,
+  Alert,
 } from "react-native";
 import seat from "../assets/seatIcon.png";
 import { LAYOUT } from "../theme/layout";
 import { useTheme } from "../context/ThemeContext";
 import { useThemedStyles } from "../theme/useThemedStyles";
+
+import { getMaxSeatsForVehicleType, validateSeats } from "../Utils";
+import { normalizeVehicleType } from "../hooks/useLookupOptions";
 
 /**
  * Driver control to change total vehicle seats after ride creation.
@@ -21,9 +25,16 @@ const EditableRideSeats = ({
   canEdit,
   saving,
   onSave,
+  maxSeats = 20,
+  vehicleType,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const seatCap =
+    vehicleType != null && String(vehicleType).trim() !== ""
+      ? getMaxSeatsForVehicleType(vehicleType)
+      : maxSeats;
+  const isBike = normalizeVehicleType(vehicleType) === "bike";
   const totalCapacity = Math.max(
     1,
     (Number(availableSeats) || 0) + (Number(bookedSeats) || 0)
@@ -40,13 +51,18 @@ const EditableRideSeats = ({
     setTotal((prev) => {
       const next = prev + delta;
       if (next < minTotal) return minTotal;
-      if (next > 20) return 20;
+      if (next > seatCap) return seatCap;
       return next;
     });
   };
 
   const handleSave = () => {
     if (total === totalCapacity) return;
+    const seatsErr = validateSeats(String(total), vehicleType);
+    if (seatsErr) {
+      Alert.alert("Invalid seats", seatsErr);
+      return;
+    }
     onSave?.(total);
   };
 
@@ -73,7 +89,7 @@ const EditableRideSeats = ({
             <TouchableOpacity
               style={styles.stepBtn}
               onPress={() => change(1)}
-              disabled={total >= 20 || saving}
+              disabled={total >= seatCap || saving}
             >
               <Text style={styles.stepText}>+</Text>
             </TouchableOpacity>
@@ -81,6 +97,9 @@ const EditableRideSeats = ({
           <Text style={styles.meta}>
             {bookedSeats} booked · {Math.max(0, total - bookedSeats)} available
           </Text>
+          {isBike ? (
+            <Text style={styles.bikeHint}>Bikes can offer 1 seat only</Text>
+          ) : null}
           {total !== totalCapacity ? (
             <TouchableOpacity
               style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
@@ -162,6 +181,13 @@ const createStyles = (c) =>
       color: c.textMuted,
       marginTop: 8,
       textAlign: "center",
+    },
+    bikeHint: {
+      fontSize: 11,
+      color: c.textMuted,
+      marginTop: 6,
+      textAlign: "center",
+      lineHeight: 15,
     },
     saveBtn: {
       marginTop: 10,

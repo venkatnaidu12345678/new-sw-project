@@ -354,6 +354,113 @@ export const RequestPriceInput = ({
   );
 };
 
+const VEHICLE_TYPE_ICONS = {
+  bike: "bicycle-outline",
+  auto: "car-outline",
+  car: "car-sport-outline",
+};
+
+/** Vehicle type chips for passenger requests. */
+export const RequestVehicleTypeChips = ({
+  theme,
+  label = "Vehicle type needed",
+  value,
+  onChange,
+  options = [],
+}) => {
+  const accent = theme.sections?.vehicle || theme.sections?.preferences || theme.date;
+  const cardStyle = {
+    backgroundColor: accent.bg,
+    borderColor: accent.border,
+  };
+
+  return (
+    <View style={vehicleTypeStyles.container}>
+      <View style={[vehicleTypeStyles.inputCard, cardStyle]}>
+        <View style={vehicleTypeStyles.labelRow}>
+          <Icon name="car-sport-outline" size={16} color={accent.icon || theme.text} />
+          <Text style={[vehicleTypeStyles.label, { color: theme.text }]}>
+            {label}
+            <Text style={vehicleTypeStyles.req}> *</Text>
+          </Text>
+        </View>
+        <View style={vehicleTypeStyles.wrap}>
+          {options.map((opt) => {
+            const selected = value === opt.value;
+            return (
+              <TouchableOpacity
+                key={opt.value}
+                onPress={() => onChange(opt.value)}
+                activeOpacity={0.82}
+                style={[
+                  vehicleTypeStyles.chip,
+                  {
+                    backgroundColor: selected ? accent.bg : theme.surface || "#FFFFFF",
+                    borderColor: selected ? accent.icon || accent.border : accent.border,
+                  },
+                ]}
+              >
+                <Icon
+                  name={VEHICLE_TYPE_ICONS[opt.value] || "car-outline"}
+                  size={16}
+                  color={selected ? accent.icon || theme.text : theme.textMuted}
+                />
+                <Text
+                  style={[
+                    vehicleTypeStyles.chipText,
+                    { color: selected ? accent.icon || theme.text : theme.text },
+                  ]}
+                >
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+    </View>
+  );
+};
+
+const vehicleTypeStyles = StyleSheet.create({
+  container: {
+    width: "100%",
+    marginTop: 12,
+  },
+  inputCard: {
+    width: "100%",
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+  },
+  labelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+    gap: 6,
+  },
+  label: { fontSize: 13, fontWeight: "700", flex: 1 },
+  req: { color: "#EF4444" },
+  wrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1.5,
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+});
+
 const seatsStyles = StyleSheet.create({
   container: {
     width: "100%",

@@ -24,6 +24,7 @@ import { getMySubscription } from "../ApiService/subscriptionApiService";
 import FixedButton from "../Components/FixedButton";
 import UpcomingRouteLines from "../Components/ui/UpcomingRouteLines";
 import { getUpcomingRideRoutes } from "../Utils/upcomingRideRouteUtils";
+import { resolveRideVehicle } from "../Utils/vehicleDisplayUtils";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
@@ -46,7 +47,6 @@ import {
 } from "../ApiService/ridesApiServices";
 import RideDriverActionForm from "../Components/RideDriverActionForm";
 import seat from "../assets/seatIcon.png";
-import car from "../assets/car.png";
 import dateIcon from "../assets/dateIcon.png";
 import priceIcon from "../assets/priceIcon.png";
 import clock from "../assets/clock2.png";
@@ -113,6 +113,7 @@ import {
   formatLeadTimeHint,
 } from "../Utils/rideSchedule";
 import { getApiErrorMessage } from "../Utils/apiErrors";
+import { getMaxSeatsForVehicleType, validateSeats } from "../Utils";
 import { openPhoneCall } from "../Utils/phoneCall";
 import { useRideSocket } from "../hooks/useAppSocket";
 import { normalizeRideId } from "../liveTracking/liveTrackingState";
@@ -214,8 +215,24 @@ const UpcomingDetailsPage = ({ route }) => {
       !!creatorId &&
       String(creatorId) === String(myUserId));
 
-  const displayVehicle = rideMeta?.vehicle || rideData?.vehicle;
+  const displayVehicle = useMemo(
+    () =>
+      resolveRideVehicle({
+        vehicle: rideMeta?.vehicle || rideData?.vehicle,
+        creator: rideMeta?.creator || rideData?.creator,
+      }),
+    [rideMeta?.vehicle, rideMeta?.creator, rideData?.vehicle, rideData?.creator]
+  );
   const displayCreator = rideMeta?.creator || rideData?.creator;
+  const driverVehicleType = useMemo(
+    () =>
+      displayVehicle?.type ||
+      rideData?.vehicle?.type ||
+      ProfileDetails?.data?.vehicleInfo?.vehicleType ||
+      ProfileDetails?.data?.vehicleInfo?.type ||
+      "",
+    [displayVehicle, rideData?.vehicle, ProfileDetails?.data?.vehicleInfo]
+  );
   const isMountedRef = useRef(true);
   const popoverTimerRef = useRef(null);
 
@@ -644,6 +661,19 @@ const UpcomingDetailsPage = ({ route }) => {
   }, [participantTabs.length, participantTabIndex]);
 
   const handleSaveSeats = async (totalSeats) => {
+    const seatsErr = validateSeats(String(totalSeats), driverVehicleType);
+    if (seatsErr) {
+      Alert.alert("Invalid seats", seatsErr);
+      return;
+    }
+    const maxSeats = getMaxSeatsForVehicleType(driverVehicleType);
+    if (totalSeats > maxSeats) {
+      Alert.alert(
+        "Invalid seats",
+        maxSeats === 1 ? "Bikes can only offer 1 seat" : `Maximum ${maxSeats} seats allowed`
+      );
+      return;
+    }
     try {
       setSeatsSaving(true);
       const token = await AsyncStorage.getItem("token");
@@ -1457,26 +1487,11 @@ const UpcomingDetailsPage = ({ route }) => {
 
         {/* INFO */}
         <View style={styles.infoCards}>
-          {!isDriver && displayVehicle ? (
-            <View style={[styles.card, styles.fullWidth, { backgroundColor: colors.tintPurple }]}>
-              <Text style={styles.label}>
-                <Image source={car} style={styles.icon} /> Vehicle
-              </Text>
-              <VehicleInfoStrip vehicle={displayVehicle} compact />
+          {displayVehicle ? (
+            <View style={[styles.card, styles.fullWidth, styles.vehicleDetailCard]}>
+              <VehicleInfoStrip vehicle={displayVehicle} />
             </View>
-          ) : (
-            <View style={[styles.card, { backgroundColor: colors.tintPurple }]}>
-              <Text style={styles.label}>
-                <Image source={car} style={styles.icon} /> Car Type
-              </Text>
-              <Text style={styles.value}>
-                {displayVehicle?.company || rideData?.vehicle?.company || "—"}
-                {displayVehicle?.car_no || rideData?.vehicle?.car_no
-                  ? ` (${displayVehicle?.car_no || rideData?.vehicle?.car_no})`
-                  : ""}
-              </Text>
-            </View>
-          )}
+          ) : null}
 
           {isDriver ? (
             <>
@@ -1486,6 +1501,7 @@ const UpcomingDetailsPage = ({ route }) => {
                 canEdit={canEditSeats}
                 saving={seatsSaving}
                 onSave={handleSaveSeats}
+                vehicleType={driverVehicleType}
               />
 
               {canEditSeats && (
@@ -1575,6 +1591,7 @@ const UpcomingDetailsPage = ({ route }) => {
             <DriverContactCard
               driver={displayCreator}
               vehicle={displayVehicle}
+              showVehicle={false}
               messageUnread={chatUnread.driver}
               onMessage={() =>
                 openDirectChat({ userId: rideData?.creator, role: "driver" })
@@ -2167,6 +2184,13 @@ const createStyles = (c) => {
   },
 
   fullWidth: { width: "100%" },
+
+  vehicleDetailCard: {
+    padding: 10,
+    backgroundColor: c.surface,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
 
   label: {
     fontSize: 13,

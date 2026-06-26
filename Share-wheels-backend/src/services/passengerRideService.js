@@ -21,10 +21,42 @@ const {
 } = require("../utils/rideParticipantRules");
 const { withRidePickLock } = require("../utils/ridePickLock");
 const { expireStalePassengerRequests } = require("./requestExpiryService");
+const {
+  normalizeAllowedVehicleType,
+  isAllowedVehicleType,
+  passengerVehicleTypeMatchesRide,
+  getMaxSeatsForVehicleType,
+} = require("../constants/vehicleTypes");
 
-const createPassengerRequest = async (user, { from, to, ride_need_date, seats_needed, date, luggage_included, amount_will }) => {
+const createPassengerRequest = async (
+  user,
+  { from, to, ride_need_date, seats_needed, date, luggage_included, amount_will, vehicle_type }
+) => {
   if (!from || !to || !ride_need_date || !seats_needed) {
     return { status: 400, body: { error: "All fields are required" } };
+  }
+  const normalizedVehicleType = normalizeAllowedVehicleType(vehicle_type);
+  if (!normalizedVehicleType) {
+    return {
+      status: 400,
+      body: { error: "vehicle_type is required (bike, auto, or car)" },
+    };
+  }
+  const seatCount = Number(seats_needed);
+  if (!Number.isFinite(seatCount) || seatCount < 1) {
+    return { status: 400, body: { error: "Valid seats_needed is required" } };
+  }
+  const maxSeats = getMaxSeatsForVehicleType(normalizedVehicleType);
+  if (seatCount > maxSeats) {
+    return {
+      status: 400,
+      body: {
+        error:
+          normalizedVehicleType === "bike"
+            ? "Bikes can only request 1 seat"
+            : `Maximum ${maxSeats} seats allowed for this vehicle type`,
+      },
+    };
   }
   const amount = parseAmount(amount_will);
   if (amount === null || amount <= 0) {
@@ -42,7 +74,8 @@ const createPassengerRequest = async (user, { from, to, ride_need_date, seats_ne
     passenger_rideId: new mongoose.Types.ObjectId().toString(),
     from,
     to,
-    seats_needed,
+    vehicle_type: normalizedVehicleType,
+    seats_needed: seatCount,
     amount_will: amount,
     ride_need_date,
     luggage_included,
@@ -171,6 +204,20 @@ const pickPassenger = async (user, { passenger_rideId, rideId }) => {
   if (!ride) return { status: 404, body: { message: "Ride not found" } };
   if (ride.creator.toString() !== user._id.toString()) return { status: 403, body: { message: "Unauthorized" } };
   if (ride.availableSeats < passengerRide.seats_needed) return { status: 400, body: { success: false, message: "Not enough seats" } };
+  if (
+    !passengerVehicleTypeMatchesRide(
+      passengerRide.vehicle_type,
+      ride.vehicle?.type
+    )
+  ) {
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message: "This passenger request does not match your vehicle type",
+      },
+    };
+  }
 
   const participantConflict = rejectIfEnroutePickWouldConflict(
     ride,

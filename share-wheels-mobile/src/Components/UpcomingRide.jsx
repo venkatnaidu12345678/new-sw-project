@@ -9,6 +9,8 @@ import {
   getUpcomingRideRoutes,
   stopoverCount,
 } from "../Utils/upcomingRideRouteUtils";
+import { resolveRideVehicle, getVehicleTypeMeta } from "../Utils/vehicleDisplayUtils";
+import { VehicleInlineBar } from "./VehicleInfoStrip";
 import UpcomingRouteLines from "./ui/UpcomingRouteLines";
 import UserAvatar from "./ui/UserAvatar";
 import { LAYOUT } from "../theme/layout";
@@ -78,6 +80,7 @@ const UpcomingRide = ({ data, onPress, highlighted = false, highlightLabel = "Yo
     ProfileDetails?.id ||
     ProfileDetails?.data?.personalInfo?._id;
   const { rideRoute, bookedRoute } = getUpcomingRideRoutes(data, { myUserId });
+  const vehicle = resolveRideVehicle(data);
   const stops = stopoverCount(data?.stopovers);
   const seats =
     data?.requires_seats ||
@@ -251,6 +254,8 @@ const UpcomingRide = ({ data, onPress, highlighted = false, highlightLabel = "Yo
             role={role}
           />
 
+          {vehicle ? <VehicleInlineBar vehicle={vehicle} /> : null}
+
           <View style={styles.metaRow}>
             {dateLabel ? <MetaChip icon="calendar-outline" label={dateLabel} /> : null}
             {timeLabel ? <MetaChip icon="time-outline" label={timeLabel} /> : null}
@@ -264,6 +269,12 @@ const UpcomingRide = ({ data, onPress, highlighted = false, highlightLabel = "Yo
               <MetaChip
                 icon="people-outline"
                 label={`${seats} seat${seats !== 1 ? "s" : ""}`}
+              />
+            ) : null}
+            {vehicle?.type ? (
+              <MetaChip
+                icon={getVehicleTypeMeta(vehicle.type).icon}
+                label={getVehicleTypeMeta(vehicle.type).label}
               />
             ) : null}
           </View>

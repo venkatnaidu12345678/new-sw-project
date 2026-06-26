@@ -9,7 +9,8 @@ import {
 import DateTimePicker from "@react-native-community/datetimepicker";
 import Icon from "react-native-vector-icons/Ionicons";
 
-import { validateSeats } from "../Utils";
+import { validateSeats, getMaxSeatsForVehicleType } from "../Utils";
+import { normalizeVehicleType } from "../hooks/useLookupOptions";
 import {
   parseLocalDate,
   formatLocalISODate,
@@ -19,7 +20,7 @@ import { DS } from "../theme/designSystem";
 import { getCreateRideTheme } from "../theme/createRideTheme";
 import { useTheme } from "../context/ThemeContext";
 
-const DriverDateAndSeats = ({ rideData, updateRideData, submitted }) => {
+const DriverDateAndSeats = ({ rideData, updateRideData, submitted, vehicleType }) => {
   const { colors, input, isDark } = useTheme();
   const CR = useMemo(() => getCreateRideTheme(colors), [colors]);
   const styles = useMemo(() => makeStyles(CR, input), [CR, input]);
@@ -27,6 +28,8 @@ const DriverDateAndSeats = ({ rideData, updateRideData, submitted }) => {
   const [touchedDate, setTouchedDate] = useState(false);
   const [touchedSeats, setTouchedSeats] = useState(false);
 
+  const maxSeats = getMaxSeatsForVehicleType(vehicleType);
+  const isBike = normalizeVehicleType(vehicleType) === "bike";
   const seats = parseInt(rideData.availableSeats || "1", 10);
 
   const today = useMemo(() => {
@@ -44,7 +47,7 @@ const DriverDateAndSeats = ({ rideData, updateRideData, submitted }) => {
 
   const dateError = submitted || touchedDate ? validateDate() : "";
   const seatsError =
-    submitted || touchedSeats ? validateSeats(rideData.availableSeats) : "";
+    submitted || touchedSeats ? validateSeats(rideData.availableSeats, vehicleType) : "";
 
   const isDateValid = !dateError;
   const isSeatsValid = !seatsError;
@@ -58,6 +61,7 @@ const DriverDateAndSeats = ({ rideData, updateRideData, submitted }) => {
   };
 
   const increaseSeats = () => {
+    if (seats >= maxSeats) return;
     setTouchedSeats(true);
     updateRideData("availableSeats", String(seats + 1));
   };
@@ -133,6 +137,7 @@ const DriverDateAndSeats = ({ rideData, updateRideData, submitted }) => {
             <TouchableOpacity
               onPress={decreaseSeats}
               style={styles.seatBtn}
+              disabled={seats <= 1}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Icon name="remove" size={22} color={CR.textMuted} />
@@ -142,12 +147,21 @@ const DriverDateAndSeats = ({ rideData, updateRideData, submitted }) => {
 
             <TouchableOpacity
               onPress={increaseSeats}
-              style={styles.seatBtn}
+              style={[styles.seatBtn, seats >= maxSeats && styles.seatBtnDisabled]}
+              disabled={seats >= maxSeats}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Icon name="add" size={22} color={CR.seats.icon} />
+              <Icon
+                name="add"
+                size={22}
+                color={seats >= maxSeats ? CR.textMuted : CR.seats.icon}
+              />
             </TouchableOpacity>
           </View>
+
+          {isBike ? (
+            <Text style={styles.bikeHint}>Bikes can offer 1 seat only</Text>
+          ) : null}
 
           <Text style={styles.errorText}>
             {submitted || touchedSeats ? seatsError || " " : " "}
@@ -237,6 +251,15 @@ const makeStyles = (CR, input) =>
     },
     seatBtn: {
       padding: 4,
+    },
+    seatBtnDisabled: {
+      opacity: 0.45,
+    },
+    bikeHint: {
+      fontSize: DS.font.small,
+      color: CR.textMuted,
+      marginTop: 6,
+      lineHeight: 16,
     },
     seatCount: {
       fontSize: DS.font.section,

@@ -13,16 +13,18 @@ import {
   RequestSection,
   RequestPriceInput,
   RequestSeatsStepper,
+  RequestVehicleTypeChips,
 } from "../Components/ui/RequestFormUI";
 
 import {
   createpassengerrequest,
   updateMyPassengerRequest,
 } from "../ApiService/ridesApiServices";
-import { validateLocation, validatePrice } from "../Utils";
+import { validateLocation, validatePrice, getMaxSeatsForVehicleType } from "../Utils";
 import { getPassengerTheme } from "../theme/requestFormTheme";
 import { DS } from "../theme/designSystem";
 import { useTheme } from "../context/ThemeContext";
+import { useLookupOptions, normalizeVehicleType } from "../hooks/useLookupOptions";
 import {
   alertError,
   alertValidation,
@@ -33,6 +35,7 @@ const EMPTY_PASSENGER_PAYLOAD = {
   from: "",
   to: "",
   ride_need_date: "",
+  vehicle_type: "",
   seats_needed: 1,
   dateStart: "",
   dateEnd: "",
@@ -52,6 +55,7 @@ const PassengerRequest = () => {
   const route = useRoute();
   const { colors } = useTheme();
   const T = useMemo(() => getPassengerTheme(colors), [colors]);
+  const { options: vehicleTypeOptions } = useLookupOptions("vehicle_type", "Select type");
   const formRef = useRef();
   const [formResetKey, setFormResetKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -81,13 +85,28 @@ const PassengerRequest = () => {
           ? editRequest.raw.luggage_included
           : true,
       amount_will: String(editRequest?.raw?.amount || editRequest?.amount || ""),
+      vehicle_type:
+        normalizeVehicleType(
+          editRequest?.raw?.vehicle_type || editRequest?.raw?.vehicleType || ""
+        ) || "",
     }));
     setFormResetKey((k) => k + 1);
   }, [isEditMode, editRequest]);
 
   const updatePayload = (key, value) => {
-    setPayload((prev) => ({ ...prev, [key]: value }));
+    setPayload((prev) => {
+      const next = { ...prev, [key]: value };
+      if (key === "vehicle_type") {
+        const maxSeats = getMaxSeatsForVehicleType(value);
+        if ((Number(next.seats_needed) || 1) > maxSeats) {
+          next.seats_needed = maxSeats;
+        }
+      }
+      return next;
+    });
   };
+
+  const maxSeatsForType = getMaxSeatsForVehicleType(payload.vehicle_type);
 
   const fields = [
     {
@@ -125,6 +144,20 @@ const PassengerRequest = () => {
       return;
     }
 
+    if (!normalizeVehicleType(payload.vehicle_type)) {
+      alertValidation("Please select a vehicle type.");
+      return;
+    }
+
+    if (payload.seats_needed > maxSeatsForType) {
+      alertValidation(
+        normalizeVehicleType(payload.vehicle_type) === "bike"
+          ? "Bikes can only request 1 seat."
+          : `Maximum ${maxSeatsForType} seats allowed for this vehicle type.`
+      );
+      return;
+    }
+
     const priceError = validatePrice(payload.amount_will);
     if (priceError) {
       alertValidation(priceError);
@@ -141,6 +174,7 @@ const PassengerRequest = () => {
 
       const finalPayload = {
         ...payload,
+        vehicle_type: normalizeVehicleType(payload.vehicle_type),
         ride_need_date: payload.dateStart,
         amount_will: Number(payload.amount_will),
         date: {
@@ -230,6 +264,20 @@ const PassengerRequest = () => {
 
         <RequestSection
           theme={T}
+          accent={T.sections.preferences}
+          title="Vehicle preference"
+          subtitle="Which vehicle type do you need?"
+        >
+          <RequestVehicleTypeChips
+            theme={T}
+            value={payload.vehicle_type}
+            onChange={(value) => updatePayload("vehicle_type", value)}
+            options={vehicleTypeOptions}
+          />
+        </RequestSection>
+
+        <RequestSection
+          theme={T}
           accent={T.sections.schedule}
           title="Schedule"
           subtitle="When you need a ride"
@@ -246,6 +294,7 @@ const PassengerRequest = () => {
             theme={T}
             label="Seats needed"
             value={payload.seats_needed}
+            max={maxSeatsForType}
             onChange={(n) => updatePayload("seats_needed", n)}
           />
         </RequestSection>

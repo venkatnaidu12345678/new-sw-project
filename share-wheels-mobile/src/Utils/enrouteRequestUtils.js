@@ -1,10 +1,25 @@
 import { formatLocalISODate } from "./dateUtils";
 
+import {
+  LOOKUP_FALLBACKS,
+  normalizeVehicleType,
+} from "../hooks/useLookupOptions";
+
+const formatVehicleTypeLabel = (value) => {
+  const type = normalizeVehicleType(value);
+  if (!type) return "";
+  return (
+    LOOKUP_FALLBACKS.vehicle_type.find((o) => o.value === type)?.label ||
+    type.charAt(0).toUpperCase() + type.slice(1)
+  );
+};
+
 export const formatEnrouteItems = (list, from, to) => {
   if (!Array.isArray(list)) return [];
 
   return list.map((item, index) => {
     const isCourier = item.request_type?.toLowerCase().includes("courier");
+    const vehicleLabel = !isCourier ? formatVehicleTypeLabel(item.vehicle_type) : "";
 
     return {
       id:
@@ -22,7 +37,12 @@ export const formatEnrouteItems = (list, from, to) => {
       timeSlot: item.timeSlot || "",
       details: isCourier
         ? item.what_to_deliver || "Courier Item"
-        : `Seats: ${item.seats_needed || 1}`,
+        : [
+            vehicleLabel ? `Vehicle: ${vehicleLabel}` : null,
+            `Seats: ${item.seats_needed || 1}`,
+          ]
+            .filter(Boolean)
+            .join(" · "),
       route: `${item.from || from} → ${item.to || to}`,
       price: item.amount ?? item.amount_will ?? 0,
       type: isCourier ? "courier" : "passenger",

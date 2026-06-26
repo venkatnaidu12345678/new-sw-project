@@ -308,6 +308,7 @@ const CreateRideComponentOne = forwardRef(
             rideData={rideData}
             updateRideData={updateRideData}
             submitted={submitted}
+            vehicleType={vehicleInfo?.vehicleType || vehicleInfo?.type || ""}
           />
         </FormSection>
 

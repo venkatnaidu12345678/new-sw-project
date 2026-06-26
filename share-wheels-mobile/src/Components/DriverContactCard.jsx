@@ -26,6 +26,7 @@ const DriverContactCard = ({
   onCall,
   messageUnread = 0,
   showCall = true,
+  showVehicle = true,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -58,7 +59,7 @@ const DriverContactCard = ({
           </View>
         </View>
 
-        {vehicle ? <VehicleInfoStrip vehicle={vehicle} compact /> : null}
+        {showVehicle && vehicle ? <VehicleInfoStrip vehicle={vehicle} compact /> : null}
 
         <View style={styles.actions}>
           <TouchableOpacity

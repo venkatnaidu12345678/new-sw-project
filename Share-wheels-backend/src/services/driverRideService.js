@@ -8,6 +8,7 @@ const { notifyUser } = require("./notificationService");
 const { notifyRideParticipants } = require("../utils/rideNotificationUtils");
 const { getDriverCompleteRideBlockers } = require("../utils/participantTripStatus");
 const { getRideDetails } = require("./rideService");
+const { normalizeAllowedVehicleType, passengerVehicleTypeMatchesRide } = require("../constants/vehicleTypes");
 const { toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
 const {
   collectRideParticipantUserIds,
@@ -477,16 +478,18 @@ const enrouteRequests = async (user, { from, to, date, rideId, stopovers, routeP
   let stopoverRows = normalizeStopoverRows(stopovers);
   let polyline = String(routePolyline || "").trim();
   let rideDayDate = date;
+  let rideVehicleType = null;
   let excludePassengerRideIds = new Set();
   let excludeCourierIds = new Set();
 
   if (rideId && mongoose.Types.ObjectId.isValid(rideId)) {
     const ride = await Ride.findById(rideId)
       .select(
-        "stopovers from to routePolyline date"
+        "stopovers from to routePolyline date vehicle.type"
       )
       .lean();
     if (ride) {
+      rideVehicleType = ride.vehicle?.type || null;
       const assigned = await collectAssignedRequestDocIds(rideId);
       assigned.passengerRideIds.forEach((id) => excludePassengerRideIds.add(id));
       assigned.courierIds.forEach((id) => excludeCourierIds.add(id));
@@ -543,7 +546,8 @@ const enrouteRequests = async (user, { from, to, date, rideId, stopovers, routeP
       (p) =>
         !excludePassengerRideIds.has(String(p._id)) &&
         isPassengerOpenForDriverEnroute(p, driverRideIdStr) &&
-        matchesCorridor(p.from, p.to)
+        matchesCorridor(p.from, p.to) &&
+        passengerVehicleTypeMatchesRide(p.vehicle_type, rideVehicleType)
     )
     .map((p) => ({
     request_type: "passenger",
@@ -552,6 +556,7 @@ const enrouteRequests = async (user, { from, to, date, rideId, stopovers, routeP
     name: p.creator?.name || "",
     gender: p.creator?.gender || "",
     profile: p.creator?.profile_img || "",
+    vehicle_type: p.vehicle_type || "",
     seats_needed: p.seats_needed,
     luggage: p.luggage_included,
     amount: p.amount_will,
@@ -875,6 +880,14 @@ const updateRideSeats = async (user, { rideId, totalSeats }) => {
   if (!ride) {
     return { status: 404, body: { success: false, message: "Ride not found" } };
   }
+
+  if (normalizeAllowedVehicleType(ride.vehicle?.type) === "bike" && total > 1) {
+    return {
+      status: 400,
+      body: { success: false, message: "Bikes can only offer 1 seat" },
+    };
+  }
+
   if (ride.creator.toString() !== user._id.toString()) {
     return {
       status: 403,

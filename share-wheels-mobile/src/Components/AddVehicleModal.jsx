@@ -20,7 +20,7 @@ import LinearGradient from "react-native-linear-gradient";
 
 import { AddVehicle } from "../ApiService/ridesApiServices";
 import AppTextInput from "./ui/AppTextInput";
-import { useLookupOptions } from "../hooks/useLookupOptions";
+import { normalizeVehicleType, useLookupOptions } from "../hooks/useLookupOptions";
 import { alertError, alertValidation } from "../Utils/appAlert";
 import { getCreateRideTheme } from "../theme/createRideTheme";
 import { DS } from "../theme/designSystem";
@@ -78,6 +78,38 @@ const formatDisplayDate = (iso) => {
   return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 };
 
+const PhotoReuploadNotice = ({ message, colors, isDark }) => {
+  if (!message) return null;
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "flex-start",
+        gap: 10,
+        padding: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        marginBottom: 12,
+        backgroundColor: isDark ? "#78350F33" : "#FFFBEB",
+        borderColor: isDark ? "#F59E0B66" : "#FDE68A",
+      }}
+    >
+      <Icon name="warning-outline" size={18} color="#D97706" />
+      <Text
+        style={{
+          flex: 1,
+          fontSize: 13,
+          lineHeight: 18,
+          fontWeight: "600",
+          color: isDark ? "#FCD34D" : "#92400E",
+        }}
+      >
+        {message}
+      </Text>
+    </View>
+  );
+};
+
 /* ─── Sub-components ─── */
 
 const SegmentedTabs = ({ active, onChange, colors, theme }) => (
@@ -121,6 +153,7 @@ const UploadRow = ({
   iconBg,
   title,
   subtitle,
+  pendingMessage,
   image,
   onPick,
   status,
@@ -132,7 +165,13 @@ const UploadRow = ({
   const verified = status === DOC_STATUS.VERIFIED;
   const failed = status === DOC_STATUS.FAILED;
 
-  const borderColor = verified ? "#22C55E" : failed ? "#EF4444" : colors.border;
+  const borderColor = verified
+    ? "#22C55E"
+    : failed
+      ? "#EF4444"
+      : pendingMessage
+        ? "#F59E0B"
+        : colors.border;
 
   return (
     <TouchableOpacity
@@ -156,9 +195,12 @@ const UploadRow = ({
         <Text
           style={[
             uploadStyles.sub,
-            { color: failed ? "#EF4444" : colors.textMuted },
+            {
+              color: failed ? "#EF4444" : pendingMessage ? "#D97706" : colors.textMuted,
+              fontWeight: pendingMessage ? "600" : "400",
+            },
           ]}
-          numberOfLines={2}
+          numberOfLines={3}
         >
           {scanning
             ? "Verifying document…"
@@ -166,7 +208,7 @@ const UploadRow = ({
               ? "Verified · tap to replace"
               : failed
                 ? errorMessage || "Verification failed · tap to retry"
-                : subtitle}
+                : pendingMessage || subtitle}
         </Text>
       </View>
 
@@ -363,6 +405,8 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
   });
   const [extracted, setExtracted] = useState({ ...EMPTY_EXTRACTED });
   const [toastMsg, setToastMsg] = useState("");
+  const [carPhotoReuploadMessage, setCarPhotoReuploadMessage] = useState("");
+  const [carImageVerifiedForType, setCarImageVerifiedForType] = useState(null);
   const modalOpenRef = useRef(false);
 
   const isUpdate = !!existingVehicle?.vehicleCompany;
@@ -398,15 +442,22 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
 
     modalOpenRef.current = true;
     const mappedForm = mapProfileToForm(existingVehicle);
+    const initialStatus = initialDocStatus(existingVehicle);
     setTab("docs");
     setForm(mappedForm);
     setImages(mapProfileToImages(existingVehicle));
-    setDocStatus(initialDocStatus(existingVehicle));
+    setDocStatus(initialStatus);
     setDocErrors({ license_image: "", rc_image: "", car_image: "" });
+    setCarImageVerifiedForType(
+      initialStatus.car_image === DOC_STATUS.VERIFIED
+        ? normalizeVehicleType(mappedForm.type) || null
+        : null
+    );
     setExtracted(buildExtractedSnapshot(mappedForm, {}, existingVehicle));
     setShowIssuePicker(false);
     setShowExpiryPicker(false);
     setToastMsg("");
+    setCarPhotoReuploadMessage("");
   }, [visible, existingVehicle, initialDocStatus]);
 
   useEffect(() => {
@@ -416,6 +467,43 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
   }, [toastMsg]);
 
   const updateForm = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
+
+  const resetCarPhoto = useCallback((message, { showAlert = false } = {}) => {
+    setImages((prev) => ({ ...prev, car_image: null }));
+    setDocStatus((prev) => ({ ...prev, car_image: DOC_STATUS.IDLE }));
+    setDocErrors((prev) => ({ ...prev, car_image: "" }));
+    setCarImageVerifiedForType(null);
+    if (message) {
+      setCarPhotoReuploadMessage(message);
+      setToastMsg(message);
+      if (showAlert) alertValidation(message);
+    }
+  }, []);
+
+  const handleVehicleTypeChange = useCallback(
+    (nextType) => {
+      const normalizedNext =
+        normalizeVehicleType(nextType) || String(nextType || "").trim().toLowerCase();
+      const normalizedPrev =
+        normalizeVehicleType(form.type) || String(form.type || "").trim().toLowerCase();
+
+      updateForm("type", nextType);
+
+      if (!normalizedNext || normalizedNext === normalizedPrev) return;
+
+      const hasCarPhoto =
+        docStatus.car_image !== DOC_STATUS.IDLE || !!images.car_image;
+      if (!hasCarPhoto) return;
+
+      const label =
+        vehicleTypes.find((o) => normalizeVehicleType(o.value) === normalizedNext)?.label ||
+        "vehicle";
+      const message = `Vehicle type changed — upload a new ${label} photo`;
+      resetCarPhoto(message, { showAlert: true });
+      setTab("docs");
+    },
+    [form.type, docStatus.car_image, images.car_image, vehicleTypes, resetCarPhoto]
+  );
 
   const isDocVerified = useCallback(
     (field) => docStatus[field] === DOC_STATUS.VERIFIED,
@@ -428,6 +516,13 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
   );
 
   const carPhotoVerified = isDocVerified("car_image");
+
+  const carPhotoMatchesType = useMemo(() => {
+    if (!carPhotoVerified) return false;
+    const currentType = normalizeVehicleType(form.type);
+    const verifiedFor = normalizeVehicleType(carImageVerifiedForType);
+    return !!currentType && verifiedFor === currentType;
+  }, [carPhotoVerified, form.type, carImageVerifiedForType]);
 
   const canContinueToDetails = hasIdentityDocVerified;
 
@@ -459,7 +554,21 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
         });
         return next;
       });
-      setForm((prev) => applyScannedFields(prev, result, documentType));
+      setForm((prev) => {
+        const next = applyScannedFields(prev, result, documentType);
+        const prevType = normalizeVehicleType(prev.type);
+        const nextType = normalizeVehicleType(next.type);
+        if (nextType && prevType !== nextType) {
+          const message = "Vehicle type updated from RC — upload a new vehicle photo";
+          setImages((img) => ({ ...img, car_image: null }));
+          setDocStatus((ds) => ({ ...ds, car_image: DOC_STATUS.IDLE }));
+          setDocErrors((de) => ({ ...de, car_image: "" }));
+          setCarImageVerifiedForType(null);
+          setCarPhotoReuploadMessage(message);
+          setToastMsg(message);
+        }
+        return next;
+      });
     });
   }, []);
 
@@ -489,6 +598,13 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
             return;
           }
           setDocState(field, DOC_STATUS.VERIFIED, "");
+          setCarPhotoReuploadMessage("");
+          setForm((current) => {
+            setCarImageVerifiedForType(
+              normalizeVehicleType(current.type) || current.type || null
+            );
+            return current;
+          });
           setToastMsg("Vehicle photo verified");
           return;
         }
@@ -557,6 +673,14 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
       setTab("docs");
       return false;
     }
+    if (!carPhotoMatchesType) {
+      alertValidation(
+        carPhotoReuploadMessage ||
+          "Upload a vehicle photo that matches your selected vehicle type."
+      );
+      setTab("docs");
+      return false;
+    }
     if (!form.company?.trim() || !form.model?.trim() || !form.type?.trim()) {
       alertValidation("Fill in company, model, and vehicle type.");
       setTab("details");
@@ -615,6 +739,7 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
   const canSave =
     hasIdentityDocVerified &&
     carPhotoVerified &&
+    carPhotoMatchesType &&
     form.company?.trim() &&
     form.model?.trim() &&
     form.type?.trim() &&
@@ -726,7 +851,15 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
             <View style={[styles.body, { backgroundColor: colors.background }]}>
               <View style={[styles.stickyHeader, { borderBottomColor: colors.border }]}>
                 <SegmentedTabs active={tab} onChange={trySetTab} colors={colors} theme={theme} />
-                <InlineToast message={toastMsg} visible={!!toastMsg} colors={colors} />
+                {carPhotoReuploadMessage ? (
+                  <PhotoReuploadNotice
+                    message={carPhotoReuploadMessage}
+                    colors={colors}
+                    isDark={isDark}
+                  />
+                ) : (
+                  <InlineToast message={toastMsg} visible={!!toastMsg} colors={colors} />
+                )}
               </View>
 
               <ScrollView
@@ -775,12 +908,20 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
                       errorMessage={docErrors.rc_image}
                       colors={colors}
                     />
+                    {carPhotoReuploadMessage ? (
+                      <PhotoReuploadNotice
+                        message={carPhotoReuploadMessage}
+                        colors={colors}
+                        isDark={isDark}
+                      />
+                    ) : null}
                     <UploadRow
                       icon="camera-outline"
                       iconColor="#059669"
                       iconBg={isDark ? "#14532D44" : "#D1FAE5"}
                       title="Vehicle photo"
                       subtitle="Required · clear car/bike photo (camera or gallery)"
+                      pendingMessage={carPhotoReuploadMessage || undefined}
                       image={images.car_image}
                       onPick={() => pickImage("car_image")}
                       status={docStatus.car_image}
@@ -820,12 +961,20 @@ const AddVehicleModal = ({ visible, onClose, onVehicleAdded, existingVehicle }) 
                           value={opt.value}
                           selected={form.type === opt.value}
                           icon={TYPE_ICONS[opt.value] || "car-outline"}
-                          onPress={(v) => updateForm("type", v)}
+                          onPress={handleVehicleTypeChange}
                           colors={colors}
                           theme={theme}
                         />
                       ))}
                     </View>
+
+                    {carPhotoReuploadMessage ? (
+                      <PhotoReuploadNotice
+                        message={carPhotoReuploadMessage}
+                        colors={colors}
+                        isDark={isDark}
+                      />
+                    ) : null}
 
                     <View style={[styles.formBlock, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                       <View style={styles.twoCol}>
