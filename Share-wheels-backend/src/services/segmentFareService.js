@@ -129,19 +129,24 @@ const enrichRideVehicle = async (ride) => {
   const creatorId = ride.creator?._id || ride.creator;
   if (!creatorId) return ride;
 
-  const driver = await User.findById(creatorId).select("vehicle.type vehicle.company").lean();
+  const driver = await User.findById(creatorId)
+    .select("vehicle.type vehicle.company vehicle.model vehicle.car_no vehicle.car_image")
+    .lean();
   if (!driver?.vehicle?.type) return ride;
 
   const rideType = normalizeVehicleType(ride?.vehicle?.type);
   const driverType = normalizeVehicleType(driver.vehicle.type);
-  if (rideType === driverType && ride?.vehicle?.company) return ride;
+  const driverVehicle = driver.vehicle || {};
 
   return {
     ...ride,
     vehicle: {
       ...(ride.vehicle || {}),
-      type: driver.vehicle.type,
-      company: ride.vehicle?.company || driver.vehicle.company || "",
+      type: rideType || driverType,
+      company: ride.vehicle?.company || driverVehicle.company || "",
+      model: ride.vehicle?.model || driverVehicle.model || "",
+      car_no: ride.vehicle?.car_no || driverVehicle.car_no || "",
+      car_image: ride.vehicle?.car_image || driverVehicle.car_image || "",
     },
   };
 };
@@ -336,7 +341,7 @@ const hydrateCourierRequestRecord = async (entry) => {
   };
 };
 
-/** Restore total offer for passengers picked from enroute (per-seat × seats). */
+/** Restore total offer for passengers picked from enroute (stored at request creation). */
 const hydratePassengerEnrouteOffer = async (participant, rideId) => {
   const plain = toParticipantPlain(participant);
   const userId = plain.userId?._id || plain.userId;
@@ -347,17 +352,13 @@ const hydratePassengerEnrouteOffer = async (participant, rideId) => {
     "assigned_to.rideId": rideId,
     status: { $in: ["aisgned_passenger", "assigned"] },
   })
-    .select("amount_will seats_needed")
+    .select("amount_will")
     .lean();
   if (!linked) return plain;
 
-  const perSeat = Math.round(Number(linked.amount_will) || 0);
-  const seats = Math.max(
-    1,
-    Number(linked.seats_needed) || Number(plain.requires_seats) || 1
-  );
-  if (perSeat > 0) {
-    plain.ride_amount = perSeat * seats;
+  const totalOffer = Math.round(Number(linked.amount_will) || 0);
+  if (totalOffer > 0) {
+    plain.ride_amount = totalOffer;
     plain.fareSource = "passenger_offer";
   }
   return plain;

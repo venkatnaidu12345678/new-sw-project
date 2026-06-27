@@ -178,9 +178,14 @@ const DriverParticipantPopover = ({
 
                 {detail?.price != null ? (
                   <View style={styles.footerRow}>
-                    <Text style={styles.priceLabel}>
-                      {detail?.priceLabel || "Amount"}
-                    </Text>
+                    <View style={styles.priceCol}>
+                      <Text style={styles.priceLabel}>
+                        {detail?.priceLabel || "Amount"}
+                      </Text>
+                      {detail?.offerHint ? (
+                        <Text style={styles.priceHint}>{detail.offerHint}</Text>
+                      ) : null}
+                    </View>
                     <Text style={styles.priceText}>₹{detail.price}</Text>
                   </View>
                 ) : null}
@@ -388,16 +393,27 @@ const createStyles = (c) =>
   footerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     borderTopWidth: 1,
     borderTopColor: c.border,
     paddingTop: 14,
     marginBottom: 10,
   },
+  priceCol: {
+    flex: 1,
+    marginRight: 12,
+  },
   priceLabel: {
     fontSize: 13,
     color: c.textMuted,
     fontWeight: "600",
+  },
+  priceHint: {
+    marginTop: 3,
+    fontSize: 11,
+    fontWeight: "600",
+    color: c.textMuted,
+    lineHeight: 15,
   },
   priceText: {
     fontSize: 18,

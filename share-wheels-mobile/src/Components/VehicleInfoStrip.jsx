@@ -40,29 +40,71 @@ export const VehicleTypeBadge = ({ type, size = "md", style }) => {
  */
 export const VehicleInlineBar = ({ vehicle }) => {
   const styles = useThemedStyles(createStyles);
+  const [previewOpen, setPreviewOpen] = useState(false);
+
   if (!vehicle) return null;
 
   const title = formatVehicleTitle(vehicle);
   const plate = String(vehicle.car_no || "").trim();
+  const imageUri = String(vehicle.car_image || vehicle.carImage || "").trim();
   const meta = getVehicleTypeMeta(vehicle.type);
-  if (!title && !plate && !meta.label) return null;
+  if (!title && !plate && !imageUri && !meta.label) return null;
+
+  const thumbBlock = imageUri ? (
+    <Pressable
+      onPress={() => setPreviewOpen(true)}
+      accessibilityRole="imagebutton"
+      accessibilityLabel="View vehicle photo full screen"
+      style={({ pressed }) => [styles.inlineThumbWrap, pressed && styles.imagePressed]}
+    >
+      <RemoteImage
+        source={imageUri}
+        style={styles.inlineThumb}
+        resizeMode="cover"
+      />
+      {meta.label ? (
+        <View style={[styles.inlineThumbTypeBadge, { backgroundColor: meta.bg }]}>
+          <Icon name={meta.icon} size={9} color={meta.color} />
+        </View>
+      ) : null}
+    </Pressable>
+  ) : (
+    <View style={[styles.inlineThumbWrap, styles.inlineThumbPlaceholder]}>
+      <Icon name={meta.icon || "car-outline"} size={18} color={meta.color} />
+    </View>
+  );
 
   return (
-    <View style={styles.inlineBar}>
-      <VehicleTypeBadge type={vehicle.type} size="sm" />
-      <View style={styles.inlineTextCol}>
-        {title ? (
-          <Text style={styles.inlineTitle} numberOfLines={1}>
-            {title}
-          </Text>
-        ) : null}
-        {plate ? (
-          <Text style={styles.inlinePlate} numberOfLines={1}>
-            {plate}
-          </Text>
-        ) : null}
+    <>
+      <View style={styles.inlineBar}>
+        {thumbBlock}
+        <View style={styles.inlineTextCol}>
+          <View style={styles.inlineTitleRow}>
+            {title ? (
+              <Text style={styles.inlineTitle} numberOfLines={1}>
+                {title}
+              </Text>
+            ) : null}
+            <VehicleTypeBadge type={vehicle.type} size="sm" />
+          </View>
+          {plate ? (
+            <Text style={styles.inlinePlate} numberOfLines={1}>
+              {plate}
+            </Text>
+          ) : null}
+        </View>
       </View>
-    </View>
+
+      {imageUri ? (
+        <ImagePreviewModal
+          visible={previewOpen}
+          source={imageUri}
+          title={title || formatVehicleLabel(vehicle) || "Vehicle"}
+          subtitle={plate ? `Reg: ${plate}` : meta.label || undefined}
+          onClose={() => setPreviewOpen(false)}
+        />
+      ) : null}
+    </>
   );
 };
 
@@ -82,7 +124,7 @@ const VehicleInfoStrip = ({ vehicle, compact = false, variant = "card" }) => {
   const title = formatVehicleTitle(vehicle);
   const label = formatVehicleLabel(vehicle);
   const plate = String(vehicle.car_no || "").trim();
-  const imageUri = vehicle.car_image;
+  const imageUri = String(vehicle.car_image || vehicle.carImage || "").trim();
   const meta = getVehicleTypeMeta(vehicle.type);
 
   if (!title && !plate && !imageUri && !meta.label) return null;
@@ -299,7 +341,7 @@ const createStyles = (c) =>
     inlineBar: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 8,
+      gap: 10,
       marginBottom: 8,
       paddingVertical: 8,
       paddingHorizontal: 10,
@@ -308,11 +350,46 @@ const createStyles = (c) =>
       borderWidth: 1,
       borderColor: c.border,
     },
+    inlineThumbWrap: {
+      width: 56,
+      height: 44,
+      borderRadius: 8,
+      overflow: "hidden",
+      backgroundColor: c.chipBg,
+    },
+    inlineThumb: {
+      width: "100%",
+      height: "100%",
+    },
+    inlineThumbPlaceholder: {
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.primaryMuted,
+    },
+    inlineThumbTypeBadge: {
+      position: "absolute",
+      bottom: 4,
+      left: 4,
+      width: 18,
+      height: 18,
+      borderRadius: 9,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.85)",
+    },
     inlineTextCol: {
       flex: 1,
       minWidth: 0,
     },
+    inlineTitleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      minWidth: 0,
+    },
     inlineTitle: {
+      flex: 1,
       fontSize: 12,
       fontWeight: "700",
       color: c.text,

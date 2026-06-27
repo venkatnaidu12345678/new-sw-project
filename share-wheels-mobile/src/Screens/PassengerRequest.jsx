@@ -12,6 +12,7 @@ import {
   RequestHero,
   RequestSection,
   RequestPriceInput,
+  RequestOfferTotal,
   RequestSeatsStepper,
   RequestVehicleTypeChips,
 } from "../Components/ui/RequestFormUI";
@@ -23,6 +24,7 @@ import {
 import { validateLocation, validatePrice, getMaxSeatsForVehicleType } from "../Utils";
 import { getPassengerTheme } from "../theme/requestFormTheme";
 import { DS } from "../theme/designSystem";
+import { verticalScale } from "../theme/layout";
 import { useTheme } from "../context/ThemeContext";
 import { useLookupOptions, normalizeVehicleType } from "../hooks/useLookupOptions";
 import {
@@ -66,11 +68,19 @@ const PassengerRequest = () => {
 
   useEffect(() => {
     if (!isEditMode) return;
+    const editSeats = Number(editRequest?.seats || editRequest?.raw?.seats || 1) || 1;
+    const storedTotal =
+      Number(
+        editRequest?.raw?.amount ?? editRequest?.raw?.amount_will ?? editRequest?.amount
+      ) || 0;
+    const perSeatForEdit =
+      storedTotal > 0 ? String(Math.round(storedTotal / Math.max(1, editSeats))) : "";
+
     setPayload((prev) => ({
       ...prev,
       from: String(editRequest?.from || ""),
       to: String(editRequest?.to || ""),
-      seats_needed: Number(editRequest?.seats || 1) || 1,
+      seats_needed: editSeats,
       dateStart:
         editRequest?.raw?.date ||
         editRequest?.raw?.ride_need_date ||
@@ -84,7 +94,7 @@ const PassengerRequest = () => {
         typeof editRequest?.raw?.luggage_included === "boolean"
           ? editRequest.raw.luggage_included
           : true,
-      amount_will: String(editRequest?.raw?.amount || editRequest?.amount || ""),
+      amount_will: perSeatForEdit,
       vehicle_type:
         normalizeVehicleType(
           editRequest?.raw?.vehicle_type || editRequest?.raw?.vehicleType || ""
@@ -172,11 +182,15 @@ const PassengerRequest = () => {
         return;
       }
 
+      const perSeatAmount = Number(payload.amount_will);
       const finalPayload = {
-        ...payload,
+        from: payload.from,
+        to: payload.to,
         vehicle_type: normalizeVehicleType(payload.vehicle_type),
         ride_need_date: payload.dateStart,
-        amount_will: Number(payload.amount_will),
+        seats_needed: payload.seats_needed,
+        amount_will: perSeatAmount,
+        luggage_included: payload.luggage_included,
         date: {
           startDate: payload.dateStart,
           endDate: payload.dateEnd,
@@ -217,6 +231,7 @@ const PassengerRequest = () => {
       <KeyboardAwareScreen
         style={{ flex: 1, backgroundColor: T.pageBg }}
         scrollable
+        keyboardVerticalOffset={verticalScale(24)}
         header={
           <ScreenHeader
             title={isEditMode ? "Edit passenger request" : "Passenger request"}
@@ -320,7 +335,7 @@ const PassengerRequest = () => {
           theme={T}
           accent={T.sections.pricing}
           title="Your offer"
-          subtitle="Amount you're willing to pay"
+          subtitle="Per-seat amount — total is calculated automatically"
           style={{ marginBottom: DS.spacing.sm }}
         >
           <RequestPriceInput
@@ -331,6 +346,11 @@ const PassengerRequest = () => {
               updatePayload("amount_will", text.replace(/[^0-9]/g, ""))
             }
             placeholder="Enter amount per seat (₹)"
+          />
+          <RequestOfferTotal
+            theme={T}
+            perSeat={payload.amount_will}
+            seats={payload.seats_needed}
           />
         </RequestSection>
       </KeyboardAwareScreen>

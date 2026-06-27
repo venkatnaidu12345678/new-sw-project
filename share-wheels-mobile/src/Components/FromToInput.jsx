@@ -24,6 +24,7 @@ import {
 import { useTheme } from "../context/ThemeContext";
 import { useLocationSuggestions } from "../hooks/useLocationSuggestions";
 import { getSuggestionKey, getSuggestionLabel } from "../Utils/placeSuggestions";
+import { useScrollFieldIntoView, useScrollToRestPosition } from "./ui/keyboardScrollContext";
 
 const BLUR_HIDE_MS = 280;
 
@@ -59,7 +60,10 @@ const FromToInput = forwardRef(
     const [confirmedFields, setConfirmedFields] = useState({});
     const blurTimers = useRef({});
     const inputRefs = useRef({});
+    const fieldRefs = useRef({});
     const selectingRef = useRef(false);
+    const scrollFieldIntoView = useScrollFieldIntoView();
+    const scrollToRestPosition = useScrollToRestPosition();
     const { searchPlaces, resolvePlace } = useLocationSuggestions();
 
     useEffect(() => {
@@ -209,6 +213,9 @@ const FromToInput = forwardRef(
           ...prev,
           [key]: { show: true, data: prev[key]?.data || [], loading: true },
         }));
+        requestAnimationFrame(() => {
+          scrollToField(key, { dropdownSpace: 100 });
+        });
 
         const filtered = await searchPlaces(text);
         setDropdownState((prev) => ({
@@ -219,8 +226,13 @@ const FromToInput = forwardRef(
             loading: false,
           },
         }));
+        if (filtered.length > 0) {
+          requestAnimationFrame(() => {
+            scrollToField(key, { dropdownSpace: 130 });
+          });
+        }
       },
-      [onPlaceSelect, resetDownstreamFrom, searchPlaces]
+      [onPlaceSelect, resetDownstreamFrom, scrollToField, searchPlaces]
     );
 
     const handleSelect = useCallback(
@@ -241,11 +253,22 @@ const FromToInput = forwardRef(
         setErrors((prev) => ({ ...prev, [key]: "" }));
         inputRefs.current[key]?.blur?.();
         Keyboard.dismiss();
+        scrollToRestPosition({ current: fieldRefs.current[key] });
         setTimeout(() => {
           selectingRef.current = false;
         }, 100);
       },
-      [onPlaceSelect, resolvePlace]
+      [onPlaceSelect, resolvePlace, scrollToRestPosition]
+    );
+
+    const scrollToField = useCallback(
+      (key, { dropdownSpace = 120 } = {}) => {
+        scrollFieldIntoView(
+          { current: fieldRefs.current[key] },
+          { dropdownSpace, delay: 100 }
+        );
+      },
+      [scrollFieldIntoView]
     );
 
     const renderField = (field, index) => {
@@ -260,6 +283,10 @@ const FromToInput = forwardRef(
       return (
         <View
           key={field.key}
+          ref={(node) => {
+            if (node) fieldRefs.current[field.key] = node;
+          }}
+          collapsable={false}
           style={[
             styles.container,
             isRoute && styles.routeField,

@@ -41,20 +41,28 @@ export const getVehicleTypeMeta = (type) => {
   };
 };
 
+const getVehicleImageUri = (vehicle) =>
+  String(vehicle?.car_image || vehicle?.carImage || "").trim();
+
 export const resolveRideVehicle = (data) => {
   const candidates = [data?.vehicle, data?.creator?.vehicle].filter(Boolean);
-  for (const vehicle of candidates) {
+  for (const raw of candidates) {
+    const car_image = getVehicleImageUri(raw);
+    const vehicle = car_image ? { ...raw, car_image } : raw;
     if (
       vehicle.type ||
       vehicle.company ||
       vehicle.model ||
       vehicle.car_no ||
-      vehicle.car_image
+      car_image
     ) {
       return vehicle;
     }
   }
-  return candidates[0] || null;
+  const first = candidates[0];
+  if (!first) return null;
+  const car_image = getVehicleImageUri(first);
+  return car_image ? { ...first, car_image } : first;
 };
 
 export const formatVehicleTitle = (vehicle) => {

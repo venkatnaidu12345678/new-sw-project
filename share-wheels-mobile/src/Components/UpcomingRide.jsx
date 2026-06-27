@@ -284,7 +284,7 @@ const UpcomingRide = ({ data, onPress, highlighted = false, highlightLabel = "Yo
   );
 };
 
-export default UpcomingRide;
+export default React.memo(UpcomingRide);
 
 const createStyles = (c) =>
   StyleSheet.create({

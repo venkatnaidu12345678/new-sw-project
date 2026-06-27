@@ -33,6 +33,10 @@ const {
 const { toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
 const { normalizeAllowedVehicleType, getMaxSeatsForVehicleType } = require("../constants/vehicleTypes");
 const {
+  resolvePassengerRequestStoredAmount,
+  perSeatFromStoredPassengerAmount,
+} = require("../utils/passengerRequestAmountUtils");
+const {
   closeStandaloneRequestsAfterJoin,
   linkStandalonePassengersForRideRequest,
   routesRoughlyMatch,
@@ -133,6 +137,23 @@ const parseRideDateForStorage = (dateStr) => {
   const p = parseCalendarDateParts(dateStr);
   if (!p) return null;
   return new Date(Date.UTC(p.year, p.month - 1, p.day, 0, 0, 0, 0));
+};
+
+const resolveMatchingRideVehicle = (ride) => {
+  const fromRide = ride?.vehicle || {};
+  const fromCreator = ride?.creator?.vehicle || {};
+  const type =
+    normalizeAllowedVehicleType(fromRide.type) ||
+    normalizeAllowedVehicleType(fromCreator.type) ||
+    "car";
+
+  return {
+    type,
+    company: String(fromRide.company || fromCreator.company || "").trim(),
+    model: String(fromRide.model || fromCreator.model || "").trim(),
+    car_no: String(fromRide.car_no || fromCreator.car_no || "").trim(),
+    car_image: String(fromRide.car_image || fromCreator.car_image || "").trim(),
+  };
 };
 
 const getRidesData = async ({ rideIds }) => {
@@ -309,7 +330,10 @@ const getRides = async (query, authUser) => {
   applyRideTypeFilter(findFilter, rideType);
 
   const candidates = await Ride.find(findFilter)
-    .populate("creator", "name email mobile profile_img")
+    .populate(
+      "creator",
+      "name email mobile profile_img vehicle.type vehicle.company vehicle.model vehicle.car_no vehicle.car_image"
+    )
     .sort({ createdAt: -1 })
     .lean();
 
@@ -319,7 +343,12 @@ const getRides = async (query, authUser) => {
       matches: await rideMatchesPassengerSearch(ride, from, to),
     }))
   );
-  const rides = matchResults.filter((row) => row.matches).map((row) => row.ride);
+  const rides = matchResults
+    .filter((row) => row.matches)
+    .map((row) => ({
+      ...row.ride,
+      vehicle: resolveMatchingRideVehicle(row.ride),
+    }));
 
   // Original API: JSON array of rides (empty array when none)
   return { status: 200, body: rides };
@@ -796,13 +825,12 @@ const resolvePassengerRequestPerSeatAmount = async (
 
   const amountFromDoc = (doc) => {
     if (!doc || String(doc.creator) !== String(userId)) return null;
-    const parsed = parseAmount(doc.amount_will);
-    return parsed != null && parsed > 0 ? parsed : null;
+    return perSeatFromStoredPassengerAmount(doc.amount_will, doc.seats_needed);
   };
 
   if (standalonePassengerRideId && mongoose.Types.ObjectId.isValid(standalonePassengerRideId)) {
     const passengerRide = await PassengerRide.findById(standalonePassengerRideId)
-      .select("amount_will creator")
+      .select("amount_will seats_needed creator")
       .lean();
     return amountFromDoc(passengerRide);
   }
@@ -1116,6 +1144,8 @@ const resolveBookedSegmentForList = (
 
 /** Inclusion-only — cannot mix `-password` exclusions with named fields in MongoDB projections */
 const USER_PUBLIC_FIELDS = "name email mobile profile_img gender userNo";
+const USER_PUBLIC_WITH_VEHICLE =
+  "name email mobile profile_img gender userNo vehicle.type vehicle.company vehicle.model vehicle.car_no vehicle.car_image";
 
 const listRidesByPhase = async (user, completed) => {
   if (!completed) {
@@ -1156,7 +1186,7 @@ const listRidesByPhase = async (user, completed) => {
       };
 
   const rides = await Ride.find(query)
-    .populate({ path: "creator", select: USER_PUBLIC_FIELDS, strictPopulate: false })
+    .populate({ path: "creator", select: USER_PUBLIC_WITH_VEHICLE, strictPopulate: false })
     .populate({
       path: "passengers.userId",
       select: USER_PUBLIC_FIELDS,
@@ -1581,23 +1611,6 @@ const userIdOnRideRequests = (ride, userId) => {
 const MATCHING_RIDE_CREATOR_SELECT =
   "name mobile profile_img vehicle.type vehicle.company vehicle.model vehicle.car_no vehicle.car_image";
 
-const resolveMatchingRideVehicle = (ride) => {
-  const fromRide = ride?.vehicle || {};
-  const fromCreator = ride?.creator?.vehicle || {};
-  const type =
-    normalizeAllowedVehicleType(fromRide.type) ||
-    normalizeAllowedVehicleType(fromCreator.type) ||
-    "car";
-
-  return {
-    type,
-    company: String(fromRide.company || fromCreator.company || "").trim(),
-    model: String(fromRide.model || fromCreator.model || "").trim(),
-    car_no: String(fromRide.car_no || fromCreator.car_no || "").trim(),
-    car_image: String(fromRide.car_image || fromCreator.car_image || "").trim(),
-  };
-};
-
 const serializeMatchingRide = (ride, userId) => {
   if (!ride) return null;
   const { passengerPending, courierPending } = userIdOnRideRequests(ride, userId);
@@ -1990,7 +2003,7 @@ const updateMyPassengerRequest = async (user, requestId, body = {}) => {
   const from = String(body.from || "").trim();
   const to = String(body.to || "").trim();
   const seats = Number(body.seats_needed);
-  const amount = parseAmount(body.amount_will);
+  const totalAmount = resolvePassengerRequestStoredAmount(body.amount_will, seats);
   const startDate = parseDateValue(body.date?.startDate ?? body.date ?? body.ride_need_date);
   const endDateRaw = body.date?.endDate ?? body.date_end ?? null;
   const endDate = endDateRaw ? parseDateValue(endDateRaw) : null;
@@ -1998,7 +2011,7 @@ const updateMyPassengerRequest = async (user, requestId, body = {}) => {
   if (!from || !to || !startDate || !Number.isFinite(seats) || seats < 1) {
     return { status: 400, body: { success: false, message: "Invalid route, seats, or date" } };
   }
-  if (amount === null || amount <= 0) {
+  if (totalAmount === null || totalAmount <= 0) {
     return { status: 400, body: { success: false, message: "Valid amount_will is required" } };
   }
 
@@ -2036,7 +2049,7 @@ const updateMyPassengerRequest = async (user, requestId, body = {}) => {
   doc.to = to;
   doc.vehicle_type = normalizedVehicleType;
   doc.seats_needed = seats;
-  doc.amount_will = amount;
+  doc.amount_will = totalAmount;
   doc.ride_need_date = startDate;
   doc.date = startDate;
   doc.date_end = endDate || null;

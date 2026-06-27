@@ -1,18 +1,26 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import {
   View,
   Text,
   StyleSheet,
   Animated,
-  FlatList,
-  ScrollView,
   KeyboardAvoidingView,
   Keyboard,
   Platform,
   RefreshControl,
   TouchableOpacity,
   ActivityIndicator,
+  SectionList,
 } from "react-native";
+import Reanimated, {
+  createAnimatedComponent,
+  Extrapolation,
+  interpolate,
+  interpolateColor,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
 import Icon from "react-native-vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -40,6 +48,18 @@ import { useTheme } from "../context/ThemeContext";
 import { useThemedStyles } from "../theme/useThemedStyles";
 import CoachMarkAnchor from "../Components/coachMarks/CoachMarkAnchor";
 import { useCoachMarks } from "../context/CoachMarksContext";
+import {
+  attachDashboardListRef,
+  dashboardListScrollRefs,
+  scrollDashboardListToLocation,
+  scrollDashboardListToOffset,
+} from "../Utils/dashboardListScroll";
+
+const AnimatedSectionList = createAnimatedComponent(SectionList);
+
+const STICKY_HEADER_KEY = "upcoming";
+
+const PINNED_FADE_PX = 28;
 
 const UPCOMING_STATUS_PRIORITY = {
   started: 0,
@@ -108,15 +128,24 @@ const DashboardPage = () => {
   const [errorMsg, setErrorMsg] = useState("");
 
   const animation = useRef(new Animated.Value(1)).current;
-  const listRef = useRef(null);
+  const scrollY = useSharedValue(0);
+  const topHeightSv = useSharedValue(0);
+  const upcomingEnterAnim = useRef(new Animated.Value(0)).current;
+  const dashboardTopHeightRef = useRef(0);
+  const searchSectionYRef = useRef(0);
+  const upcomingSectionScrollOffsetRef = useRef(0);
   const blurTimerRef = useRef(null);
   const scrollSearchTimerRef = useRef(null);
   const selectingLocationRef = useRef(false);
   const searchRequestIdRef = useRef(0);
-  const searchSectionYRef = useRef(0);
-  const headerBeforeUpcomingHeightRef = useRef(0);
-  const upcomingSectionScrollOffsetRef = useRef(0);
   const { registerScrollPreparer, unregisterScrollPreparer } = useCoachMarks();
+
+  const upcomingSections = useMemo(
+    () => [{ key: STICKY_HEADER_KEY, data: rides }],
+    [rides]
+  );
+
+  useEffect(() => () => attachDashboardListRef(null), []);
 
   const user = ProfileDetails?.data?.personalInfo;
   const myUserId =
@@ -132,19 +161,49 @@ const DashboardPage = () => {
     if (scrollSearchTimerRef.current) {
       clearTimeout(scrollSearchTimerRef.current);
     }
-
     scrollSearchTimerRef.current = setTimeout(() => {
       scrollSearchTimerRef.current = null;
-      const list = listRef.current;
-      if (!list) return;
-
       const fieldOffset = field === "TO" ? verticalScale(72) : 0;
-      list.scrollToOffset({
+      scrollDashboardListToOffset({
         offset: Math.max(0, searchSectionYRef.current + fieldOffset),
         animated: true,
       });
     }, 80);
   }, []);
+
+  const dashboardScrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollY.value = event.contentOffset.y;
+    },
+  });
+
+  const upcomingHeaderStickyStyle = useAnimatedStyle(() => {
+    const threshold = topHeightSv.value;
+    const strength = interpolate(
+      scrollY.value,
+      [threshold, threshold + PINNED_FADE_PX],
+      [0, 1],
+      Extrapolation.CLAMP
+    );
+    return {
+      shadowOpacity: strength * 0.18,
+      elevation: strength * 8,
+    };
+  });
+
+  const upcomingTitleStyle = useAnimatedStyle(() => {
+    const threshold = topHeightSv.value;
+    const strength = interpolate(
+      scrollY.value,
+      [threshold, threshold + PINNED_FADE_PX],
+      [0, 1],
+      Extrapolation.CLAMP
+    );
+    return {
+      color: interpolateColor(strength, [0, 1], [colors.text, colors.primary]),
+      transform: [{ scale: interpolate(strength, [0, 1], [1, 1.02]) }],
+    };
+  });
 
   const scrollToNormalPosition = useCallback(() => {
     if (scrollSearchTimerRef.current) {
@@ -153,7 +212,7 @@ const DashboardPage = () => {
     }
 
     requestAnimationFrame(() => {
-      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+      scrollDashboardListToOffset({ offset: 0, animated: true });
     });
   }, []);
 
@@ -199,6 +258,19 @@ const DashboardPage = () => {
     reloadLocations(true);
   }, [fetchUpcomingRides, refreshAds, reloadLocations]);
 
+  useEffect(() => {
+    if (loadingUpcoming) {
+      upcomingEnterAnim.setValue(0);
+      return;
+    }
+    Animated.spring(upcomingEnterAnim, {
+      toValue: 1,
+      tension: 72,
+      friction: 11,
+      useNativeDriver: true,
+    }).start();
+  }, [loadingUpcoming, upcomingEnterAnim]);
+
   useFocusEffect(
     useCallback(() => {
       let nextHighlightId = null;
@@ -233,16 +305,26 @@ const DashboardPage = () => {
     );
     if (index < 0) return undefined;
 
+    const listIndex = index;
+
     const scrollTimer = setTimeout(() => {
       collapseFilters();
       try {
-        listRef.current?.scrollToIndex({
-          index,
-          animated: true,
-          viewPosition: 0.15,
-        });
+        if (
+          !scrollDashboardListToLocation({
+            sectionIndex: 0,
+            itemIndex: listIndex,
+            animated: true,
+            viewPosition: 0.12,
+          })
+        ) {
+          scrollDashboardListToOffset({
+            offset: Math.max(0, upcomingSectionScrollOffsetRef.current),
+            animated: true,
+          });
+        }
       } catch {
-        listRef.current?.scrollToOffset({
+        scrollDashboardListToOffset({
           offset: Math.max(0, upcomingSectionScrollOffsetRef.current),
           animated: true,
         });
@@ -264,17 +346,15 @@ const DashboardPage = () => {
   useEffect(() => {
     const scrollToUpcoming = () =>
       new Promise((resolve) => {
-        const list = listRef.current;
-        if (!list) {
+        if (!dashboardListScrollRefs.list && !dashboardListScrollRefs.native) {
           resolve();
           return;
         }
 
         dismissSuggestions();
         collapseFilters();
-
         const offset = Math.max(0, upcomingSectionScrollOffsetRef.current);
-        list.scrollToOffset({ offset, animated: true });
+        scrollDashboardListToOffset({ offset, animated: true });
 
         const finish = () => {
           requestAnimationFrame(() => {
@@ -284,15 +364,10 @@ const DashboardPage = () => {
 
         if (rides.length > 0) {
           setTimeout(() => {
-            try {
-              list.scrollToIndex({
-                index: 0,
-                animated: true,
-                viewPosition: 0.12,
-              });
-            } catch {
-              /* scrollToOffset above is sufficient */
-            }
+            scrollDashboardListToOffset({
+              offset: Math.max(0, upcomingSectionScrollOffsetRef.current),
+              animated: true,
+            });
             setTimeout(finish, 420);
           }, 280);
           return;
@@ -468,34 +543,6 @@ const DashboardPage = () => {
   const animatedOpacity = animation;
   const dropdownTop = activeField === "FROM" ? 70 : 142;
 
-  const renderRide = ({ item, index }) => {
-    const isHighlighted =
-      !!highlightRideId &&
-      String(item?._id || item?.id) === highlightRideId;
-
-    const card = (
-      <UpcomingRide
-        data={item}
-        highlighted={isHighlighted}
-        highlightLabel={isHighlighted ? highlightLabel : undefined}
-        onPress={() => {
-          dismissSuggestions();
-          handleRidePress(item);
-        }}
-      />
-    );
-
-    if (index === 0) {
-      return (
-        <CoachMarkAnchor id="home_upcoming" style={styles.upcomingAnchor}>
-          {card}
-        </CoachMarkAnchor>
-      );
-    }
-
-    return card;
-  };
-
   const terms = ProfileDetails?.data?.terms;
 
   const searchProps = {
@@ -561,7 +608,9 @@ const DashboardPage = () => {
 
   const upcomingSectionTitle = (
     <View style={styles.sectionRow}>
-      <Text style={styles.section}>Upcoming Rides</Text>
+      <Reanimated.Text style={[styles.section, upcomingTitleStyle]}>
+        Upcoming Rides
+      </Reanimated.Text>
       <TouchableOpacity
         style={styles.refreshBtn}
         onPress={onRefreshUpcoming}
@@ -579,53 +628,172 @@ const DashboardPage = () => {
     </View>
   );
 
-  const scrollListHeader = (
-    <>
-      <View
-        onLayout={(e) => {
-          headerBeforeUpcomingHeightRef.current = e.nativeEvent.layout.height;
-          upcomingSectionScrollOffsetRef.current =
-            headerBeforeUpcomingHeightRef.current;
-        }}
+  const upcomingHeaderAnimatedStyle = {
+    transform: [
+      {
+        translateY: upcomingEnterAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [14, 0],
+        }),
+      },
+    ],
+  };
+
+  const renderUpcomingSectionHeader = useCallback(
+    () => (
+      <Reanimated.View
+        collapsable={false}
+        style={[styles.upcomingHeaderSticky, upcomingHeaderStickyStyle]}
       >
-        <Text style={styles.title}>Where do you plan to go today?</Text>
+        <Animated.View style={upcomingHeaderAnimatedStyle}>
+          <View style={[styles.upcomingHeaderGradient, styles.upcomingHeaderSolidBg]}>
+            <View style={styles.upcomingHeaderContent}>{upcomingSectionTitle}</View>
+          </View>
+        </Animated.View>
+      </Reanimated.View>
+    ),
+    [
+      styles.upcomingHeaderSticky,
+      styles.upcomingHeaderGradient,
+      styles.upcomingHeaderSolidBg,
+      upcomingTitleStyle,
+      upcomingHeaderStickyStyle,
+      upcomingHeaderAnimatedStyle,
+      upcomingSectionTitle,
+    ]
+  );
 
-        <View style={styles.bannerWrap}>
-          <AdPlacement placement="home_banner" />
+  const renderRide = useCallback(
+    ({ item, index }) => {
+      const isHighlighted =
+        !!highlightRideId &&
+        String(item?._id || item?.id) === highlightRideId;
+
+      const card = (
+        <View style={styles.rideItemPad}>
+          <UpcomingRide
+            data={item}
+            highlighted={isHighlighted}
+            highlightLabel={isHighlighted ? highlightLabel : undefined}
+            onPress={() => {
+              dismissSuggestions();
+              handleRidePress(item);
+            }}
+          />
         </View>
+      );
 
-        {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
-
-        <View
-          onLayout={(e) => {
-            searchSectionYRef.current = e.nativeEvent.layout.y;
-          }}
-        >
-          <CoachMarkAnchor id="home_search">
-            <SearchLocation {...searchProps} />
-          </CoachMarkAnchor>
-        </View>
-
-        <AdPlacement placement="home_video" />
-      </View>
-
-      <View
-        onLayout={(e) => {
-          upcomingSectionScrollOffsetRef.current =
-            headerBeforeUpcomingHeightRef.current;
-        }}
-      >
-        {rides.length === 0 ? (
+      if (index === 0) {
+        return (
           <CoachMarkAnchor id="home_upcoming" style={styles.upcomingAnchor}>
-            {upcomingSectionTitle}
-            <Text style={styles.emptyRides}>No upcoming rides</Text>
+            {card}
           </CoachMarkAnchor>
-        ) : (
-          upcomingSectionTitle
-        )}
+        );
+      }
+
+      return card;
+    },
+    [
+      highlightRideId,
+      highlightLabel,
+      styles.rideItemPad,
+      styles.upcomingAnchor,
+      handleRidePress,
+    ]
+  );
+
+  const dashboardListHeader = (
+    <View
+      style={styles.listContentPad}
+      onLayout={(e) => {
+        const height = e.nativeEvent.layout.height;
+        dashboardTopHeightRef.current = height;
+        upcomingSectionScrollOffsetRef.current = height;
+        topHeightSv.value = height;
+      }}
+    >
+      <Text style={styles.title}>Where do you plan to go today?</Text>
+
+      <View style={styles.bannerWrap}>
+        <AdPlacement placement="home_banner" />
       </View>
+
+      {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
+
+      <View
+        onLayout={(e) => {
+          searchSectionYRef.current = e.nativeEvent.layout.y;
+        }}
+      >
+        <CoachMarkAnchor id="home_search">
+          <SearchLocation {...searchProps} />
+        </CoachMarkAnchor>
+      </View>
+
+      <AdPlacement placement="home_video" />
       <AdPlacement placement="home_native" />
-    </>
+    </View>
+  );
+
+  const renderUpcomingList = () => (
+    <View style={styles.upcomingSection}>
+      <AnimatedSectionList
+        ref={attachDashboardListRef}
+        sections={upcomingSections}
+        keyExtractor={(item, index) => `${item._id || item.id}-${index}`}
+        renderItem={renderRide}
+        renderSectionHeader={renderUpcomingSectionHeader}
+        stickySectionHeadersEnabled
+        ListHeaderComponent={dashboardListHeader}
+        ListFooterComponent={
+          !loadingUpcoming && rides.length === 0 ? (
+            <View style={styles.listContentPad}>
+              <CoachMarkAnchor id="home_upcoming" style={styles.upcomingAnchor}>
+                <Text style={styles.emptyRides}>No upcoming rides</Text>
+              </CoachMarkAnchor>
+            </View>
+          ) : null
+        }
+        style={styles.upcomingList}
+        onScroll={dashboardScrollHandler}
+        scrollEventThrottle={16}
+        decelerationRate={Platform.OS === "ios" ? 0.998 : 0.985}
+        overScrollMode="always"
+        bounces
+        automaticallyAdjustKeyboardInsets
+        initialNumToRender={4}
+        maxToRenderPerBatch={5}
+        windowSize={9}
+        updateCellsBatchingPeriod={50}
+        removeClippedSubviews={Platform.OS === "android"}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshingUpcoming}
+            onRefresh={onRefreshUpcoming}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        }
+        onScrollToLocationFailed={(info) => {
+          const average = info.averageItemLength || 220;
+          scrollDashboardListToOffset({
+            offset: Math.max(
+              0,
+              upcomingSectionScrollOffsetRef.current + average * info.index
+            ),
+            animated: true,
+          });
+        }}
+        contentContainerStyle={{
+          paddingBottom: getScrollBottomPadding(insets.bottom, 72),
+          flexGrow: 1,
+        }}
+        showsVerticalScrollIndicator
+        persistentScrollbar={Platform.OS === "android"}
+        keyboardShouldPersistTaps="always"
+        keyboardDismissMode="on-drag"
+      />
+    </View>
   );
 
   return (
@@ -635,8 +803,8 @@ const DashboardPage = () => {
       {/* Fixed top nav — does not scroll */}
       <DashboardTopNav user={user} />
 
-      <View style={styles.body}>
-        {showAllRides ? (
+      {showAllRides ? (
+        <View style={styles.body}>
           <KeyboardAvoidingView
             style={styles.flex}
             behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -648,15 +816,9 @@ const DashboardPage = () => {
                 onBack={exitSearchResults}
                 style={styles.searchHeader}
               />
-              <ScrollView
-                keyboardShouldPersistTaps="always"
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.searchResultsScroll}
-              >
-                <CoachMarkAnchor id="home_search">
-                  <SearchLocation {...searchProps} />
-                </CoachMarkAnchor>
-              </ScrollView>
+              {errorMsg ? (
+                <Text style={styles.errorText}>{errorMsg}</Text>
+              ) : null}
               <AllridesComponent
                 rides={allRides}
                 loading={loadingAllRides}
@@ -664,49 +826,22 @@ const DashboardPage = () => {
                 currentUserId={myUserId}
                 searchFrom={fromValue}
                 searchTo={toValue}
+                headerContent={
+                  <CoachMarkAnchor id="home_search">
+                    <SearchLocation {...searchProps} compact />
+                  </CoachMarkAnchor>
+                }
               />
             </View>
           </KeyboardAvoidingView>
-        ) : loadingUpcoming && rides.length === 0 ? (
-          <View style={styles.flex}>
-            <DashboardSkeleton />
-          </View>
-        ) : (
-          <FlatList
-            ref={listRef}
-            data={rides}
-            keyExtractor={(item, index) => `${item._id}-${index}`}
-            renderItem={renderRide}
-            ListHeaderComponent={scrollListHeader}
-            ListEmptyComponent={null}
-            automaticallyAdjustKeyboardInsets
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshingUpcoming}
-                onRefresh={onRefreshUpcoming}
-                colors={[colors.primary]}
-                tintColor={colors.primary}
-              />
-            }
-            onScrollToIndexFailed={(info) => {
-              const average = info.averageItemLength || 220;
-              listRef.current?.scrollToOffset({
-                offset: Math.max(
-                  0,
-                  upcomingSectionScrollOffsetRef.current + average * info.index
-                ),
-                animated: true,
-              });
-            }}
-            contentContainerStyle={{
-              paddingBottom: getScrollBottomPadding(insets.bottom, 72),
-            }}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="always"
-            keyboardDismissMode="on-drag"
-          />
-        )}
-      </View>
+        </View>
+      ) : loadingUpcoming && rides.length === 0 ? (
+        <View style={styles.body}>
+          <DashboardSkeleton />
+        </View>
+      ) : (
+        renderUpcomingList()
+      )}
     </ScreenContainer>
   );
 };
@@ -724,6 +859,51 @@ const createStyles = (c) =>
       paddingHorizontal: LAYOUT.spacing.screen,
     },
     flex: { flex: 1 },
+    listContentPad: {
+      paddingHorizontal: LAYOUT.spacing.screen,
+    },
+    rideItemPad: {
+      paddingHorizontal: LAYOUT.spacing.screen,
+    },
+    upcomingSection: {
+      flex: 1,
+      width: LAYOUT.screenWidth,
+      alignSelf: "center",
+    },
+    upcomingHeaderSticky: {
+      width: LAYOUT.screenWidth,
+      alignSelf: "center",
+      zIndex: 10,
+      backgroundColor: "transparent",
+      shadowColor: c.shadow,
+      shadowOffset: { width: 0, height: 6 },
+      shadowRadius: 14,
+      shadowOpacity: 0,
+      elevation: 0,
+    },
+    upcomingHeaderGradient: {
+      width: "100%",
+      overflow: "hidden",
+    },
+    upcomingHeaderSolidBg: {
+      backgroundColor: c.background,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: c.border,
+    },
+    upcomingHeaderContent: {
+      paddingHorizontal: LAYOUT.spacing.screen,
+    },
+    section: {
+      fontSize: LAYOUT.font.section,
+      fontWeight: "700",
+      color: c.text,
+      flex: 1,
+    },
+    upcomingList: {
+      flex: 1,
+      width: LAYOUT.screenWidth,
+      alignSelf: "center",
+    },
     title: {
       fontSize: LAYOUT.font.title,
       fontWeight: "700",
@@ -732,12 +912,6 @@ const createStyles = (c) =>
     },
     bannerWrap: {
       marginBottom: LAYOUT.spacing.sm,
-    },
-    section: {
-      fontSize: LAYOUT.font.section,
-      fontWeight: "700",
-      color: c.text,
-      flex: 1,
     },
     sectionRow: {
       flexDirection: "row",
@@ -771,8 +945,5 @@ const createStyles = (c) =>
     searchHeader: {
       paddingHorizontal: LAYOUT.spacing.screen,
       paddingTop: LAYOUT.spacing.xs,
-    },
-    searchResultsScroll: {
-      paddingBottom: LAYOUT.spacing.sm,
     },
   });

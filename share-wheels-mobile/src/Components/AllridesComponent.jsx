@@ -9,7 +9,8 @@ import {
 import Icon from "react-native-vector-icons/Ionicons";
 
 import UserAvatar from "./ui/UserAvatar";
-import { formatVehicleLabel } from "./VehicleInfoStrip";
+import { VehicleInlineBar } from "./VehicleInfoStrip";
+import { resolveRideVehicle } from "../Utils/vehicleDisplayUtils";
 import { LAYOUT, scale } from "../theme/layout";
 import { useTheme } from "../context/ThemeContext";
 import { useThemedStyles } from "../theme/useThemedStyles";
@@ -44,7 +45,7 @@ const SearchRideCard = ({ item, onPress, searchSegment }) => {
   const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
   const seats = item?.availableSeats ?? 0;
-  const vehicleLabel = formatVehicleLabel(item?.vehicle);
+  const vehicle = resolveRideVehicle(item);
   const stopoverCount = Array.isArray(item?.stopovers) ? item.stopovers.length : 0;
 
   const resolvedSegment = useMemo(() => {
@@ -94,10 +95,6 @@ const SearchRideCard = ({ item, onPress, searchSegment }) => {
           <View style={styles.topCenter}>
             <Text style={styles.driverName} numberOfLines={1}>
               {item?.creator?.name || "Driver"}
-            </Text>
-            <Text style={styles.vehicleText} numberOfLines={1}>
-              {vehicleLabel || "Vehicle on request"}
-              {item?.vehicle?.car_no ? ` · ${item.vehicle.car_no}` : ""}
             </Text>
           </View>
           <View style={styles.fareBox}>
@@ -184,6 +181,12 @@ const SearchRideCard = ({ item, onPress, searchSegment }) => {
           ) : null}
         </View>
 
+        {vehicle ? (
+          <View style={styles.vehicleBarWrap}>
+            <VehicleInlineBar vehicle={vehicle} />
+          </View>
+        ) : null}
+
         {/* Footer */}
         <View style={styles.footerRow}>
           <View style={styles.metaRow}>
@@ -227,6 +230,7 @@ const AllridesComponent = ({
   currentUserId,
   searchFrom = "",
   searchTo = "",
+  headerContent = null,
 }) => {
   const styles = useThemedStyles(createStyles);
   const visibleRides = (rides || []).filter((item) => {
@@ -257,46 +261,76 @@ const AllridesComponent = ({
     [navigation, searchSegment]
   );
 
+  const resultLabel =
+    visibleRides.length > 0 ? (
+      <Text style={styles.resultCount}>
+        {visibleRides.length} ride
+        {visibleRides.length !== 1 ? "s" : ""} available
+      </Text>
+    ) : null;
+
+  const fixedHeader = (
+    <View style={styles.fixedHeader}>
+      {headerContent}
+      {resultLabel}
+    </View>
+  );
+
+  const cardsList = (
+    <FlatList
+      data={visibleRides}
+      ListFooterComponent={<AdPlacement placement="search_results" />}
+      keyExtractor={(item, index) =>
+        item?._id ? item._id.toString() : index.toString()
+      }
+      renderItem={renderRide}
+      showsVerticalScrollIndicator={false}
+      style={styles.cardsList}
+      contentContainerStyle={styles.listContent}
+      initialNumToRender={6}
+      maxToRenderPerBatch={6}
+      windowSize={7}
+      removeClippedSubviews
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+    />
+  );
+
   if (!loading && visibleRides.length === 0) {
-    return <EmptyResults />;
+    return (
+      <View style={styles.listRoot}>
+        {fixedHeader}
+        <View style={styles.cardsArea}>
+          <EmptyResults />
+        </View>
+      </View>
+    );
+  }
+
+  if (loading && visibleRides.length === 0) {
+    return (
+      <View style={styles.listRoot}>
+        {fixedHeader}
+        <View style={[styles.cardsArea, styles.skeletonWrap]}>
+          <RideListSkeleton count={4} />
+        </View>
+      </View>
+    );
   }
 
   return (
     <View style={styles.listRoot}>
+      {fixedHeader}
       <AnimatedLoad
         loading={loading}
         skeleton={
-          <View style={styles.skeletonWrap}>
+          <View style={[styles.cardsArea, styles.skeletonWrap]}>
             <RideListSkeleton count={4} />
           </View>
         }
-        style={{ flex: 1 }}
+        style={styles.cardsArea}
       >
-        <FlatList
-          data={visibleRides}
-          ListHeaderComponent={
-            visibleRides.length > 0 ? (
-              <View style={styles.listHeader}>
-                <Text style={styles.resultCount}>
-                  {visibleRides.length} ride
-                  {visibleRides.length !== 1 ? "s" : ""} available
-                </Text>
-                <AdPlacement placement="search_results" />
-              </View>
-            ) : null
-          }
-          keyExtractor={(item, index) =>
-            item?._id ? item._id.toString() : index.toString()
-          }
-          renderItem={renderRide}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.listContent}
-          initialNumToRender={6}
-          maxToRenderPerBatch={6}
-          windowSize={7}
-          removeClippedSubviews
-          keyboardShouldPersistTaps="handled"
-        />
+        {cardsList}
       </AnimatedLoad>
     </View>
   );
@@ -309,25 +343,36 @@ const createStyles = (c) =>
   listRoot: {
     flex: 1,
   },
+  fixedHeader: {
+    flexShrink: 0,
+    zIndex: 20,
+    overflow: "visible",
+  },
+  cardsArea: {
+    flex: 1,
+    minHeight: 0,
+  },
+  cardsList: {
+    flex: 1,
+  },
   listContent: {
     paddingHorizontal: LAYOUT.spacing.md,
+    paddingTop: LAYOUT.spacing.xs,
     paddingBottom: LAYOUT.spacing.xl + 80,
-  },
-  listHeader: {
-    marginBottom: LAYOUT.spacing.sm,
+    flexGrow: 1,
   },
   resultCount: {
     fontSize: LAYOUT.font.small,
     fontWeight: "700",
     color: c.textMuted,
-    marginBottom: LAYOUT.spacing.sm,
-    marginLeft: 2,
+    marginBottom: LAYOUT.spacing.xs,
+    marginTop: LAYOUT.spacing.xs,
+    marginLeft: LAYOUT.spacing.md + 2,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   skeletonWrap: {
     padding: LAYOUT.spacing.md,
-    flex: 1,
   },
 
   cardOuter: {
@@ -371,11 +416,6 @@ const createStyles = (c) =>
     fontSize: LAYOUT.font.body,
     fontWeight: "800",
     color: c.text,
-  },
-  vehicleText: {
-    fontSize: LAYOUT.font.small,
-    color: c.textMuted,
-    marginTop: 2,
   },
   fareBox: {
     alignItems: "flex-end",
@@ -528,6 +568,10 @@ const createStyles = (c) =>
     fontWeight: "600",
     color: c.textMuted,
     lineHeight: 17,
+  },
+
+  vehicleBarWrap: {
+    marginBottom: 10,
   },
 
   footerRow: {

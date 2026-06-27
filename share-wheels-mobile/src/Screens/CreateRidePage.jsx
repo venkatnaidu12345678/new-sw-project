@@ -14,6 +14,7 @@ import { profileData } from "../Navigation/AuthNavigator";
 import { validatePrice, validateSeats, getMaxSeatsForVehicleType } from "../Utils";
 import { assertScheduledStartInFuture } from "../Utils/rideSchedule";
 import { DS } from "../theme/designSystem";
+import { verticalScale } from "../theme/layout";
 import { getCreateRideTheme } from "../theme/createRideTheme";
 import { useTheme } from "../context/ThemeContext";
 import { toCoordsPayload } from "../Utils/placeSuggestions";
@@ -314,6 +315,7 @@ const CreateRidePage = () => {
       <KeyboardAwareScreen
         style={{ flex: 1, backgroundColor: CR.pageBg }}
         scrollable={!routeMapFullscreen}
+        keyboardVerticalOffset={verticalScale(24)}
         scrollViewProps={{ scrollEnabled: !routeMapFullscreen }}
         header={
           routeMapFullscreen ? null : (

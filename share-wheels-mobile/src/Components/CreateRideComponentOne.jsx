@@ -60,7 +60,6 @@ const CreateRideComponentOne = forwardRef(
       updateRideData,
       submitted,
       vehicleInfo,
-      userName,
       onPressAddVehicle,
       onPlaceSelect,
       fromCoords,
@@ -196,21 +195,17 @@ const CreateRideComponentOne = forwardRef(
           </View>
         </LinearGradient>
 
-        <View style={styles.section}>
-          <SectionHeader
-            icon={CR.sections.vehicle.icon}
-            iconBg={CR.sections.vehicle.bg}
-            iconColor={CR.sections.vehicle.color}
-            title="Your vehicle"
-            subtitle="Required before publishing"
-            styles={styles}
-          />
+        <FormSection
+          accent={CR.sections.vehicle}
+          title="Your vehicle"
+          subtitle="Passengers see this on your ride listing"
+          styles={styles}
+        >
           <VehicleInfo
             vehicleInfo={vehicleInfo}
-            userName={userName}
             onPressAdd={onPressAddVehicle}
           />
-        </View>
+        </FormSection>
 
         <FormSection
           accent={CR.sections.route}

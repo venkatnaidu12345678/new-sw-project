@@ -198,7 +198,12 @@ const RequestDetailPopover = ({
                     <View />
                   )}
                   {showPrice ? (
-                    <Text style={styles.priceText}>{request.price}</Text>
+                    <View style={styles.priceCol}>
+                      <Text style={styles.priceText}>{request.price}</Text>
+                      {request.offerHint ? (
+                        <Text style={styles.priceHint}>{request.offerHint}</Text>
+                      ) : null}
+                    </View>
                   ) : null}
                 </View>
 
@@ -353,5 +358,17 @@ const createStyles = (c) =>
       fontSize: 18,
       fontWeight: "800",
       color: c.text,
+      textAlign: "right",
+    },
+    priceCol: {
+      alignItems: "flex-end",
+      maxWidth: "58%",
+    },
+    priceHint: {
+      marginTop: 2,
+      fontSize: 11,
+      fontWeight: "600",
+      color: c.textMuted,
+      textAlign: "right",
     },
   });

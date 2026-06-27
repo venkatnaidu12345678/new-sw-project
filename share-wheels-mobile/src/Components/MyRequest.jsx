@@ -62,6 +62,7 @@ import {
   bookingHighlightLabel,
   goToDashboardWithRideHighlight,
 } from "../Utils/navigateToDashboardHighlight";
+import { getPassengerRequestOfferDisplay } from "../Utils/passengerOfferUtils";
 
 const getRoleTheme = (c) => ({
   Passenger: {
@@ -131,6 +132,11 @@ const mapPassengerRequest = (item) => {
     item.driver?.name ||
     item.linkedRide?.creator?.name ||
     (isRideJoin ? "Driver ride" : "—");
+  const seats = Math.max(1, Number(item.seats) || 1);
+  const { perSeat, total, hint } = getPassengerRequestOfferDisplay(
+    item.amount ?? item.amount_will,
+    seats
+  );
 
   return {
     id: item.requestId,
@@ -142,8 +148,11 @@ const mapPassengerRequest = (item) => {
     time:
       formatDisplayTime(item.startTime || item.linkedRide?.startTime) || "--",
     car: driverName,
-    seats: item.seats || "-",
-    price: `₹${item.amount || 0}`,
+    seats,
+    offerPerSeat: perSeat,
+    offerTotal: total,
+    offerHint: hint,
+    price: total > 0 ? `₹${total}` : "₹0",
     status: item.status || "pending",
     relatedRideCount: countRelatedRides(item),
     raw: item,
@@ -437,7 +446,7 @@ const MyRequest = () => {
         standalonePassengerRideId: requestItem?.id || requestItem?.raw?.requestId,
         from: requestItem?.from || requestItem?.raw?.from,
         to: requestItem?.to || requestItem?.raw?.to,
-        amount_will: requestItem?.raw?.amount ?? requestItem?.raw?.amount_will,
+        amount_will: requestItem?.offerPerSeat > 0 ? requestItem.offerPerSeat : undefined,
       });
       if (response?.success) {
         if (response.bookingStatus === "confirmed") {
@@ -776,10 +785,24 @@ const MyRequest = () => {
         </View>
 
         <View style={styles.line} />
-        <View style={styles.priceRow}>
-          <Text style={styles.priceLabel}>Offer</Text>
-          <Text style={[styles.price, { color: theme.price }]}>{item.price}</Text>
-        </View>
+        {item.role === "Passenger" ? (
+          <View style={styles.offerBlock}>
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>Total offer</Text>
+              <Text style={[styles.price, { color: theme.price }]}>
+                ₹{item.offerTotal || 0}
+              </Text>
+            </View>
+            {item.offerHint ? (
+              <Text style={styles.offerHint}>{item.offerHint}</Text>
+            ) : null}
+          </View>
+        ) : (
+          <View style={styles.priceRow}>
+            <Text style={styles.priceLabel}>Offer</Text>
+            <Text style={[styles.price, { color: theme.price }]}>{item.price}</Text>
+          </View>
+        )}
 
         <View style={styles.cardActions}>
           <TouchableOpacity
@@ -1139,6 +1162,14 @@ const createStyles = (c) =>
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+  },
+  offerBlock: {
+    gap: 4,
+  },
+  offerHint: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: c.textMuted,
   },
   priceLabel: {
     fontSize: 12,

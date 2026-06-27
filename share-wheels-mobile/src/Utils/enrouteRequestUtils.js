@@ -1,4 +1,5 @@
 import { formatLocalISODate } from "./dateUtils";
+import { getPassengerRequestOfferDisplay } from "./passengerOfferUtils";
 
 import {
   LOOKUP_FALLBACKS,
@@ -20,6 +21,36 @@ export const formatEnrouteItems = (list, from, to) => {
   return list.map((item, index) => {
     const isCourier = item.request_type?.toLowerCase().includes("courier");
     const vehicleLabel = !isCourier ? formatVehicleTypeLabel(item.vehicle_type) : "";
+    const seatsNeeded = Math.max(1, Number(item.seats_needed) || 1);
+
+    if (isCourier) {
+      const amount = Math.round(Number(item.amount ?? item.amount_will) || 0);
+      return {
+        id:
+          item.passengerId ||
+          item.courierId ||
+          item._id ||
+          `${item.creatorId || "user"}-${item.from || ""}-${item.to || ""}-${index}`,
+        rideId: item.rideId || item.ride_id,
+        courierId: item.courierId || item.courier_id,
+        passengerId: item.passengerId || item.passenger_id,
+        creatorId: item.creatorId || item.creator?._id,
+        name: item.name || "Unknown",
+        profile: item.profile || null,
+        gender: item.gender || "",
+        timeSlot: item.timeSlot || "",
+        details: item.what_to_deliver || "Courier Item",
+        route: `${item.from || from} → ${item.to || to}`,
+        price: amount,
+        type: "courier",
+        raw: item,
+      };
+    }
+
+    const { perSeat, total, hint } = getPassengerRequestOfferDisplay(
+      item.amount ?? item.amount_will,
+      seatsNeeded
+    );
 
     return {
       id:
@@ -35,17 +66,14 @@ export const formatEnrouteItems = (list, from, to) => {
       profile: item.profile || null,
       gender: item.gender || "",
       timeSlot: item.timeSlot || "",
-      details: isCourier
-        ? item.what_to_deliver || "Courier Item"
-        : [
-            vehicleLabel ? `Vehicle: ${vehicleLabel}` : null,
-            `Seats: ${item.seats_needed || 1}`,
-          ]
-            .filter(Boolean)
-            .join(" · "),
+      vehicleLabel,
+      seatsNeeded,
+      perSeat,
+      offerHint: hint,
+      details: vehicleLabel ? `Vehicle: ${vehicleLabel}` : "",
       route: `${item.from || from} → ${item.to || to}`,
-      price: item.amount ?? item.amount_will ?? 0,
-      type: isCourier ? "courier" : "passenger",
+      price: total,
+      type: "passenger",
       raw: item,
     };
   });

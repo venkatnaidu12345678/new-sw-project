@@ -25,6 +25,7 @@ import { getApiErrorMessage } from "../Utils/apiErrors";
 import { validateLocation, validatePrice } from "../Utils";
 import { getCourierTheme } from "../theme/requestFormTheme";
 import { DS } from "../theme/designSystem";
+import { verticalScale } from "../theme/layout";
 import { useTheme } from "../context/ThemeContext";
 import { useLookupOptions } from "../hooks/useLookupOptions";
 import {
@@ -231,6 +232,7 @@ const CourierRequest = () => {
       <KeyboardAwareScreen
         style={{ flex: 1, backgroundColor: T.pageBg }}
         scrollable
+        keyboardVerticalOffset={verticalScale(24)}
         header={
           <ScreenHeader
             title={isEditMode ? "Edit courier request" : "Courier request"}

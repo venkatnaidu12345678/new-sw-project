@@ -50,6 +50,7 @@ const SearchLocation = ({
   activeField,
   fromSelected = false,
   toSelected = false,
+  compact = false,
 }) => {
   const { input, colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -153,7 +154,7 @@ const SearchLocation = ({
   };
 
   return (
-    <View style={styles.container} collapsable={false}>
+    <View style={[styles.container, compact && styles.containerCompact]} collapsable={false}>
       <GradientField variant="from">
         <TextInput
           placeholder="From — pickup city"
@@ -275,6 +276,10 @@ const createStyles = (c) =>
   StyleSheet.create({
     container: {
       marginVertical: 10,
+    },
+    containerCompact: {
+      marginVertical: 0,
+      marginBottom: LAYOUT.spacing.xs,
     },
     input: {
       flex: 1,

@@ -1,6 +1,7 @@
 import { formatRequestDate, formatSingleDate } from "../Utils";
 import { getPassengerFare, getCourierFare } from "./fareUtils";
 import { tripStatusLabel } from "./participantTripStatus";
+import { getPassengerRequestOfferDisplay } from "./passengerOfferUtils";
 
 const fmtDate = (value) => {
   if (!value) return "—";
@@ -136,6 +137,15 @@ export const buildEnrouteDetail = (item, from, to, date) => {
     };
   }
 
+  const seatsNeeded = Math.max(
+    1,
+    Number(item?.seatsNeeded ?? raw.seats_needed) || 1
+  );
+  const { perSeat, total, hint } = getPassengerRequestOfferDisplay(
+    item?.perSeat ?? raw.amount ?? raw.amount_will ?? item?.price,
+    seatsNeeded
+  );
+
   return {
     role: "passenger",
     name: item?.name || "Passenger",
@@ -147,14 +157,22 @@ export const buildEnrouteDetail = (item, from, to, date) => {
       { label: "From", value: routeFrom },
       { label: "To", value: routeTo },
       { label: "Date", value: fmtDate(date || raw.date) },
-      { label: "Seats Needed", value: raw.seats_needed },
+      { label: "Seats needed", value: seatsNeeded },
+      { label: "Vehicle", value: item?.vehicleLabel || raw.vehicle_type || "—" },
       { label: "Gender", value: raw.gender || item?.gender },
       { label: "Luggage", value: raw.luggage },
       { label: "Request Type", value: raw.request_type },
       { label: "Status", value: raw.status },
+      ...(perSeat > 0
+        ? [
+            { label: "Per seat", value: `₹${perSeat}` },
+            { label: "Total offer", value: `₹${total}` },
+          ]
+        : []),
     ],
-    price: item?.price ?? raw.amount ?? raw.amount_will ?? 0,
-    priceLabel: "Fare",
+    price: total,
+    priceLabel: "Total offer",
+    offerHint: hint || item?.offerHint,
   };
 };
 
@@ -186,12 +204,29 @@ export const buildMyRequestDetail = (ride) => {
       ? "Pending join on driver ride"
       : "Open passenger request";
 
+  const seats = Math.max(1, Number(raw.seats ?? ride.seats) || 1);
+  const { perSeat, total, hint } = getPassengerRequestOfferDisplay(
+    raw.amount ?? raw.amount_will ?? ride.offerPerSeat,
+    seats
+  );
+
   return {
     ...base,
+    offerPerSeat: perSeat,
+    offerTotal: total,
+    offerHint: hint,
+    price: total > 0 ? `₹${total}` : ride.price,
+    priceLabel: "Total offer",
     extraRows: [
       { label: "Type", value: kindLabel },
       { label: "Driver", value: raw.driver?.name || raw.linkedRide?.creator?.name },
       { label: "Luggage", value: raw.luggage },
+      ...(perSeat > 0
+        ? [
+            { label: "Per seat", value: `₹${perSeat}` },
+            { label: "Total offer", value: `₹${total}` },
+          ]
+        : []),
     ],
   };
 };

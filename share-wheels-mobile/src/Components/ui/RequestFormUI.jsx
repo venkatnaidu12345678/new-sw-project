@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import { Picker } from "@react-native-picker/picker";
 
 import { DS } from "../../theme/designSystem";
 import { useTheme } from "../../context/ThemeContext";
+import { useScrollFieldIntoView } from "./keyboardScrollContext";
 
 export const RequestHero = ({
   theme,
@@ -109,11 +110,18 @@ export const StyledTextInput = ({
   icon,
   style,
   multiline,
+  onFocus,
+  scrollOnFocus = false,
   ...props
 }) => {
   const { input } = useTheme();
+  const wrapRef = useRef(null);
+  const scrollFieldIntoView = useScrollFieldIntoView();
+
   return (
   <View
+    ref={wrapRef}
+    collapsable={false}
     style={[
       styles.inputWrap,
       multiline && styles.inputWrapMultiline,
@@ -144,6 +152,14 @@ export const StyledTextInput = ({
         placeholderTextColor={input.placeholder}
         multiline={multiline}
         textAlignVertical={multiline ? "top" : "center"}
+        onFocus={(event) => {
+          onFocus?.(event);
+          if (scrollOnFocus) {
+            requestAnimationFrame(() => {
+              scrollFieldIntoView(wrapRef, { dropdownSpace: multiline ? 48 : 0 });
+            });
+          }
+        }}
         {...props}
       />
     </View>
@@ -328,6 +344,7 @@ export const RequestPriceInput = ({
   placeholder = "Enter amount you will pay",
 }) => {
   const { input } = useTheme();
+
   return (
     <StyledField label={label} required theme={theme}>
       <View
@@ -351,6 +368,38 @@ export const RequestPriceInput = ({
         />
       </View>
     </StyledField>
+  );
+};
+
+/** Read-only total from per-seat × seats (not sent to API). */
+export const RequestOfferTotal = ({ theme, perSeat, seats }) => {
+  const per = Math.round(Number(perSeat) || 0);
+  const seatCount = Math.max(1, Number(seats) || 1);
+  if (per <= 0) return null;
+
+  const total = per * seatCount;
+  return (
+    <View
+      style={[
+        styles.offerTotalWrap,
+        {
+          backgroundColor: theme.price.bg,
+          borderColor: theme.price.border,
+        },
+      ]}
+    >
+      <View style={styles.offerTotalRow}>
+        <Text style={[styles.offerTotalLabel, { color: theme.textMuted }]}>
+          Total offer
+        </Text>
+        <Text style={[styles.offerTotalValue, { color: theme.text }]}>
+          ₹{total}
+        </Text>
+      </View>
+      <Text style={[styles.offerTotalHint, { color: theme.textMuted }]}>
+        {seatCount} seat{seatCount !== 1 ? "s" : ""} × ₹{per} per seat
+      </Text>
+    </View>
   );
 };
 
@@ -681,5 +730,32 @@ const styles = StyleSheet.create({
     fontSize: DS.font.section,
     fontWeight: "700",
     paddingVertical: Platform.OS === "ios" ? 12 : 8,
+  },
+  offerTotalWrap: {
+    marginTop: DS.spacing.sm,
+    borderWidth: 1,
+    borderRadius: DS.radius.md,
+    paddingHorizontal: DS.spacing.md,
+    paddingVertical: DS.spacing.sm,
+  },
+  offerTotalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  offerTotalLabel: {
+    fontSize: DS.font.small,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  offerTotalValue: {
+    fontSize: DS.font.title,
+    fontWeight: "800",
+  },
+  offerTotalHint: {
+    marginTop: 4,
+    fontSize: DS.font.small,
+    fontWeight: "600",
   },
 });

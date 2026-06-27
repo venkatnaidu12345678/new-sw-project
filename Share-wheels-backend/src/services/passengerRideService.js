@@ -3,7 +3,6 @@ const Ride = require("../models/rideModel");
 const PassengerRide = require("../models/passengerRideModel");
 const UserRides = require("../models/userRides");
 const User = require("../models/userModel");
-const { parseAmount } = require("../schemas/commonSchemas");
 const { ensureParticipantBoardingOtp } = require("./rideVerificationService");
 const { notifyUser } = require("./notificationService");
 const { getRideDetails } = require("./rideService");
@@ -27,6 +26,7 @@ const {
   passengerVehicleTypeMatchesRide,
   getMaxSeatsForVehicleType,
 } = require("../constants/vehicleTypes");
+const { resolvePassengerRequestStoredAmount } = require("../utils/passengerRequestAmountUtils");
 
 const createPassengerRequest = async (
   user,
@@ -58,8 +58,8 @@ const createPassengerRequest = async (
       },
     };
   }
-  const amount = parseAmount(amount_will);
-  if (amount === null || amount <= 0) {
+  const totalAmount = resolvePassengerRequestStoredAmount(amount_will, seatCount);
+  if (totalAmount === null || totalAmount <= 0) {
     return { status: 400, body: { error: "Valid price (amount_will) is required" } };
   }
   const startDateRaw = date?.startDate ?? date;
@@ -76,7 +76,7 @@ const createPassengerRequest = async (
     to,
     vehicle_type: normalizedVehicleType,
     seats_needed: seatCount,
-    amount_will: amount,
+    amount_will: totalAmount,
     ride_need_date,
     luggage_included,
     date: new Date(startDateRaw),
@@ -260,9 +260,8 @@ const pickPassenger = async (user, { passenger_rideId, rideId }) => {
     };
   }
 
-  const perSeatOffer = Math.round(Number(claimedPassengerRide.amount_will) || 0);
   const seatsNeeded = Math.max(1, Number(claimedPassengerRide.seats_needed) || 1);
-  const totalOffer = perSeatOffer * seatsNeeded;
+  const totalOffer = Math.round(Number(claimedPassengerRide.amount_will) || 0);
 
   const passengerEntry = {
     userId: claimedPassengerRide.creator,

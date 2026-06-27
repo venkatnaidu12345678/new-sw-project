@@ -8,6 +8,7 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
+import LinearGradient from "react-native-linear-gradient";
 import Icon from "react-native-vector-icons/Ionicons";
 import UserAvatar from "./ui/UserAvatar";
 import DriverParticipantPopover from "./ui/DriverParticipantPopover";
@@ -15,6 +16,7 @@ import { profileFromUrl } from "../Utils/profileImage";
 import { buildEnrouteDetail } from "../Utils/driverParticipantDetails";
 import { useTheme } from "../context/ThemeContext";
 import { useThemedStyles } from "../theme/useThemedStyles";
+import { getRoleCardThemes } from "../theme/appTheme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { pickCourierApi, pickPassengerApi } from "../ApiService/ridesApiServices";
 import {
@@ -51,6 +53,32 @@ const TAB_ICON = {
 const isPickSuccess = (response) =>
   response?.success === true || response?.status === true;
 
+const getEnrouteCardTheme = (colors, isCourier) => {
+  const roles = getRoleCardThemes(colors);
+  if (isCourier) {
+    return {
+      bg: roles.Courier.card,
+      border: roles.Courier.border,
+      accent: [colors.warningText, colors.warningText],
+      chipText: colors.warningText,
+      chipBg: colors.surface,
+      fareColor: colors.warningText,
+      label: "Courier",
+      icon: "cube",
+    };
+  }
+  return {
+    bg: roles.Passenger.card,
+    border: colors.successText,
+    accent: [colors.successText, colors.successText],
+    chipText: colors.successText,
+    chipBg: colors.surface,
+    fareColor: colors.successText,
+    label: "Passenger",
+    icon: "person",
+  };
+};
+
 const EnrouteRequestCard = ({
   item,
   onPick,
@@ -62,82 +90,130 @@ const EnrouteRequestCard = ({
   colors,
 }) => {
   const isCourier = item.type === "courier";
-  const accent = isCourier ? "#EA580C" : colors.successText;
+  const theme = getEnrouteCardTheme(colors, isCourier);
 
   return (
-    <View style={styles.card}>
-      <View style={[styles.cardAccent, { backgroundColor: accent }]} />
-      <View style={styles.cardBody}>
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={() => onShowDetails(item)}
-          style={styles.cardMain}
-        >
-          <UserAvatar
-            user={profileFromUrl(item.profile)}
-            size={46}
-          />
-          <View style={styles.cardInfo}>
-            <View style={styles.nameRow}>
-              <Text style={styles.name} numberOfLines={1}>
-                {item.name}
-              </Text>
-              <View style={[styles.rolePill, { backgroundColor: `${accent}18` }]}>
-                <Text style={[styles.rolePillText, { color: accent }]}>
-                  {isCourier ? "Courier" : "Passenger"}
-                </Text>
-              </View>
-            </View>
-            <Text style={styles.detailLine} numberOfLines={2}>
-              {item.details}
-            </Text>
-            <Text style={styles.routeLine} numberOfLines={1}>
-              {item.route}
-            </Text>
-            {item.timeSlot ? (
-              <Text style={styles.metaLine} numberOfLines={1}>
-                {item.timeSlot}
-              </Text>
-            ) : null}
-            <Text style={styles.tapHint}>Tap for full details</Text>
-          </View>
-          <View style={styles.fareCol}>
-            <Text style={styles.fareLabel}>{isCourier ? "Amount" : "Fare"}</Text>
-            <Text style={styles.fareValue}>₹{item.price}</Text>
-          </View>
-        </TouchableOpacity>
+    <View style={[styles.cardOuter, { borderColor: theme.border }]}>
+      <LinearGradient
+        colors={theme.bg}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.cardGradient}
+      >
+        <LinearGradient
+          colors={theme.accent}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.topAccent}
+        />
 
-        <TouchableOpacity
-          style={[
-            styles.pickBtn,
-            (picking || pickDisabled) && styles.pickBtnDisabled,
-          ]}
-          onPress={() => onPick(item)}
-          disabled={picking || pickDisabled}
-          activeOpacity={0.85}
-        >
-          {picking ? (
-            <ActivityIndicator size="small" color={colors.inverseText} />
-          ) : (
-            <>
-              <Icon
-                name={pickDisabled ? "lock-closed" : isCourier ? "cube" : "person-add"}
-                size={17}
-                color={colors.inverseText}
-              />
-              <Text style={styles.pickBtnText}>
-                {pickDisabled
-                  ? picking
-                    ? "Picking…"
-                    : pickDisabledLabel
-                  : isCourier
-                    ? "Pick courier"
-                    : "Pick passenger"}
+        <View style={styles.cardBody}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => onShowDetails(item)}
+            style={styles.cardMain}
+          >
+            <UserAvatar
+              user={profileFromUrl(item.profile)}
+              size={46}
+              borderColor={theme.border}
+            />
+            <View style={styles.cardInfo}>
+              <View style={styles.nameRow}>
+                <Text style={styles.name} numberOfLines={1}>
+                  {item.name}
+                </Text>
+                <View style={[styles.rolePill, { backgroundColor: theme.chipBg }]}>
+                  <Icon name={theme.icon} size={11} color={theme.chipText} />
+                  <Text style={[styles.rolePillText, { color: theme.chipText }]}>
+                    {theme.label}
+                  </Text>
+                </View>
+              </View>
+
+              {!isCourier && item.seatsNeeded ? (
+                <View
+                  style={[
+                    styles.seatsChip,
+                    {
+                      backgroundColor: colors.successBg,
+                      borderColor: colors.successText,
+                    },
+                  ]}
+                >
+                  <Icon name="people" size={13} color={colors.successText} />
+                  <Text style={[styles.seatsChipText, { color: colors.successText }]}>
+                    {item.seatsNeeded} seat{item.seatsNeeded !== 1 ? "s" : ""} needed
+                  </Text>
+                </View>
+              ) : null}
+
+              {item.details ? (
+                <Text style={styles.detailLine} numberOfLines={2}>
+                  {item.details}
+                </Text>
+              ) : null}
+              <Text style={styles.routeLine} numberOfLines={1}>
+                {item.route}
               </Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
+              {item.timeSlot ? (
+                <Text style={styles.metaLine} numberOfLines={1}>
+                  {item.timeSlot}
+                </Text>
+              ) : null}
+              <Text style={[styles.tapHint, { color: theme.chipText }]}>
+                Tap for full details
+              </Text>
+            </View>
+
+            <View style={styles.fareCol}>
+              <Text style={styles.fareLabel}>
+                {isCourier ? "Amount" : "Total"}
+              </Text>
+              <Text style={[styles.fareValue, { color: theme.fareColor }]}>
+                ₹{item.price || 0}
+              </Text>
+              {!isCourier && item.offerHint ? (
+                <Text style={styles.fareHint} numberOfLines={2}>
+                  {item.offerHint}
+                </Text>
+              ) : null}
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.pickBtn,
+              { backgroundColor: theme.chipText },
+              (picking || pickDisabled) && styles.pickBtnDisabled,
+            ]}
+            onPress={() => onPick(item)}
+            disabled={picking || pickDisabled}
+            activeOpacity={0.85}
+          >
+            {picking ? (
+              <ActivityIndicator size="small" color={colors.inverseText} />
+            ) : (
+              <>
+                <Icon
+                  name={pickDisabled ? "lock-closed" : isCourier ? "cube" : "person-add"}
+                  size={17}
+                  color={colors.inverseText}
+                />
+                <Text style={styles.pickBtnText}>
+                  {pickDisabled
+                    ? picking
+                      ? "Picking…"
+                      : pickDisabledLabel
+                    : isCourier
+                      ? "Pick courier"
+                      : "Pick passenger"}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
     </View>
   );
 };
@@ -773,20 +849,21 @@ const createStyles = (c) =>
       color: c.text,
       lineHeight: 18,
     },
-    card: {
-      flexDirection: "row",
+    cardOuter: {
       marginBottom: 12,
       borderRadius: 14,
       overflow: "hidden",
-      backgroundColor: c.surface,
       borderWidth: 1,
-      borderColor: c.border,
     },
-    cardAccent: {
-      width: 4,
+    cardGradient: {
+      borderRadius: 14,
+      overflow: "hidden",
+    },
+    topAccent: {
+      height: 4,
+      width: "100%",
     },
     cardBody: {
-      flex: 1,
       padding: 12,
     },
     cardMain: {
@@ -811,9 +888,28 @@ const createStyles = (c) =>
       flexShrink: 1,
     },
     rolePill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
       borderRadius: 8,
       paddingHorizontal: 8,
-      paddingVertical: 2,
+      paddingVertical: 3,
+    },
+    seatsChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "flex-start",
+      gap: 5,
+      marginTop: 6,
+      marginBottom: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 999,
+      borderWidth: 1.5,
+    },
+    seatsChipText: {
+      fontSize: 12,
+      fontWeight: "800",
     },
     rolePillText: {
       fontSize: 10,
@@ -837,13 +933,13 @@ const createStyles = (c) =>
     },
     tapHint: {
       fontSize: 11,
-      color: c.primary,
       marginTop: 6,
       fontWeight: "600",
     },
     fareCol: {
       alignItems: "flex-end",
-      minWidth: 56,
+      minWidth: 72,
+      maxWidth: 110,
     },
     fareLabel: {
       fontSize: 10,
@@ -854,8 +950,15 @@ const createStyles = (c) =>
     fareValue: {
       fontSize: 17,
       fontWeight: "800",
-      color: c.primary,
       marginTop: 2,
+    },
+    fareHint: {
+      fontSize: 9,
+      fontWeight: "600",
+      color: c.textMuted,
+      marginTop: 4,
+      textAlign: "right",
+      lineHeight: 12,
     },
     pickBtn: {
       flexDirection: "row",
@@ -865,7 +968,6 @@ const createStyles = (c) =>
       marginTop: 12,
       paddingVertical: 11,
       borderRadius: 11,
-      backgroundColor: c.primary,
     },
     pickBtnDisabled: {
       opacity: 0.7,
