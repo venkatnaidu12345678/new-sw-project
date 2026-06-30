@@ -113,6 +113,7 @@ import {
   formatLeadTimeHint,
 } from "../Utils/rideSchedule";
 import { getApiErrorMessage } from "../Utils/apiErrors";
+import { goToDashboard } from "../Utils/navigateToDashboardHighlight";
 import { getMaxSeatsForVehicleType, validateSeats } from "../Utils";
 import { openPhoneCall } from "../Utils/phoneCall";
 import { useRideSocket } from "../hooks/useAppSocket";
@@ -1199,8 +1200,17 @@ const UpcomingDetailsPage = ({ route }) => {
 
       if (response?.success) {
         await clearActiveRideTracking();
-        setRideStatus("completed"); // ✅ update status
-        Alert.alert("Success", "Ride Completed Successfully");
+        setRideStatus("completed");
+        Alert.alert("Success", "Ride Completed Successfully", [
+          {
+            text: "OK",
+            onPress: () =>
+              goToDashboard({
+                navigation,
+                setRefreshUpcomingrides,
+              }),
+          },
+        ]);
       }
     } catch (error) {
       Alert.alert(

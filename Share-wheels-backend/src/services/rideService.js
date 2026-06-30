@@ -31,7 +31,11 @@ const {
   emitRideRequestUpdated,
 } = require("../utils/socketEmit");
 const { toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
-const { normalizeAllowedVehicleType, getMaxSeatsForVehicleType } = require("../constants/vehicleTypes");
+const {
+  normalizeAllowedVehicleType,
+  getMaxSeatsForVehicleType,
+  passengerVehicleTypeMatchesRide,
+} = require("../constants/vehicleTypes");
 const {
   resolvePassengerRequestStoredAmount,
   perSeatFromStoredPassengerAmount,
@@ -54,6 +58,9 @@ const { expireStalePendingRides, expirePendingRideIfStale } = require("./rideExp
 const { expireStaleOpenRequests } = require("./requestExpiryService");
 const { rejectIfCourierJoiningAsPassenger } = require("../utils/rideParticipantRules");
 const { normalizeStartTimeForStorage } = require("../utils/rideScheduleUtils");
+
+const BOOKING_SOURCE_RIDE_DETAILS = "ride_details";
+const BOOKING_SOURCE_PASSENGER_REQUEST = "passenger_request";
 
 const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -581,6 +588,8 @@ const sendPassengerRequest = async (
     from: requestedFrom,
     to: requestedTo,
     amount_will,
+    bookingSource,
+    displayedPerSeatFare,
   }
 ) => {
   const userId = user._id;
@@ -664,25 +673,59 @@ const sendPassengerRequest = async (
     standalonePassengerRideId,
     requestedFrom,
     requestedTo,
+    bookingSource,
   });
 
-  const requestPerSeat = await resolvePassengerRequestPerSeatAmount(userId, {
-    standalonePassengerRideId,
-    amount_will,
-  });
+  const isRideDetailsBooking =
+    bookingSource === BOOKING_SOURCE_RIDE_DETAILS ||
+    (!standalonePassengerRideId &&
+      bookingSource !== BOOKING_SOURCE_PASSENGER_REQUEST &&
+      !!requestedFrom &&
+      !!requestedTo);
 
-  const perSeatAmount =
-    requestPerSeat != null
-      ? requestPerSeat
-      : await calculatePerSeatFareForSegment(ride, bookingSegment);
+  const isPassengerRequestBooking =
+    bookingSource === BOOKING_SOURCE_PASSENGER_REQUEST ||
+    (!!standalonePassengerRideId && !isRideDetailsBooking);
+
+  let perSeatAmount = 0;
+  let usedPassengerOffer = false;
+
+  if (isRideDetailsBooking) {
+    const displayed = Math.round(Number(displayedPerSeatFare) || 0);
+    if (displayed <= 0) {
+      const quote = await quoteSegmentFare(ride, {
+        from: bookingSegment.from,
+        to: bookingSegment.to,
+        seats,
+      });
+      perSeatAmount = Math.round(Number(quote.perSeatFare) || 0);
+    } else {
+      // Honor the segment fare shown on RideDetails — never a My Request offer
+      perSeatAmount = displayed;
+    }
+  } else if (isPassengerRequestBooking) {
+    const requestPerSeat = await resolvePassengerRequestPerSeatAmount(userId, {
+      standalonePassengerRideId,
+      amount_will,
+    });
+    usedPassengerOffer = requestPerSeat != null;
+    perSeatAmount =
+      requestPerSeat != null
+        ? requestPerSeat
+        : await calculatePerSeatFareForSegment(ride, bookingSegment);
+  } else {
+    perSeatAmount = await calculatePerSeatFareForSegment(ride, bookingSegment);
+  }
   if (!Number.isFinite(perSeatAmount) || perSeatAmount <= 0) {
     return {
       status: 400,
       body: {
         success: false,
-        message: requestPerSeat != null
-          ? "Invalid offer amount on your passenger request."
-          : "Could not calculate fare for this segment. Ask the admin to configure vehicle fare rules.",
+        message: isRideDetailsBooking
+          ? "Could not determine segment fare for this booking."
+          : usedPassengerOffer
+            ? "Invalid offer amount on your passenger request."
+            : "Could not calculate fare for this segment. Ask the admin to configure vehicle fare rules.",
       },
     };
   }
@@ -734,7 +777,9 @@ const sendPassengerRequest = async (
   );
 
   await linkStandalonePassengersForRideRequest(userId, ride, {
-    explicitPassengerRideId: standalonePassengerRideId,
+    explicitPassengerRideId: isPassengerRequestBooking
+      ? standalonePassengerRideId
+      : null,
   });
   emitMyRequestsUpdated(userId, {
     action: "passenger_request_sent",
@@ -1062,18 +1107,37 @@ const loadCourierSegmentByRideId = async (userId, userIdStr, rides, rideIds) => 
 const resolvePassengerBookingSegment = async (
   userId,
   ride,
-  { standalonePassengerRideId, requestedFrom, requestedTo } = {}
+  { standalonePassengerRideId, requestedFrom, requestedTo, bookingSource } = {}
 ) => {
   const rideFrom = ride.from;
   const rideTo = ride.to;
 
+  const isRideDetailsBooking =
+    bookingSource === BOOKING_SOURCE_RIDE_DETAILS ||
+    (!standalonePassengerRideId &&
+      bookingSource !== BOOKING_SOURCE_PASSENGER_REQUEST &&
+      !!requestedFrom &&
+      !!requestedTo);
+
+  if (isRideDetailsBooking && requestedFrom && requestedTo) {
+    const from = normalizeRouteLabel(requestedFrom);
+    const to = normalizeRouteLabel(requestedTo);
+    return { from: from || rideFrom, to: to || rideTo };
+  }
+
   if (requestedFrom && requestedTo) {
-    const corridorSegment = await validateSegmentOnRideCorridor(
-      ride,
-      requestedFrom,
-      requestedTo
-    );
+    const from = normalizeRouteLabel(requestedFrom);
+    const to = normalizeRouteLabel(requestedTo);
+
+    const corridorSegment = await validateSegmentOnRideCorridor(ride, from, to);
     if (corridorSegment) return corridorSegment;
+
+    if (isFullRideBooking(from, to, rideFrom, rideTo)) {
+      return {
+        from: normalizeRouteLabel(rideFrom) || rideFrom,
+        to: normalizeRouteLabel(rideTo) || rideTo,
+      };
+    }
   }
 
   if (standalonePassengerRideId && mongoose.Types.ObjectId.isValid(standalonePassengerRideId)) {
@@ -1716,12 +1780,12 @@ const findMatchingRidesForRequest = async ({
   );
   const matchedRides = matchResults.filter((row) => row.matches).map((row) => row.ride);
 
-  const requestedVehicleType = normalizeAllowedVehicleType(vehicleType);
-  const vehicleFilteredRides = requestedVehicleType
-    ? matchedRides.filter(
-        (ride) => resolveMatchingRideVehicle(ride).type === requestedVehicleType
-      )
-    : matchedRides;
+  const vehicleFilteredRides = matchedRides.filter((ride) =>
+    passengerVehicleTypeMatchesRide(
+      vehicleType,
+      resolveMatchingRideVehicle(ride).type
+    )
+  );
 
   const subscribedRides = await filterRidesByDriverSubscription(vehicleFilteredRides);
 
@@ -1772,6 +1836,10 @@ const buildMyPassengerRequests = async (user) => {
       vehicle_type: p.vehicle_type || "",
       seats: p.seats_needed,
       amount: p.amount_will,
+      amount_per_seat: perSeatFromStoredPassengerAmount(
+        p.amount_will,
+        p.seats_needed
+      ),
       luggage: p.luggage_included,
       requestedAt: p.createdAt,
       status: p.status,

@@ -211,10 +211,21 @@ const RideDetails = ({ navigation, route }) => {
   const formattedRideTime =
     formatDisplayTime(ride?.startTime || rideDate) || "N/A";
 
-  const handleBookPassenger = async (seats, segment) => {
+  const handleBookPassenger = async (seats, segment, displayedPerSeat) => {
     if (bookingPassenger) return;
     if (passengerBlockReason) {
       Alert.alert("Cannot book", passengerBlockReason);
+      return;
+    }
+    if (segmentFareLoading) {
+      Alert.alert("Fare loading", "Please wait for the segment fare to finish loading.");
+      return;
+    }
+    const perSeat =
+      Math.round(Number(displayedPerSeat) || 0) ||
+      Math.round(Number(seatFare) || 0);
+    if (perSeat <= 0) {
+      Alert.alert("Fare unavailable", "Could not determine the segment fare for this ride.");
       return;
     }
     try {
@@ -229,11 +240,16 @@ const RideDetails = ({ navigation, route }) => {
       }
 
       setBookingPassenger(true);
+      const bookingSeg =
+        segment ||
+        displayBookingSegment ||
+        resolveBookingSegment();
       const payload = {
         rideId: ride._id,
         requires_seats: seats,
+        bookingSource: "ride_details",
+        displayedPerSeatFare: perSeat,
       };
-      const bookingSeg = segment || resolveBookingSegment();
       if (bookingSeg?.from && bookingSeg?.to) {
         payload.from = bookingSeg.from;
         payload.to = bookingSeg.to;
@@ -681,11 +697,11 @@ const RideDetails = ({ navigation, route }) => {
         booking={bookingPassenger}
         segment={displayBookingSegment}
         hideSegmentPicker={hasContextSegment || showSegmentPicker}
-        perSeatFare={seatFare}
-        segmentKm={segmentKm}
-        fullRouteKm={fullRouteKm}
-        fareHint={segmentFareHint}
-        fareLoading={segmentFareLoading}
+        segmentPerSeatFromPage={seatFare}
+        segmentKmFromPage={segmentKm}
+        fullRouteKmFromPage={fullRouteKm}
+        segmentFareHintFromPage={segmentFareHint}
+        segmentFareLoadingFromPage={segmentFareLoading}
         onBook={handleBookPassenger}
       />
 

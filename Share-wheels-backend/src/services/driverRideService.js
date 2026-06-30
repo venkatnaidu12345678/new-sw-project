@@ -9,6 +9,7 @@ const { notifyRideParticipants } = require("../utils/rideNotificationUtils");
 const { getDriverCompleteRideBlockers } = require("../utils/participantTripStatus");
 const { getRideDetails } = require("./rideService");
 const { normalizeAllowedVehicleType, passengerVehicleTypeMatchesRide } = require("../constants/vehicleTypes");
+const { perSeatFromStoredPassengerAmount } = require("../utils/passengerRequestAmountUtils");
 const { toEnrouteDateKey } = require("../utils/rideDateQueryUtils");
 const {
   collectRideParticipantUserIds,
@@ -560,6 +561,10 @@ const enrouteRequests = async (user, { from, to, date, rideId, stopovers, routeP
     seats_needed: p.seats_needed,
     luggage: p.luggage_included,
     amount: p.amount_will,
+    amount_per_seat: perSeatFromStoredPassengerAmount(
+      p.amount_will,
+      p.seats_needed
+    ),
     date: p.date,
     from: p.from,
     to: p.to,

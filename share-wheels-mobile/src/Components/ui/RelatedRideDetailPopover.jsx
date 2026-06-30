@@ -16,7 +16,8 @@ import UserAvatar from "./UserAvatar";
 import VehicleInfoStrip from "../VehicleInfoStrip";
 import { DS } from "../../theme/designSystem";
 import { formatDisplayDate, formatRideTimeLabel } from "../../Utils/dateUtils";
-import { getRideDisplayFare } from "../../Utils/fareUtils";
+import { formatRupee, getRideDisplayFare } from "../../Utils/fareUtils";
+import { getPassengerRequestOfferDisplay } from "../../Utils/passengerOfferUtils";
 import { rideDetails } from "../../ApiService/ridesApiServices";
 import { useTheme } from "../../context/ThemeContext";
 import { useThemedStyles } from "../../theme/useThemedStyles";
@@ -114,7 +115,22 @@ const RelatedRideDetailPopover = ({
     ? ride.courierRequestPending
     : ride.passengerRequestPending;
   const joinBusy = joiningRideId && String(joiningRideId) === String(ride._id);
-  const fare = getRideDisplayFare(ride);
+  const rideFare = getRideDisplayFare(ride);
+  const passengerOffer =
+    !isCourier && requestContext
+      ? getPassengerRequestOfferDisplay(
+          requestContext.raw?.amount ??
+            requestContext.raw?.amount_will ??
+            requestContext.offerTotal,
+          requestContext.seats ?? requestContext.raw?.seats ?? 1
+        )
+      : null;
+  const fare =
+    !isCourier && passengerOffer?.total > 0
+      ? `${formatRupee(passengerOffer.total)} (your offer)`
+      : rideFare
+        ? formatRupee(rideFare)
+        : null;
   const dateLabel = formatDisplayDate(ride.date, { weekday: true }) || "—";
   const timeLabel = formatRideTimeLabel(ride.date, ride.startTime) || "—";
   const seats = ride.availableSeats ?? "—";

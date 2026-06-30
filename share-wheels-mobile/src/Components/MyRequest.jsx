@@ -62,7 +62,12 @@ import {
   bookingHighlightLabel,
   goToDashboardWithRideHighlight,
 } from "../Utils/navigateToDashboardHighlight";
-import { getPassengerRequestOfferDisplay } from "../Utils/passengerOfferUtils";
+import { getPassengerRequestOfferDisplay, getPassengerOfferFromPerSeat } from "../Utils/passengerOfferUtils";
+import {
+  countPassengerRelatedRides,
+  resolvePassengerRelatedRides,
+} from "../Utils/passengerMatchingRidesUtils";
+import { getVehicleTypeMeta } from "../Utils/vehicleDisplayUtils";
 
 const getRoleTheme = (c) => ({
   Passenger: {
@@ -89,7 +94,9 @@ const resolveRequestDate = (item) => {
   return formatRequestDate(item?.requestedAt || item?.createdAt);
 };
 
-const countRelatedRides = (raw) => {
+const countRelatedRides = (raw, { passenger = false } = {}) => {
+  if (passenger) return countPassengerRelatedRides(raw);
+
   const linked = raw?.linkedRide ? 1 : 0;
   const matches = (raw?.matchingRides || []).filter(
     (r) => !raw?.linkedRide || String(r._id) !== String(raw.linkedRide._id)
@@ -133,10 +140,11 @@ const mapPassengerRequest = (item) => {
     item.linkedRide?.creator?.name ||
     (isRideJoin ? "Driver ride" : "—");
   const seats = Math.max(1, Number(item.seats) || 1);
-  const { perSeat, total, hint } = getPassengerRequestOfferDisplay(
-    item.amount ?? item.amount_will,
-    seats
-  );
+  const { perSeat, total, hint } =
+    item.amount_per_seat > 0
+      ? getPassengerOfferFromPerSeat(item.amount_per_seat, seats)
+      : getPassengerRequestOfferDisplay(item.amount ?? item.amount_will, seats);
+  const vehicleMeta = getVehicleTypeMeta(item.vehicle_type);
 
   return {
     id: item.requestId,
@@ -148,13 +156,14 @@ const mapPassengerRequest = (item) => {
     time:
       formatDisplayTime(item.startTime || item.linkedRide?.startTime) || "--",
     car: driverName,
+    vehicleTypeLabel: vehicleMeta.label,
     seats,
     offerPerSeat: perSeat,
     offerTotal: total,
     offerHint: hint,
     price: total > 0 ? `₹${total}` : "₹0",
     status: item.status || "pending",
-    relatedRideCount: countRelatedRides(item),
+    relatedRideCount: countRelatedRides(item, { passenger: true }),
     raw: item,
   };
 };
@@ -374,14 +383,23 @@ const MyRequest = () => {
 
   const filteredRides = activeTab === "Courier" ? courierRides : passengerRides;
 
-  const buildSelectedRequest = (ride) =>
-    buildMyRequestDetail({
+  const buildSelectedRequest = (ride) => {
+    const related =
+      ride.role === "Passenger"
+        ? resolvePassengerRelatedRides(ride.raw)
+        : {
+            matchingRides: ride.raw?.matchingRides || [],
+            linkedRide: ride.raw?.linkedRide || null,
+          };
+
+    return buildMyRequestDetail({
       ...ride,
-      matchingRides: ride.raw?.matchingRides || [],
-      linkedRide: ride.raw?.linkedRide || null,
+      matchingRides: related.matchingRides,
+      linkedRide: related.linkedRide,
       requestKind: ride.raw?.requestKind,
       raw: ride.raw,
     });
+  };
 
   const openDetails = (ride) => {
     setSelectedRide(buildSelectedRequest(ride));
@@ -443,10 +461,10 @@ const MyRequest = () => {
       const response = await passengerSendRequestApi(token, {
         rideId: ride._id,
         requires_seats: seats,
+        bookingSource: "passenger_request",
         standalonePassengerRideId: requestItem?.id || requestItem?.raw?.requestId,
         from: requestItem?.from || requestItem?.raw?.from,
         to: requestItem?.to || requestItem?.raw?.to,
-        amount_will: requestItem?.offerPerSeat > 0 ? requestItem.offerPerSeat : undefined,
       });
       if (response?.success) {
         if (response.bookingStatus === "confirmed") {
@@ -776,12 +794,23 @@ const MyRequest = () => {
             </Text>
           </View>
 
-          <View style={styles.metaItem}>
-            <Image source={carIcon} style={styles.metaIcon} />
-            <Text style={styles.metaText} numberOfLines={1}>
-              {item.car}
-            </Text>
-          </View>
+          {item.role === "Passenger" &&
+          item.requestKind !== "ride_join" &&
+          item.vehicleTypeLabel ? (
+            <View style={styles.metaItem}>
+              <Image source={carIcon} style={styles.metaIcon} />
+              <Text style={styles.metaText} numberOfLines={1}>
+                {item.vehicleTypeLabel}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.metaItem}>
+              <Image source={carIcon} style={styles.metaIcon} />
+              <Text style={styles.metaText} numberOfLines={1}>
+                {item.car}
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.line} />

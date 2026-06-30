@@ -32,6 +32,9 @@ import {
   alertValidation,
   showAppToast,
 } from "../Utils/appAlert";
+import {
+  perSeatFromStoredPassengerAmount,
+} from "../Utils/passengerOfferUtils";
 
 const EMPTY_PASSENGER_PAYLOAD = {
   from: "",
@@ -74,7 +77,9 @@ const PassengerRequest = () => {
         editRequest?.raw?.amount ?? editRequest?.raw?.amount_will ?? editRequest?.amount
       ) || 0;
     const perSeatForEdit =
-      storedTotal > 0 ? String(Math.round(storedTotal / Math.max(1, editSeats))) : "";
+      storedTotal > 0
+        ? String(perSeatFromStoredPassengerAmount(storedTotal, editSeats))
+        : "";
 
     setPayload((prev) => ({
       ...prev,

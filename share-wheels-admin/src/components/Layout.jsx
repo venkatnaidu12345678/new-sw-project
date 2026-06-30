@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAdminAuth } from "../context/AdminAuthContext";
 import { useTheme } from "../context/ThemeContext";
@@ -16,8 +16,6 @@ import {
   IconChat,
   IconScale,
   IconMenu,
-  IconChevronLeft,
-  IconChevronRight,
   IconLogout,
   IconShieldCheck,
   IconSun,
@@ -122,6 +120,14 @@ export default function Layout() {
     setAdmin(null);
     navigate("/login");
   };
+
+  const toggleSideMenu = useCallback(() => {
+    if (window.matchMedia("(min-width: 1024px)").matches) {
+      setSidebarCollapsed((v) => !v);
+    } else {
+      setMobileOpen((v) => !v);
+    }
+  }, []);
 
   const initials = (admin?.name || "Admin")
     .split(/\s+/)
@@ -248,40 +254,27 @@ export default function Layout() {
         />
 
         <div className="relative z-10 flex min-h-0 flex-1 flex-col">{navContent}</div>
-
-        <button
-          type="button"
-          onClick={() => setSidebarCollapsed((v) => !v)}
-          className="absolute -right-3 top-20 z-20 hidden h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-md transition hover:bg-slate-50 lg:flex dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-          aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {sidebarCollapsed ? (
-            <IconChevronRight className="h-3.5 w-3.5" />
-          ) : (
-            <IconChevronLeft className="h-3.5 w-3.5" />
-          )}
-        </button>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-4 border-b border-slate-200/80 bg-white/85 px-4 backdrop-blur-xl lg:px-6 dark:border-slate-800 dark:bg-slate-900/90">
           <button
             type="button"
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 lg:hidden dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-            onClick={() => setMobileOpen(true)}
-            aria-label="Open menu"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            onClick={toggleSideMenu}
+            aria-label="Toggle side menu"
+            aria-expanded={mobileOpen || !sidebarCollapsed}
           >
             <IconMenu />
           </button>
 
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <AdminLogo className="hidden h-9 w-9 shadow-md sm:block" />
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                Share Wheels
-              </p>
-              <h1 className="truncate text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100">{pageTitle}</h1>
-            </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              Share Wheels
+            </p>
+            <h1 className="truncate text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100">
+              {pageTitle}
+            </h1>
           </div>
 
           <div className="flex items-center gap-3">

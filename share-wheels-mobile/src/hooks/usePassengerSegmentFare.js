@@ -105,7 +105,7 @@ const resolveFareFromApiQuote = async (ride, apiQuote, estimatedKm, storedFullKm
  * When fixedPerSeatFare is set (standalone request / enroute offer), admin tiers are skipped.
  */
 export function usePassengerSegmentFare(ride, segment, seats = 1, options = {}) {
-  const { fixedPerSeatFare } = options;
+  const { fixedPerSeatFare, enabled = true } = options;
   const [perSeatFare, setPerSeatFare] = useState(null);
   const [segmentKm, setSegmentKm] = useState(null);
   const [fullRouteKm, setFullRouteKm] = useState(null);
@@ -134,6 +134,10 @@ export function usePassengerSegmentFare(ride, segment, seats = 1, options = {}) 
   }, [ride, segment?.from, segment?.to]);
 
   useEffect(() => {
+    if (!enabled) {
+      return undefined;
+    }
+
     const fixed = Number(fixedPerSeatFare);
     if (Number.isFinite(fixed) && fixed > 0) {
       setPerSeatFare(Math.round(fixed));
@@ -238,7 +242,7 @@ export function usePassengerSegmentFare(ride, segment, seats = 1, options = {}) 
     return () => {
       cancelled = true;
     };
-  }, [ride, segment?.from, segment?.to, seats, segmentKey, estimatedKm, fixedPerSeatFare]);
+  }, [ride, segment?.from, segment?.to, seats, segmentKey, estimatedKm, fixedPerSeatFare, enabled]);
 
   const displayKm = segmentKm ?? estimatedKm;
 

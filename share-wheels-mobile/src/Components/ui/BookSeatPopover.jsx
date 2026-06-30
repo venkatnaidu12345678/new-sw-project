@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,10 +10,16 @@ import {
 import Icon from "react-native-vector-icons/Ionicons";
 import FormPopoverShell from "./FormPopoverShell";
 import RideCorridorSegmentPicker from "./RideCorridorSegmentPicker";
+import { getSegmentBookingFareDisplay } from "../../Utils/bookingFareUtils";
 import { defaultCorridorSegment, corridorHasSegments } from "../../Utils/rideCorridorUtils";
+import { usePassengerSegmentFare } from "../../hooks/usePassengerSegmentFare";
 import { useTheme } from "../../context/ThemeContext";
 import { useThemedStyles } from "../../theme/useThemedStyles";
 
+/**
+ * Book a seat on a driver ride — uses admin segment fare only.
+ * Passenger request offers (My Request) are handled separately elsewhere.
+ */
 const BookSeatPopover = ({
   visible,
   onClose,
@@ -24,11 +30,12 @@ const BookSeatPopover = ({
   booking,
   segment: externalSegment,
   hideSegmentPicker = false,
-  perSeatFare = 0,
-  segmentKm,
-  fullRouteKm,
-  fareHint = "",
-  fareLoading = false,
+  /** Segment per-seat fare already shown on RideDetails (not a passenger request offer). */
+  segmentPerSeatFromPage = 0,
+  segmentKmFromPage,
+  fullRouteKmFromPage,
+  segmentFareHintFromPage = "",
+  segmentFareLoadingFromPage = false,
   onBook,
 }) => {
   const { colors } = useTheme();
@@ -44,29 +51,78 @@ const BookSeatPopover = ({
     ? internalSegment
     : (externalSegment ?? internalSegment);
 
-  const resolvedPerSeat = Math.round(Number(perSeatFare) || 0);
-  const totalFare = useMemo(
-    () => resolvedPerSeat * Math.max(1, seats),
-    [resolvedPerSeat, seats]
+  const segmentAligned =
+    !!externalSegment &&
+    String(activeSegment?.from || "") === String(externalSegment.from || "") &&
+    String(activeSegment?.to || "") === String(externalSegment.to || "");
+
+  const {
+    perSeatFare: quotedSegmentPerSeat,
+    segmentKm: quotedSegmentKm,
+    fullRouteKm: quotedFullRouteKm,
+    fareHint: quotedSegmentFareHint,
+    loading: quoteLoading,
+  } = usePassengerSegmentFare(ride, activeSegment, seats, { enabled: visible });
+
+  const usePageSegmentSeed =
+    visible &&
+    segmentAligned &&
+    quoteLoading &&
+    Number(segmentPerSeatFromPage) > 0;
+
+  const segmentPerSeat = usePageSegmentSeed
+    ? Math.round(Number(segmentPerSeatFromPage))
+    : Math.round(Number(quotedSegmentPerSeat) || 0);
+  const displaySegmentKm = usePageSegmentSeed ? segmentKmFromPage : quotedSegmentKm;
+  const displayFullRouteKm = usePageSegmentSeed
+    ? fullRouteKmFromPage
+    : quotedFullRouteKm;
+  const displaySegmentFareHint = usePageSegmentSeed
+    ? segmentFareHintFromPage
+    : quotedSegmentFareHint;
+  const isFareLoading =
+    visible && (segmentFareLoadingFromPage || quoteLoading) && !usePageSegmentSeed;
+
+  const { total: totalFare, hint: bookingFareHint } = getSegmentBookingFareDisplay(
+    segmentPerSeat,
+    seats
   );
-  const displayFareHint =
-    fareHint && !/offer price/i.test(fareHint) ? fareHint : "";
+  const displayFareHint = displaySegmentFareHint || bookingFareHint;
 
   useEffect(() => {
     if (visible) {
       setSeats(1);
-      if (!externalSegment) {
-        setInternalSegment(defaultCorridorSegment(ride));
-      }
     }
-  }, [visible, ride?._id, ride?.from, ride?.to, ride?.stopovers, externalSegment]);
+  }, [visible, ride?._id]);
+
+  useEffect(() => {
+    if (externalSegment?.from && externalSegment?.to) {
+      setInternalSegment(externalSegment);
+      return;
+    }
+    if (visible && ride) {
+      setInternalSegment(defaultCorridorSegment(ride));
+    }
+  }, [
+    visible,
+    ride?._id,
+    ride?.from,
+    ride?.to,
+    ride?.stopovers,
+    externalSegment?.from,
+    externalSegment?.to,
+  ]);
 
   useEffect(() => {
     if (maxSeats > 0 && seats > maxSeats) setSeats(maxSeats);
   }, [maxSeats, seats]);
 
   const canBook =
-    !blockReason && maxSeats >= 1 && !booking && !fareLoading && resolvedPerSeat > 0;
+    !blockReason &&
+    maxSeats >= 1 &&
+    !booking &&
+    !isFareLoading &&
+    segmentPerSeat > 0;
 
   return (
     <FormPopoverShell visible={visible} onClose={onClose} disabledClose={booking}>
@@ -138,28 +194,28 @@ const BookSeatPopover = ({
             </TouchableOpacity>
           </View>
 
-          {fareLoading ? (
+          {isFareLoading ? (
             <View style={styles.fareLoadingRow}>
               <ActivityIndicator size="small" color={colors.primary} />
               <Text style={styles.fareLoadingText}>
-                {segmentKm != null
-                  ? `Calculating fare · ${segmentKm.toFixed(1)} km…`
+                {displaySegmentKm != null
+                  ? `Calculating fare · ${displaySegmentKm.toFixed(1)} km…`
                   : "Calculating segment fare…"}
               </Text>
             </View>
           ) : (
             <>
-              {segmentKm != null ? (
+              {displaySegmentKm != null ? (
                 <Text style={styles.segmentKmText}>
-                  Your trip: {segmentKm.toFixed(1)} km
-                  {fullRouteKm != null &&
-                  Math.abs(fullRouteKm - segmentKm) > 0.5
-                    ? ` of ${fullRouteKm.toFixed(1)} km route`
+                  Your trip: {displaySegmentKm.toFixed(1)} km
+                  {displayFullRouteKm != null &&
+                  Math.abs(displayFullRouteKm - displaySegmentKm) > 0.5
+                    ? ` of ${displayFullRouteKm.toFixed(1)} km route`
                     : ""}
                 </Text>
               ) : null}
               <Text style={styles.fareLine}>
-                ₹{resolvedPerSeat}/seat × {seats} = ₹{totalFare}
+                ₹{segmentPerSeat}/seat × {seats} = ₹{totalFare}
               </Text>
               {displayFareHint ? (
                 <Text style={styles.fareHintText}>{displayFareHint}</Text>
@@ -170,7 +226,7 @@ const BookSeatPopover = ({
 
         <TouchableOpacity
           style={[styles.primaryBtn, !canBook && styles.primaryBtnDisabled]}
-          onPress={() => onBook?.(seats, hideSegmentPicker ? undefined : activeSegment)}
+          onPress={() => onBook?.(seats, activeSegment, segmentPerSeat)}
           disabled={!canBook}
           activeOpacity={0.88}
         >

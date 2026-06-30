@@ -1,7 +1,7 @@
 import { formatRequestDate, formatSingleDate } from "../Utils";
 import { getPassengerFare, getCourierFare } from "./fareUtils";
 import { tripStatusLabel } from "./participantTripStatus";
-import { getPassengerRequestOfferDisplay } from "./passengerOfferUtils";
+import { getPassengerRequestOfferDisplay, getPassengerOfferFromPerSeat } from "./passengerOfferUtils";
 
 const fmtDate = (value) => {
   if (!value) return "—";
@@ -141,10 +141,13 @@ export const buildEnrouteDetail = (item, from, to, date) => {
     1,
     Number(item?.seatsNeeded ?? raw.seats_needed) || 1
   );
-  const { perSeat, total, hint } = getPassengerRequestOfferDisplay(
-    item?.perSeat ?? raw.amount ?? raw.amount_will ?? item?.price,
-    seatsNeeded
-  );
+  const { perSeat, total, hint } =
+    item?.perSeat > 0
+      ? getPassengerOfferFromPerSeat(item.perSeat, seatsNeeded)
+      : getPassengerRequestOfferDisplay(
+          raw.amount ?? raw.amount_will ?? item?.price,
+          seatsNeeded
+        );
 
   return {
     role: "passenger",
@@ -206,7 +209,7 @@ export const buildMyRequestDetail = (ride) => {
 
   const seats = Math.max(1, Number(raw.seats ?? ride.seats) || 1);
   const { perSeat, total, hint } = getPassengerRequestOfferDisplay(
-    raw.amount ?? raw.amount_will ?? ride.offerPerSeat,
+    raw.amount ?? raw.amount_will,
     seats
   );
 

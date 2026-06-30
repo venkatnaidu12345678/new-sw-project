@@ -13,6 +13,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import RequestMatchingRides from "./RequestMatchingRides";
 import { getRequestLockedRideId } from "../../Utils/myRequestUtils";
+import { getVehicleTypeMeta } from "../../Utils/vehicleDisplayUtils";
+import { getPassengerRequestVehicleType } from "../../Utils/passengerMatchingRidesUtils";
 import { DS } from "../../theme/designSystem";
 import { useThemedStyles } from "../../theme/useThemedStyles";
 
@@ -75,6 +77,15 @@ const RequestRelatedRidesSheet = ({
     (request?.matchingRides?.length || 0) +
     (request?.linkedRide ? 1 : 0);
   const lockedRideId = getRequestLockedRideId(request);
+  const vehicleTypeLabel = getVehicleTypeMeta(
+    getPassengerRequestVehicleType(request?.raw || request)
+  ).label;
+  const emptyMessage =
+    rideCount === 0
+      ? vehicleTypeLabel
+        ? `No ${vehicleTypeLabel.toLowerCase()} driver rides match this route and date yet.`
+        : "No driver rides match this route and date yet."
+      : undefined;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={dismiss}>
@@ -118,11 +129,7 @@ const RequestRelatedRidesSheet = ({
               joiningRideId={joiningRideId}
               onViewRide={onViewRide}
               onJoinRide={onJoinRide}
-              emptyMessage={
-                rideCount === 0
-                  ? "No driver rides match this route and date yet."
-                  : undefined
-              }
+              emptyMessage={emptyMessage}
             />
           </ScrollView>
         </Animated.View>

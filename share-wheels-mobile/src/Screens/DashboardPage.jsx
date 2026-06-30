@@ -23,7 +23,7 @@ import Reanimated, {
 } from "react-native-reanimated";
 import Icon from "react-native-vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 
 import SearchLocation from "../Components/SearchLocation";
 import UpcomingRide from "../Components/UpcomingRide";
@@ -51,8 +51,8 @@ import { useCoachMarks } from "../context/CoachMarksContext";
 import {
   attachDashboardListRef,
   dashboardListScrollRefs,
-  scrollDashboardListToLocation,
   scrollDashboardListToOffset,
+  scrollDashboardToUpcomingRideWhenReady,
 } from "../Utils/dashboardListScroll";
 
 const AnimatedSectionList = createAnimatedComponent(SectionList);
@@ -93,6 +93,7 @@ const moveRideToFront = (rides = [], rideId) => {
 
 const DashboardPage = () => {
   const navigation = useNavigation();
+  const route = useRoute();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -102,6 +103,7 @@ const DashboardPage = () => {
   const [highlightRideId, setHighlightRideId] = useState(null);
   const [highlightLabel, setHighlightLabel] = useState(null);
   const highlightRideIdRef = useRef(null);
+  const highlightFetchRetryRef = useRef(0);
   const pendingHighlightRideIdRef = useRef(pendingHighlightRideId);
   pendingHighlightRideIdRef.current = pendingHighlightRideId;
   const pendingHighlightLabelRef = useRef(pendingHighlightLabel);
@@ -274,16 +276,38 @@ const DashboardPage = () => {
   useFocusEffect(
     useCallback(() => {
       let nextHighlightId = null;
-      const pendingId = pendingHighlightRideIdRef.current;
-      const pendingLabel = pendingHighlightLabelRef.current;
-      if (pendingId) {
-        nextHighlightId = String(pendingId);
-        highlightRideIdRef.current = nextHighlightId;
-        setHighlightRideId(nextHighlightId);
-        setHighlightLabel(pendingLabel || "Your new ride");
+      let nextHighlightLabel = null;
+
+      const paramHighlightId = route.params?.highlightRideId;
+      const paramHighlightLabel = route.params?.highlightLabel;
+
+      if (paramHighlightId) {
+        nextHighlightId = String(paramHighlightId);
+        nextHighlightLabel = paramHighlightLabel || "Your new ride";
+        navigation.setParams({
+          highlightRideId: undefined,
+          highlightLabel: undefined,
+        });
         setPendingHighlightRideId(null);
         setPendingHighlightLabel(null);
+      } else {
+        const pendingId = pendingHighlightRideIdRef.current;
+        const pendingLabel = pendingHighlightLabelRef.current;
+        if (pendingId) {
+          nextHighlightId = String(pendingId);
+          nextHighlightLabel = pendingLabel || "Your new ride";
+          setPendingHighlightRideId(null);
+          setPendingHighlightLabel(null);
+        }
       }
+
+      if (nextHighlightId) {
+        highlightRideIdRef.current = nextHighlightId;
+        highlightFetchRetryRef.current = 0;
+        setHighlightRideId(nextHighlightId);
+        setHighlightLabel(nextHighlightLabel);
+      }
+
       fetchUpcomingRides({ highlightId: nextHighlightId });
       refreshAds();
       reloadLocations(true);
@@ -294,54 +318,46 @@ const DashboardPage = () => {
       reloadLocations,
       setPendingHighlightRideId,
       setPendingHighlightLabel,
+      navigation,
+      route.params?.highlightRideId,
+      route.params?.highlightLabel,
     ])
   );
 
   useEffect(() => {
-    if (!highlightRideId || loadingUpcoming || rides.length === 0) return undefined;
+    if (!highlightRideId || loadingUpcoming) return undefined;
 
     const index = rides.findIndex(
       (ride) => String(ride?._id || ride?.id) === highlightRideId
     );
-    if (index < 0) return undefined;
 
-    const listIndex = index;
-
-    const scrollTimer = setTimeout(() => {
-      collapseFilters();
-      try {
-        if (
-          !scrollDashboardListToLocation({
-            sectionIndex: 0,
-            itemIndex: listIndex,
-            animated: true,
-            viewPosition: 0.12,
-          })
-        ) {
-          scrollDashboardListToOffset({
-            offset: Math.max(0, upcomingSectionScrollOffsetRef.current),
-            animated: true,
-          });
-        }
-      } catch {
-        scrollDashboardListToOffset({
-          offset: Math.max(0, upcomingSectionScrollOffsetRef.current),
-          animated: true,
-        });
+    if (index < 0) {
+      if (highlightFetchRetryRef.current < 3) {
+        highlightFetchRetryRef.current += 1;
+        const retryTimer = setTimeout(() => {
+          fetchUpcomingRides({ highlightId: highlightRideId });
+        }, 500 * highlightFetchRetryRef.current);
+        return () => clearTimeout(retryTimer);
       }
-    }, 350);
+      return undefined;
+    }
+
+    collapseFilters();
+    scrollDashboardToUpcomingRideWhenReady({
+      getHeaderOffset: () => upcomingSectionScrollOffsetRef.current,
+      itemIndex: index,
+      viewPosition: 0.12,
+    });
 
     const clearTimer = setTimeout(() => {
       setHighlightRideId(null);
       setHighlightLabel(null);
       highlightRideIdRef.current = null;
+      highlightFetchRetryRef.current = 0;
     }, 5000);
 
-    return () => {
-      clearTimeout(scrollTimer);
-      clearTimeout(clearTimer);
-    };
-  }, [highlightRideId, loadingUpcoming, rides]);
+    return () => clearTimeout(clearTimer);
+  }, [highlightRideId, loadingUpcoming, rides, fetchUpcomingRides]);
 
   useEffect(() => {
     const scrollToUpcoming = () =>

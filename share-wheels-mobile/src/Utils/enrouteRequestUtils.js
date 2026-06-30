@@ -1,5 +1,5 @@
 import { formatLocalISODate } from "./dateUtils";
-import { getPassengerRequestOfferDisplay } from "./passengerOfferUtils";
+import { getPassengerRequestOfferDisplay, getPassengerOfferFromPerSeat } from "./passengerOfferUtils";
 
 import {
   LOOKUP_FALLBACKS,
@@ -47,10 +47,13 @@ export const formatEnrouteItems = (list, from, to) => {
       };
     }
 
-    const { perSeat, total, hint } = getPassengerRequestOfferDisplay(
-      item.amount ?? item.amount_will,
-      seatsNeeded
-    );
+    const { perSeat, total, hint } =
+      item.amount_per_seat > 0
+        ? getPassengerOfferFromPerSeat(item.amount_per_seat, seatsNeeded)
+        : getPassengerRequestOfferDisplay(
+            item.amount ?? item.amount_will,
+            seatsNeeded
+          );
 
     return {
       id:
