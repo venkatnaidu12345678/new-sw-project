@@ -1,0 +1,17 @@
+# Share Wheels marketing site (Vite + React Router SPA)
+# Render does NOT use public/_redirects — SPA routing needs the rewrite below.
+#
+# If you created the site manually in the dashboard, also add:
+#   Settings → Redirects/Rewrites → Source: /* → Destination: /index.html → Rewrite
+services:
+  - type: web
+    name: share-wheels-web
+    runtime: static
+    rootDir: share-wheels-web
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    pullRequestPreviewsEnabled: true
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
