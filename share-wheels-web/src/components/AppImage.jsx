@@ -12,7 +12,7 @@ export default function AppImage({
   if (failed || !src) {
     return (
       <div
-        className={`bg-gradient-to-br from-slate-800 to-indigo-950/40 ${className}`}
+        className={`bg-gradient-to-br from-slate-800 to-blue-950/40 ${className}`}
         role={alt ? "img" : undefined}
         aria-label={alt || undefined}
       />

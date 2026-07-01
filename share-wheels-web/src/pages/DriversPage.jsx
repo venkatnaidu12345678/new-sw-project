@@ -42,7 +42,7 @@ export default function DriversPage() {
             <ul className="mt-8 space-y-5">
               {PERKS.map((text, i) => (
                 <li key={text} className="flex gap-4 text-base text-slate-300">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-sm text-emerald-400">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-green-500/20 text-sm text-green-400">
                     ✓
                   </span>
                   {text}
@@ -52,10 +52,10 @@ export default function DriversPage() {
           </ScrollReveal>
 
           <ScrollReveal variant="right" delay={120}>
-            <div className="relative overflow-hidden rounded-3xl border border-violet-400/20">
+            <div className="relative overflow-hidden rounded-3xl border border-blue-300/20">
               <AppImage src={IMAGES.mapNavigation} alt="Driver navigation map" className="aspect-[4/3] w-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent" />
-              <span className="map-ring absolute left-[55%] top-[40%] h-12 w-12 rounded-full border-2 border-cyan-400/70" />
+              <span className="map-ring absolute left-[55%] top-[40%] h-12 w-12 rounded-full border-2 border-blue-300/70" />
               <div className="absolute bottom-0 left-0 right-0 p-6">
                 <div className="glass-card rounded-2xl p-5 animate-slide-up">
                   <div className="flex items-center gap-4">
@@ -74,7 +74,7 @@ export default function DriversPage() {
                       <div key={r.l} className="rounded-xl bg-white/5 py-2">
                         <p className="text-[10px] uppercase text-slate-500">{r.l}</p>
                         <p className="flex items-center justify-center gap-1 font-bold text-white">
-                          {r.dot ? <span className="live-dot h-1.5 w-1.5 rounded-full bg-emerald-400" /> : null}
+                          {r.dot ? <span className="live-dot h-1.5 w-1.5 rounded-full bg-green-400" /> : null}
                           {r.v}
                         </p>
                       </div>

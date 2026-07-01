@@ -44,7 +44,7 @@ export default function PrivacyPolicyPage() {
             </p>
             <p>
               If you have questions, contact us at{" "}
-              <a href={`mailto:${CONTACT_EMAIL}`} className="font-semibold text-indigo-300 hover:text-white">
+              <a href={`mailto:${CONTACT_EMAIL}`} className="font-semibold text-blue-300 hover:text-blue-200">
                 {CONTACT_EMAIL}
               </a>
               .
@@ -202,7 +202,7 @@ export default function PrivacyPolicyPage() {
               <span className="font-semibold text-white">{COMPANY_NAME}</span>
               <br />
               Email:{" "}
-              <a href={`mailto:${CONTACT_EMAIL}`} className="font-semibold text-indigo-300 hover:text-white">
+              <a href={`mailto:${CONTACT_EMAIL}`} className="font-semibold text-blue-300 hover:text-blue-200">
                 {CONTACT_EMAIL}
               </a>
             </p>
@@ -213,7 +213,7 @@ export default function PrivacyPolicyPage() {
         </LegalDocument>
 
         <p className="mt-10 text-center text-sm text-slate-500">
-          <Link to="/download" className="font-semibold text-indigo-300 hover:text-white">
+          <Link to="/download" className="font-semibold text-blue-300 hover:text-blue-200">
             ← Back to Download
           </Link>
         </p>

@@ -7,7 +7,7 @@ export default function VehicleTypesSection({ compact = false }) {
     <section id="vehicle-types" className="section-glow border-y border-white/5 py-24 sm:py-32 lg:py-40">
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
         <ScrollReveal className="mx-auto max-w-3xl text-center">
-          <p className="text-sm font-bold uppercase tracking-[0.25em] text-indigo-400">Vehicle types</p>
+          <p className="text-sm font-bold uppercase tracking-[0.25em] text-blue-300">Vehicle types</p>
           <h2 className="mt-4 text-3xl font-extrabold text-white sm:text-4xl lg:text-5xl">
             Car, auto & <span className="gradient-text">bike</span> — your choice
           </h2>

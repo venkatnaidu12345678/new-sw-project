@@ -83,7 +83,7 @@ export default function FeaturesPage() {
 
       <PageSection>
         <ScrollReveal className="mx-auto max-w-3xl text-center">
-          <p className="text-sm font-bold uppercase tracking-[0.2em] text-cyan-400">Core features</p>
+          <p className="text-sm font-bold uppercase tracking-[0.2em] text-blue-300">Core features</p>
           <h2 className="mt-3 text-3xl font-extrabold text-white sm:text-4xl">
             Built for passengers, drivers & senders
           </h2>
@@ -103,7 +103,7 @@ export default function FeaturesPage() {
                         className="absolute inset-0 h-full w-full object-cover opacity-55"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/50 to-transparent" />
-                      <span className="map-ring absolute right-8 top-8 h-10 w-10 rounded-full border-2 border-cyan-400/60" />
+                      <span className="map-ring absolute right-8 top-8 h-10 w-10 rounded-full border-2 border-blue-300/60" />
                     </>
                   ) : (
                     <div className="relative h-44 overflow-hidden">
@@ -139,16 +139,16 @@ export default function FeaturesPage() {
             </p>
             <ul className="mt-8 space-y-4 text-base text-slate-300">
               <li className="flex gap-3">
-                <span className="text-emerald-400">✓</span> Segment-based pricing — pay only for your distance
+                <span className="text-green-400">✓</span> Segment-based pricing — pay only for your distance
               </li>
               <li className="flex gap-3">
-                <span className="text-emerald-400">✓</span> Quick Reserve instant booking
+                <span className="text-green-400">✓</span> Quick Reserve instant booking
               </li>
               <li className="flex gap-3">
-                <span className="text-emerald-400">✓</span> Real-time driver location on the map
+                <span className="text-green-400">✓</span> Real-time driver location on the map
               </li>
               <li className="flex gap-3">
-                <span className="text-emerald-400">✓</span> In-app chat with drivers & co-passengers
+                <span className="text-green-400">✓</span> In-app chat with drivers & co-passengers
               </li>
             </ul>
             <Link to="/download" className="btn-glow mt-8 inline-flex rounded-2xl px-6 py-3 text-sm font-bold text-white">

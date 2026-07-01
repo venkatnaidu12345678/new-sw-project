@@ -17,7 +17,7 @@ export default function Footer() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="mt-auto border-t border-white/5 bg-slate-950 py-12">
+    <footer className="mt-auto border-t border-white/5 bg-slate-950/80 py-12 backdrop-blur-sm">
       <div className="mx-auto flex max-w-7xl flex-col gap-8 px-4 sm:px-6 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
           <img src="/logo-mark.png" alt="Share Wheels" className="h-11 w-11 rounded-xl" />
@@ -26,7 +26,7 @@ export default function Footer() {
             <p className="text-sm text-slate-500">Car · Auto · Bike — ride together. Pay less.</p>
             <a
               href={CONTACT_MAILTO}
-              className="mt-1 inline-block text-sm font-medium text-indigo-300 hover:text-white"
+              className="mt-1 inline-block text-sm font-medium text-blue-300 hover:text-blue-200"
             >
               {CONTACT_EMAIL}
             </a>
@@ -38,7 +38,7 @@ export default function Footer() {
               key={l.to}
               to={l.to}
               end={l.end}
-              className="text-sm font-medium text-slate-400 hover:text-white"
+              className="text-sm font-medium text-slate-400 hover:text-blue-300"
             >
               {l.label}
             </NavLink>
@@ -47,7 +47,7 @@ export default function Footer() {
             <NavLink
               key={l.to}
               to={l.to}
-              className="text-sm font-medium text-slate-400 hover:text-white"
+              className="text-sm font-medium text-slate-400 hover:text-blue-300"
             >
               {l.label}
             </NavLink>

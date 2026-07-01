@@ -62,8 +62,8 @@ export const VEHICLE_TYPES = [
     desc: "Publish your daily commute with 2–4 seats. Passengers book by segment and track you live on the map.",
     image: IMAGES.heroCar,
     seats: "Up to 4 seats",
-    accent: "from-blue-500 to-indigo-600",
-    border: "border-blue-400/30",
+    accent: "from-blue-500 to-blue-700",
+    border: "border-blue-300/30",
   },
   {
     id: "auto",
@@ -72,8 +72,8 @@ export const VEHICLE_TYPES = [
     desc: "Auto drivers list routes with open seats. Ideal for short city hops — same live GPS and split fares.",
     image: IMAGES.autoRide,
     seats: "Up to 3 seats",
-    accent: "from-amber-500 to-orange-600",
-    border: "border-amber-400/30",
+    accent: "from-amber-300 to-amber-500",
+    border: "border-amber-300/30",
   },
   {
     id: "bike",
@@ -82,8 +82,8 @@ export const VEHICLE_TYPES = [
     desc: "Motorcycle and scooter rides for one passenger. Quick Reserve or request a seat on your route.",
     image: IMAGES.bikeRide,
     seats: "1 passenger",
-    accent: "from-emerald-500 to-teal-600",
-    border: "border-emerald-400/30",
+    accent: "from-green-500 to-green-700",
+    border: "border-green-300/30",
   },
 ];
 

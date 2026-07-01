@@ -8,7 +8,7 @@ import { IMAGES } from "../data/images";
 const BLOCKS = [
   {
     title: "Passengers",
-    accent: "from-indigo-500 to-violet-600",
+    accent: "from-blue-500 to-blue-700",
     image: IMAGES.passengerHappy,
     steps: [
       { n: "01", t: "Search route", d: "Enter from, to & date — browse rides or post a request." },
@@ -18,7 +18,7 @@ const BLOCKS = [
   },
   {
     title: "Courier senders",
-    accent: "from-cyan-500 to-teal-600",
+    accent: "from-amber-300 to-amber-500",
     image: IMAGES.packages,
     steps: [
       { n: "01", t: "Find a route", d: "Pick a ride heading near your parcel destination." },
@@ -28,7 +28,7 @@ const BLOCKS = [
   },
   {
     title: "Drivers",
-    accent: "from-violet-500 to-fuchsia-600",
+    accent: "from-green-500 to-green-700",
     image: IMAGES.steeringWheel,
     steps: [
       { n: "01", t: "Publish your route", d: "Choose car, auto, or bike — set stops, seats, and courier capacity." },
@@ -73,7 +73,7 @@ export default function HowItWorksPage() {
                 <div className="relative overflow-hidden rounded-3xl border border-white/10">
                   <AppImage src={block.image} alt={block.title} className="aspect-[4/3] w-full object-cover" />
                   {block.title === "Passengers" ? (
-                    <span className="map-ring absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-cyan-400/70" />
+                    <span className="map-ring absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-blue-300/70" />
                   ) : null}
                 </div>
               </ScrollReveal>
@@ -110,11 +110,11 @@ export default function HowItWorksPage() {
 
       <PageSection className="section-glow border-y border-white/5">
         <ScrollReveal className="mx-auto max-w-3xl text-center">
-          <p className="text-sm font-bold uppercase tracking-[0.2em] text-cyan-400">Tracking timeline</p>
+          <p className="text-sm font-bold uppercase tracking-[0.2em] text-blue-300">Tracking timeline</p>
           <h2 className="mt-3 text-3xl font-extrabold text-white">What happens on the map</h2>
         </ScrollReveal>
         <div className="relative mt-16">
-          <div className="absolute left-4 top-0 hidden h-full w-px bg-gradient-to-b from-cyan-400/50 via-indigo-500/30 to-transparent sm:left-1/2 sm:block" />
+          <div className="absolute left-4 top-0 hidden h-full w-px bg-gradient-to-b from-blue-300/50 via-blue-500/30 to-transparent sm:left-1/2 sm:block" />
           <div className="space-y-12">
             {TIMELINE.map((step, i) => (
               <ScrollReveal
@@ -124,7 +124,7 @@ export default function HowItWorksPage() {
                 className={`relative sm:w-1/2 ${i % 2 ? "sm:ml-auto sm:pl-12" : "sm:pr-12 sm:text-right"}`}
               >
                 <div className="gradient-border p-6">
-                  <p className="text-xs font-bold uppercase tracking-wider text-cyan-400">{step.time}</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-blue-300">{step.time}</p>
                   <p className="mt-2 text-xl font-bold text-white">{step.label}</p>
                   <p className="mt-2 text-sm text-slate-400">{step.desc}</p>
                 </div>
@@ -137,10 +137,10 @@ export default function HowItWorksPage() {
       <PageSection>
         <div className="grid gap-10 lg:grid-cols-2">
           <ScrollReveal variant="scale">
-            <div className="relative min-h-[360px] overflow-hidden rounded-3xl border border-cyan-400/20">
+            <div className="relative min-h-[360px] overflow-hidden rounded-3xl border border-blue-300/20">
               <AppImage src={IMAGES.mapTracking} alt="Live tracking map" className="absolute inset-0 h-full w-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent" />
-              <span className="map-ring absolute left-[40%] top-[45%] h-14 w-14 rounded-full border-2 border-emerald-400/80" />
+              <span className="map-ring absolute left-[40%] top-[45%] h-14 w-14 rounded-full border-2 border-green-400/80" />
               <div className="absolute bottom-6 left-6 right-6 glass-card rounded-2xl p-5">
                 <p className="font-bold text-white">Unified map for all roles</p>
                 <p className="mt-1 text-sm text-slate-400">Drivers, passengers, and senders — one live view.</p>

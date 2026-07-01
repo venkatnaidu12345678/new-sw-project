@@ -9,7 +9,7 @@ export function LegalSection({ title, children, id }) {
 
 export function LegalList({ items }) {
   return (
-    <ul className="list-disc space-y-2 pl-5 marker:text-indigo-400">
+    <ul className="list-disc space-y-2 pl-5 marker:text-blue-300">
       {items.map((item) => (
         <li key={item}>{item}</li>
       ))}

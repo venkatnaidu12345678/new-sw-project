@@ -43,9 +43,9 @@ export default function HomePage() {
         <AuroraBg />
         <div className="relative mx-auto grid max-w-7xl items-center gap-12 px-4 sm:px-6 lg:min-h-[75vh] lg:grid-cols-2 lg:py-12">
           <ScrollReveal variant="left">
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-4 py-1.5">
-              <span className="live-dot h-2 w-2 rounded-full bg-emerald-400" />
-              <span className="text-xs font-bold uppercase tracking-widest text-indigo-200">
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-blue-300/30 bg-blue-500/10 px-4 py-1.5">
+              <span className="live-dot h-2 w-2 rounded-full bg-green-400" />
+              <span className="text-xs font-bold uppercase tracking-widest text-blue-100">
                 Car · Auto · Bike · Courier
               </span>
             </div>
@@ -88,7 +88,7 @@ export default function HomePage() {
 
           <ScrollReveal variant="right" delay={150}>
             <div className="relative">
-              <div className="absolute -inset-6 rounded-3xl bg-indigo-500/20 blur-3xl animate-glow-pulse" />
+              <div className="absolute -inset-6 rounded-3xl bg-blue-500/15 blur-3xl animate-glow-pulse" />
               <div className="relative overflow-hidden rounded-3xl border border-white/10 shadow-2xl">
                 <AppImage
                   src={IMAGES.mapLiveWide}
@@ -97,14 +97,14 @@ export default function HomePage() {
                   className="aspect-[4/3] w-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent" />
-                <span className="map-ring absolute left-[45%] top-[38%] h-12 w-12 rounded-full border-2 border-cyan-400/70" />
+                <span className="map-ring absolute left-[45%] top-[38%] h-12 w-12 rounded-full border-2 border-blue-300/70" />
                 <div className="absolute bottom-4 left-4 right-4 glass-card rounded-2xl p-4 animate-slide-up">
                   <div className="flex items-center gap-3">
                     <AppImage src={IMAGES.mapPhone} alt="GPS map on phone" className="h-14 w-14 rounded-xl object-cover" />
                     <div className="min-w-0 flex-1">
                       <p className="flex items-center gap-2 text-sm font-bold text-white">
                         Live GPS tracking
-                        <span className="live-dot h-2 w-2 rounded-full bg-emerald-400" />
+                        <span className="live-dot h-2 w-2 rounded-full bg-green-400" />
                       </p>
                       <p className="text-xs text-slate-400">Driver en route · ETA 8 min · 3 passengers</p>
                     </div>
@@ -124,7 +124,7 @@ export default function HomePage() {
 
       <PageSection className="section-glow border-y border-white/5">
         <ScrollReveal className="mx-auto max-w-3xl text-center">
-          <p className="text-sm font-bold uppercase tracking-[0.2em] text-indigo-400">Why Share Wheels</p>
+          <p className="text-sm font-bold uppercase tracking-[0.2em] text-blue-300">Why Share Wheels</p>
           <h2 className="mt-3 text-3xl font-extrabold text-white sm:text-4xl">
             More than a ride — a smarter commute
           </h2>
@@ -152,10 +152,10 @@ export default function HomePage() {
       <PageSection>
         <ScrollReveal className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-sm font-bold uppercase tracking-[0.2em] text-indigo-400">Gallery</p>
+            <p className="text-sm font-bold uppercase tracking-[0.2em] text-blue-300">Gallery</p>
             <h2 className="mt-2 text-3xl font-extrabold text-white sm:text-4xl">Share Wheels in action</h2>
           </div>
-          <Link to="/features" className="text-sm font-semibold text-indigo-300 hover:text-white">
+          <Link to="/features" className="text-sm font-semibold text-blue-300 hover:text-blue-200">
             All features →
           </Link>
         </ScrollReveal>
@@ -180,7 +180,7 @@ export default function HomePage() {
 
       <PageSection className="border-t border-white/5">
         <ScrollReveal className="mx-auto max-w-3xl text-center">
-          <p className="text-sm font-bold uppercase tracking-[0.2em] text-emerald-400">Community</p>
+          <p className="text-sm font-bold uppercase tracking-[0.2em] text-green-300">Community</p>
           <h2 className="mt-3 text-3xl font-extrabold text-white">Trusted by riders & drivers</h2>
         </ScrollReveal>
         <div className="mt-12 grid gap-6 md:grid-cols-3">
@@ -201,7 +201,7 @@ export default function HomePage() {
           <p className="text-sm text-slate-500">Questions or beta access?</p>
           <a
             href={CONTACT_MAILTO}
-            className="mt-2 inline-block text-lg font-semibold text-indigo-300 hover:text-white"
+            className="mt-2 inline-block text-lg font-semibold text-blue-300 hover:text-blue-200"
           >
             {CONTACT_EMAIL}
           </a>
@@ -219,7 +219,7 @@ export default function HomePage() {
               >
                 <h3 className="text-xl font-bold text-white">{card.title}</h3>
                 <p className="mt-3 text-sm leading-relaxed text-slate-400">{card.text}</p>
-                <span className="mt-5 inline-block text-sm font-semibold text-indigo-300">Read more →</span>
+                <span className="mt-5 inline-block text-sm font-semibold text-blue-300">Read more →</span>
               </Link>
             </ScrollReveal>
           ))}

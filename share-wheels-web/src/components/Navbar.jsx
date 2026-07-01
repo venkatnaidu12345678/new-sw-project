@@ -12,7 +12,7 @@ const NAV = [
 const linkClass = ({ isActive }) =>
   [
     "text-sm font-medium transition",
-    isActive ? "text-white" : "text-slate-400 hover:text-white",
+    isActive ? "text-blue-300" : "text-slate-400 hover:text-blue-300",
   ].join(" ");
 
 export default function Navbar() {
@@ -36,13 +36,13 @@ export default function Navbar() {
       className={`fixed inset-x-0 top-0 z-50 transition-all duration-500 ${
         scrolled
           ? "border-b border-white/5 bg-slate-950/85 shadow-lg shadow-black/20 backdrop-blur-2xl"
-          : "bg-slate-950/40 backdrop-blur-md"
+          : "bg-slate-950/50 backdrop-blur-md"
       }`}
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         <NavLink to="/" className="flex items-center gap-3">
           <div className="relative">
-            <div className="absolute inset-0 rounded-xl bg-indigo-500/40 blur-md" />
+            <div className="absolute inset-0 rounded-xl bg-blue-500/35 blur-md" />
             <img src="/logo-mark.png" alt="Share Wheels" className="relative h-10 w-10 rounded-xl" />
           </div>
           <span className="text-lg font-extrabold tracking-tight text-white">Share Wheels</span>
@@ -81,7 +81,7 @@ export default function Navbar() {
               to={item.to}
               end={item.end}
               className={({ isActive }) =>
-                `block rounded-lg px-3 py-2.5 text-sm font-medium ${isActive ? "bg-white/10 text-white" : "text-slate-300"}`
+                `block rounded-lg px-3 py-2.5 text-sm font-medium ${isActive ? "bg-blue-500/15 text-blue-200" : "text-slate-300 hover:text-blue-300"}`
               }
               onClick={() => setOpen(false)}
             >

@@ -27,7 +27,7 @@ export default function DownloadPage() {
 
       <PageSection>
         <ScrollReveal variant="scale">
-          <div className="relative overflow-hidden rounded-[2rem] border border-indigo-400/20 p-8 sm:p-14">
+          <div className="relative overflow-hidden rounded-[2rem] border border-blue-300/20 p-8 sm:p-14">
             <AuroraBg />
             <div className="relative grid items-center gap-12 lg:grid-cols-2">
               <div>
@@ -40,7 +40,7 @@ export default function DownloadPage() {
                 </div>
                 <p className="mt-6 text-lg leading-relaxed text-slate-400">
                   Available for Android and iOS. Store links will be published soon —{" "}
-                  <a href={CONTACT_MAILTO} className="font-semibold text-indigo-300 hover:text-white">
+                  <a href={CONTACT_MAILTO} className="font-semibold text-blue-300 hover:text-blue-200">
                     email us
                   </a>{" "}
                   for beta access.
@@ -53,7 +53,7 @@ export default function DownloadPage() {
                   {CONTACT_EMAIL}
                 </a>
                 <p className="mt-3 text-sm text-slate-500">
-                  <Link to="/privacy" className="font-semibold text-indigo-300 hover:text-white">
+                  <Link to="/privacy" className="font-semibold text-blue-300 hover:text-blue-200">
                     Privacy Policy
                   </Link>
                   {" · "}Required for Google Play and App Store publishing.
@@ -79,7 +79,7 @@ export default function DownloadPage() {
                   alt="Share Wheels live map on mobile"
                   className="mx-auto max-h-96 w-full rounded-2xl object-cover shadow-2xl"
                 />
-                <span className="map-ring absolute left-1/2 top-1/3 h-12 w-12 -translate-x-1/2 rounded-full border-2 border-cyan-400/70" />
+                <span className="map-ring absolute left-1/2 top-1/3 h-12 w-12 -translate-x-1/2 rounded-full border-2 border-blue-300/70" />
               </div>
             </div>
           </div>
@@ -132,7 +132,7 @@ export default function DownloadPage() {
           ))}
         </div>
         <ScrollReveal className="mt-16 text-center">
-          <Link to="/features" className="text-sm font-semibold text-indigo-300 hover:text-white">
+          <Link to="/features" className="text-sm font-semibold text-blue-300 hover:text-blue-200">
             Explore all features →
           </Link>
         </ScrollReveal>
