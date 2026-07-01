@@ -7,7 +7,7 @@ import { CONTACT_EMAIL } from "../data/contact";
 const APP_NAME = "Share Wheels";
 const COMPANY_NAME = "Share Wheels";
 const APP_PACKAGE = "com.sharewheels.app";
-const LAST_UPDATED = "July 1, 2026";
+const LAST_UPDATED = "July 2, 2026";
 
 function DisclosureCard({ title, children }) {
   return (
@@ -106,7 +106,8 @@ function DataCollectionSummary() {
           </p>
           <p>
             <strong className="text-slate-300">Shared with:</strong> Other users when needed for a
-            trip; stored on our servers. You can deny camera or photo access in device settings.
+            trip; stored on our servers. On Android, you choose photos through the system picker — we
+            do not access your entire gallery. You can deny camera or photo access in device settings.
           </p>
         </DisclosureCard>
 
@@ -141,11 +142,29 @@ function DataCollectionSummary() {
           </p>
         </DisclosureCard>
 
+        <DisclosureCard title="Verification codes (OTP) — Yes, we send these to you">
+          <p>
+            <strong className="text-slate-300">What:</strong> One-time passwords sent to your mobile
+            number (SMS) or email for login, password reset, and ride boarding verification.
+          </p>
+          <p>
+            <strong className="text-slate-300">Why:</strong> Verify your identity and secure account
+            access. We send OTPs to you; we do <strong className="text-white">not</strong> read SMS
+            messages stored on your device.
+          </p>
+          <p>
+            <strong className="text-slate-300">Shared with:</strong> SMS delivery providers (for
+            example Fast2SMS) and email services used to deliver codes; Firebase Auth for password
+            reset emails where applicable.
+          </p>
+        </DisclosureCard>
+
         <DisclosureCard title="Device and diagnostic data — Yes, we collect this">
           <p>
             <strong className="text-slate-300">What:</strong> Device model, operating system, app
             version, language, IP address, push notification token (FCM), authentication session
-            tokens, server logs, and crash or error reports.
+            tokens, server logs, and crash or error reports. Crash reports may include your user ID,
+            email, or name to help us fix issues.
           </p>
           <p>
             <strong className="text-slate-300">Why:</strong> Keep you signed in, deliver
@@ -157,11 +176,37 @@ function DataCollectionSummary() {
           </p>
         </DisclosureCard>
 
+        <DisclosureCard title="Account deletion — Yes, you can request this">
+          <p>
+            <strong className="text-slate-300">How:</strong> Email{" "}
+            <a href={`mailto:${CONTACT_EMAIL}`} className="font-semibold text-blue-300 hover:text-blue-200">
+              {CONTACT_EMAIL}
+            </a>{" "}
+            from your registered email with the subject “Account deletion request” and your
+            registered phone number.
+          </p>
+          <p>
+            <strong className="text-slate-300">What we delete:</strong> Your account, profile,
+            vehicle details, notifications, feedback, and ride data linked to your account, within
+            approximately 30 days after verification.
+          </p>
+          <p>
+            <strong className="text-slate-300">What we may keep:</strong> Payment or trip records
+            required by law, fraud prevention, or dispute resolution, for the period required by
+            applicable law.{" "}
+            <a href="#account-deletion" className="font-semibold text-blue-300 hover:text-blue-200">
+              See Section 8
+            </a>
+            .
+          </p>
+        </DisclosureCard>
+
         <DisclosureCard title="Data we do not collect for advertising">
           <p>
             We do not use your data for third-party advertising. We do not sell personal
-            information. We do not collect contacts from your address book, SMS content, or
-            microphone audio.
+            information. We do not read your SMS inbox, contacts, call logs, microphone audio, or
+            broad photo library access — photos are chosen by you through the system photo picker or
+            camera only.
           </p>
         </DisclosureCard>
       </div>
@@ -232,8 +277,8 @@ export default function PrivacyPolicyPage() {
                 "Profile photo and optional display information",
                 "Account password (stored securely; not shown in plain text to other users)",
                 "Permanent rider ID number (userNo) used for OTP and account identification",
-                "OTP codes sent to your phone or email for login and password reset (temporary)",
-                "Terms of service acceptance status",
+                "OTP codes sent to your phone (SMS) or email for login, password reset, and boarding verification (temporary; we do not read SMS on your device)",
+                "Terms of service acceptance status and in-app consent for permissions such as location and notifications",
               ]}
             />
 
@@ -275,7 +320,17 @@ export default function PrivacyPolicyPage() {
                 "Profile pictures you upload or capture with the camera",
                 "Vehicle, license, and registration document images for drivers",
                 "Courier parcel photos and proof-of-delivery images",
+                "On Android, images are selected through the system photo picker — we do not request broad access to your entire photo library",
                 "Images are stored on our servers and shown to relevant trip participants",
+              ]}
+            />
+
+            <p className="font-semibold text-slate-300">Place search and maps</p>
+            <LegalList
+              items={[
+                "Address and place search queries you type (for example pickup or drop-off)",
+                "Place names and coordinates returned through our maps and places services",
+                "Route polylines and navigation data shown on maps during trips",
               ]}
             />
 
@@ -305,10 +360,19 @@ export default function PrivacyPolicyPage() {
                 "Device model, operating system version, app version, and language",
                 "IP address and server access logs for security and troubleshooting",
                 "Authentication tokens stored on your device to keep you signed in",
-                "Crash reports, error logs, and diagnostic data via Firebase Crashlytics",
+                "Crash reports, error logs, and diagnostic data via Firebase Crashlytics (may include user ID, email, or name linked to your account to diagnose issues)",
+                "Real-time trip updates sent over secure connections (for example live location during active rides)",
                 "App interaction logs needed to fix bugs and prevent fraud",
               ]}
             />
+
+            <p className="font-semibold text-slate-300">Required vs optional data</p>
+            <p>
+              You must provide account information (name, email, phone, gender, password) to register.
+              Location, camera, notification, and photo permissions are optional in your device
+              settings, but core features such as maps, live tracking, and photo uploads will not work
+              without the relevant permission.
+            </p>
           </LegalSection>
 
           <LegalSection title="3. Location data" id="location-data">
@@ -395,7 +459,8 @@ export default function PrivacyPolicyPage() {
                 "With other users on your trip — name, photo, vehicle details, route, chat messages, and live location during active rides",
                 "With courier receivers — delivery details and status you or the sender provide",
                 "With cloud hosting providers that store App data on our behalf",
-                "With Google — Google Maps (maps and routes), Firebase Cloud Messaging (push notifications), Firebase Crashlytics (crash reports)",
+                "With Google — Google Maps and Google Places (maps, routes, and address search), Firebase Cloud Messaging (push notifications), Firebase Authentication (password reset emails), Firebase Crashlytics (crash reports)",
+                "With SMS and email providers — to deliver OTP and account messages you request",
                 "With Razorpay — to process payments and subscriptions you initiate",
                 "With law enforcement, regulators, or courts when required by law or to protect safety",
                 "In connection with a merger or acquisition, subject to continued protection of your data",
@@ -423,7 +488,7 @@ export default function PrivacyPolicyPage() {
             />
             <p>
               When data is no longer required, we delete or anonymize it within a reasonable period.
-              You may request account deletion by emailing us (Section 12).
+              You may request account deletion as described in Section 8.
             </p>
           </LegalSection>
 
@@ -433,22 +498,75 @@ export default function PrivacyPolicyPage() {
                 "Access and update your name, email, phone, gender, profile photo, and vehicle details in App settings",
                 "Control location, camera, and notification permissions in your device Settings",
                 "Opt out of push notifications through device or App notification settings",
-                "Request a copy of your data, correction of inaccurate data, or account deletion by emailing us",
+                "Request a copy of your data, correction of inaccurate data, or account deletion (Section 8)",
                 "Withdraw consent for optional features by changing device permissions (some features may stop working)",
               ]}
             />
             <p>
-              To delete your account or exercise privacy rights, email{" "}
+              To delete your account or exercise privacy rights, see{" "}
+              <a href="#account-deletion" className="font-semibold text-blue-300 hover:text-blue-200">
+                Section 8 — Account and data deletion
+              </a>{" "}
+              or email{" "}
               <a href={`mailto:${CONTACT_EMAIL}`} className="font-semibold text-blue-300 hover:text-blue-200">
                 {CONTACT_EMAIL}
-              </a>{" "}
-              from your registered email address. We may verify your identity before fulfilling a
-              request. Deleting your account removes your profile and associated data as described in
-              our deletion process, subject to legal retention requirements.
+              </a>
+              .
             </p>
           </LegalSection>
 
-          <LegalSection title="8. Children's privacy">
+          <LegalSection title="8. Account and data deletion" id="account-deletion">
+            <p>
+              <strong className="font-semibold text-white">
+                You can request deletion of your Share Wheels account and associated personal data.
+              </strong>{" "}
+              This section explains how to submit a request, what we delete, what we may retain, and
+              how long processing takes.
+            </p>
+            <p className="font-semibold text-slate-300">How to request deletion</p>
+            <LegalList
+              items={[
+                `Email ${CONTACT_EMAIL} from the email address registered on your account`,
+                'Use the subject line: "Account deletion request"',
+                "Include your full name and registered mobile phone number so we can verify your identity",
+                "We will confirm by email when your deletion request is received and when it is completed",
+              ]}
+            />
+            <p className="font-semibold text-slate-300">What we delete</p>
+            <p>After we verify your request, we delete or anonymize, within approximately 30 days:</p>
+            <LegalList
+              items={[
+                "Your user account and profile (name, email, phone, gender, profile photo, rider ID)",
+                "Vehicle and driver document information stored on your profile",
+                "Rides you created, courier requests you submitted, and in-app notifications linked to your account",
+                "Ride chat messages you sent, feedback you submitted, and push notification tokens (FCM)",
+                "Your participation references in other users’ trips where technically feasible",
+              ]}
+            />
+            <p className="font-semibold text-slate-300">What we may retain</p>
+            <LegalList
+              items={[
+                "Payment and subscription transaction records required for accounting, tax, or legal compliance",
+                "Trip or fare records needed to resolve disputes, prevent fraud, or respond to lawful requests",
+                "Anonymized or aggregated data that can no longer reasonably identify you",
+                "Server backups for a limited period before they are overwritten in the ordinary course of operations",
+              ]}
+            />
+            <p className="font-semibold text-slate-300">Processing time</p>
+            <p>
+              We aim to complete verified deletion requests within <strong className="text-white">30 days</strong>.
+              Some data may take longer to remove from backups or legal archives where retention is
+              required by law.
+            </p>
+            <p className="font-semibold text-slate-300">Before you delete</p>
+            <p>
+              Deletion is permanent. You will lose access to trip history, active bookings, and
+              subscriptions. Complete or cancel active trips before requesting deletion where
+              possible.
+            </p>
+          </LegalSection>
+
+          <LegalSection title="9. Children's privacy">
             <p>
               The App is not intended for anyone under 18. We do not knowingly collect personal
               information from children. If you believe a child has provided us data, contact us and
@@ -456,7 +574,7 @@ export default function PrivacyPolicyPage() {
             </p>
           </LegalSection>
 
-          <LegalSection title="9. Security">
+          <LegalSection title="10. Security">
             <p>
               We use reasonable technical and organizational measures to protect your information,
               including HTTPS encryption, access controls, and secure password storage. No method of
@@ -465,7 +583,7 @@ export default function PrivacyPolicyPage() {
             </p>
           </LegalSection>
 
-          <LegalSection title="10. International transfers">
+          <LegalSection title="11. International transfers">
             <p>
               Your information may be processed on servers in India or other countries where our
               service providers operate. By using the App, you consent to transfer of your
@@ -474,7 +592,7 @@ export default function PrivacyPolicyPage() {
             </p>
           </LegalSection>
 
-          <LegalSection title="11. Changes to this policy">
+          <LegalSection title="12. Changes to this policy">
             <p>
               We may update this Privacy Policy from time to time. We will post the revised version
               on this page and update the “Last updated” date. Material changes may also be notified
@@ -482,7 +600,7 @@ export default function PrivacyPolicyPage() {
             </p>
           </LegalSection>
 
-          <LegalSection title="12. Contact us">
+          <LegalSection title="13. Contact us">
             <p>For privacy questions, data requests, or complaints, contact:</p>
             <p>
               <span className="font-semibold text-white">{COMPANY_NAME}</span>
